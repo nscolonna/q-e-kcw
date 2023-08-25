@@ -8,7 +8,7 @@
 MODULE scf
   !--------------------------------------------------------------------------
   !! This module contains variables and auxiliary routines needed for
-  !! the self-consistent cycle.  
+  !! the self-consistent cycle.
   !
   USE kinds,           ONLY : DP
   USE lsda_mod,        ONLY : nspin
@@ -63,9 +63,9 @@ MODULE scf
      !! viz identifies the atom in the neighborhood of at1.
      REAL(DP),    ALLOCATABLE :: bec(:,:,:)
      !! the PAW hamiltonian elements
-     REAL(DP),   ALLOCATABLE :: pol_r(:,:) 
+     REAL(DP),   ALLOCATABLE :: pol_r(:,:)
      !! the polaron density in R-space
-     COMPLEX(DP),ALLOCATABLE :: pol_g(:,:) 
+     COMPLEX(DP),ALLOCATABLE :: pol_g(:,:)
      !! the polaron density in G-space
      REAL(DP) :: el_dipole
      !! electronic dipole, if a dipole field is present
@@ -79,7 +79,7 @@ MODULE scf
   !! used to correct the forces
   !
   REAL(DP) :: v_of_0
-  !! vltot(G=0)      
+  !! vltot(G=0)
   REAL(DP), ALLOCATABLE :: vltot(:)
   !! the local potential in real space
   REAL(DP), ALLOCATABLE :: vrs(:,:)
@@ -108,7 +108,7 @@ CONTAINS
  !----------------------------------------------------------
  SUBROUTINE create_scf_type( rho, do_not_allocate_becsum )
    !----------------------------------------------------------
-   !! Creates an \(\text{scf_type}\) object by allocating all the 
+   !! Creates an \(\text{scf_type}\) object by allocating all the
    !! different terms.
    !
    IMPLICIT NONE
@@ -153,8 +153,8 @@ CONTAINS
    !
    rho%el_dipole = 0._dp
    IF (sic) THEN
-      IF(.NOT. ALLOCATED(rho%pol_r)) ALLOCATE(rho%pol_r(dfftp%nnr,nspin)) 
-      IF(.NOT. ALLOCATED(rho%pol_g)) ALLOCATE(rho%pol_g(ngm,nspin)) 
+      IF(.NOT. ALLOCATED(rho%pol_r)) ALLOCATE(rho%pol_r(dfftp%nnr,nspin))
+      IF(.NOT. ALLOCATED(rho%pol_g)) ALLOCATE(rho%pol_g(ngm,nspin))
    END IF
    !
    RETURN
@@ -229,7 +229,7 @@ CONTAINS
   IMPLICIT NONE
   TYPE(scf_type), INTENT(IN)    :: rho1
   TYPE(scf_type), INTENT(INOUT) :: rho2
-  !  
+  !
   IF (lda_plus_u_co)  rho2%ns(:,:,:,:)   = rho1%ns(:,:,:,:)
   IF (lda_plus_u_cob) rho2%nsb(:,:,:,:)  = rho1%nsb(:,:,:,:)
   IF (lda_plus_u_nc)  rho2%ns_nc(:,:,:,:)= rho1%ns_nc(:,:,:,:)

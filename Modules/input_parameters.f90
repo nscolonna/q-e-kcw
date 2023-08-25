@@ -914,7 +914,17 @@ MODULE input_parameters
 
         INTEGER :: mixing_ndim = 0
         !! dimension of mixing subspace. Used in PWscf only.
+!====================================================================================
+! ...@au
+        INTEGER :: maxlinmix = 7
+        !! Max number of iterations for simple magnetization mixing. 
+        !! Used in PWscf only.
 
+        REAL(DP) :: simplemix = 1.5_DP
+        !! Mixing parameter for magnetization density mixing. 
+        !! Used in PWscf only.
+
+!====================================================================================
         CHARACTER(len=80) :: diagonalization = 'david'
         !! diagonalization = 'david', 'cg', 'paro' or 'rmm'
         !! algorithm used by PWscf for iterative diagonalization
@@ -1078,6 +1088,7 @@ MODULE input_parameters
           diis_temp, diis_achmix, diis_g0chmix, diis_g1chmix,          &
           diis_nchmix, diis_nrot, diis_rothr, diis_ethr, diis_chguess, &
           mixing_mode, mixing_beta, mixing_ndim, mixing_fixed_ns,      &
+          maxlinmix, simplemix,                                        &
           tqr, tq_smoothing, tbeta_smoothing,                          &
           diago_cg_maxiter, diago_david_ndim, diago_rmm_ndim,          &
           diago_rmm_conv, diago_gs_nblock, diagonalization,            &

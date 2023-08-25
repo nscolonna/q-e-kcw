@@ -85,7 +85,7 @@ CONTAINS
 !
 !----------------------------------------------------------------------------
 SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
-                    iunmix, conv )
+                    iunmix, conv, maxlinmix2, simplemix2 )
   !----------------------------------------------------------------------------
   !! * Modified Broyden's method for charge density mixing: D.D. Johnson,
   !!   PRB 38, 12807 (1988) ;
@@ -141,6 +141,10 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
   TYPE(scf_type), INTENT(INOUT) :: input_rhout
   TYPE(scf_type), INTENT(INOUT) :: rhoin
   !
+  ! ... @au
+  integer, intent(in), optional :: maxlinmix2
+  real(DP), intent(in), optional :: simplemix2
+  !
   ! ... local variables
   !
   TYPE(mix_type) :: rhout_m, rhoin_m
@@ -163,6 +167,12 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
 #if defined(__NORMALIZE_BETAMIX)
   REAL(DP) :: norm2, obn
 #endif
+  !
+  integer :: sstart
+  integer :: sstop
+  real(DP) :: scal
+! integer, parameter :: & 
+!   maxlinmix = 7  ! max number of iterations for simple magnetization mixing 
   !
   ! ... saved variables and arrays
   !
@@ -194,6 +204,27 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
   !
   mixrho_iter = iter
   !
+! ...@au =====================  
+  sstart = 1
+  sstop = nspin
+!=============================  
+  !
+  if ( imix == 3 .and. iter == 1 ) then 
+          print *, ' maxlinmix = ', maxlinmix2
+          print *, ' simplemix = ', simplemix2
+  endif
+  !
+  if ( imix == 3 ) then
+    if ( mixrho_iter <= maxlinmix2 ) then
+       sstart = 1
+       sstop = 1
+    else    
+       sstart = 1
+       sstop = nspin
+    endif   
+  endif     
+  !
+  !
   IF ( n_iter > maxmix ) CALL errore( 'mix_rho', 'n_iter too big', 1 )
   !
   ! define mix_type variables and copy scf_type variables there
@@ -203,7 +234,7 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
   !
   call assign_scf_to_mix_type(rhoin, rhoin_m)
   call assign_scf_to_mix_type(input_rhout, rhout_m)
-  call mix_type_AXPY ( -1.d0, rhoin_m, rhout_m )
+  call mix_type_AXPY ( -1.d0, rhoin_m, rhout_m, sstart, sstop )  ! sstart = sstop = 1
   !
   IF ( lgcscf ) THEN
      !
@@ -211,7 +242,7 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
      !
   ELSE
      !
-     dr2 = rho_ddot( rhout_m, rhout_m, ngms )  !!!! this used to be ngm NOT ngms
+     dr2 = rho_ddot( rhout_m, rhout_m, ngms, spinstop = sstop )  !!!! this used to be ngm NOT ngms
      !
   END IF
   !
@@ -332,8 +363,8 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
      CALL davcio_mix_type( df(ipos), iunmix, 1, read_ )
      CALL davcio_mix_type( dv(ipos), iunmix, 2, read_ )
      !
-     call mix_type_AXPY ( -1.d0, rhout_m, df(ipos) )
-     call mix_type_AXPY ( -1.d0, rhoin_m, dv(ipos) )
+     call mix_type_AXPY ( -1.d0, rhout_m, df(ipos), sstart, sstop )   ! sstart = sstop = 1
+     call mix_type_AXPY ( -1.d0, rhoin_m, dv(ipos), sstart, sstop )   ! sstart = sstop = 1
      !
 #if defined (__OSCDFT)
   IF (use_oscdft .AND. (oscdft_ctx%inp%oscdft_type==2)) THEN
@@ -352,11 +383,11 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
      IF ( lgcscf ) THEN
         norm2 = rho_ddot( df(ipos), df(ipos), ngm0, gcscf_gh )
      ELSE
-        norm2 = rho_ddot( df(ipos), df(ipos), ngm0 )
+        norm2 = rho_ddot( df(ipos), df(ipos), ngm0, spinstop = sstop )          ! sstop = 1
      END IF
      obn = 1.d0/sqrt(norm2)
-     call mix_type_SCAL (obn,df(ipos))
-     call mix_type_SCAL (obn,dv(ipos))
+     call mix_type_SCAL (obn,df(ipos),sstart,sstop)                  ! sstart = sstop = 1
+     call mix_type_SCAL (obn,dv(ipos),sstart,sstop)
 #if defined (__OSCDFT)
   IF (use_oscdft .AND. (oscdft_ctx%inp%oscdft_type==2)) THEN
      IF (oscdft_ctx%is_constraint .AND. .NOT.oscdft_ctx%conv) THEN
@@ -417,7 +448,7 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
                !
             ELSE
                !
-               betamix(i,j) = rho_ddot( df(j), df(i), ngm0 )
+               betamix(i,j) = rho_ddot( df(j), df(i), ngm0, spinstop = sstop )   ! sstop = 1
                !
             END IF
             !
@@ -446,7 +477,7 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
           !
        ELSE
           !
-          work(i) = rho_ddot( df(i), rhout_m, ngm0 )
+          work(i) = rho_ddot( df(i), rhout_m, ngm0, spinstop = sstop )       ! sstop = 1
           !
        END IF
        !
@@ -456,8 +487,8 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
         !
         gamma0 = DOT_PRODUCT( betamix(1:iter_used,i), work(1:iter_used) )
         !
-        call mix_type_AXPY ( -gamma0, dv(i), rhoin_m )
-        call mix_type_AXPY ( -gamma0, df(i), rhout_m )
+        call mix_type_AXPY ( -gamma0, dv(i), rhoin_m, sstart, sstop )     ! sstart = sstop = 1
+        call mix_type_AXPY ( -gamma0, df(i), rhout_m, sstart, sstop )     ! sstart = sstop = 1
         !
 #if defined (__OSCDFT)
   IF (use_oscdft .AND. (oscdft_ctx%inp%oscdft_type==2)) THEN
@@ -479,7 +510,7 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
      DO i=1, n_iter
         call destroy_mix_type(df(i))
      END DO
-     DEALLOCATE( df )
+      DEALLOCATE( df )
   END IF
   IF ( ALLOCATED( dv ) ) THEN
      DO i=1, n_iter
@@ -514,7 +545,24 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
   !
   ! ... set new trial density
   !
-  call mix_type_AXPY ( alphamix, rhout_m, rhoin_m )
+  call mix_type_AXPY ( alphamix, rhout_m, rhoin_m, sstart, sstop )  ! sstart = sstop = 1
+  !
+  ! ...@au: linear mixing for the magnetization (spin channels 2:nspin),
+  ! ... for the first maxlinmix2 iterations
+  !
+  if ( imix == 3 ) then
+     if ( mixrho_iter <= maxlinmix2 ) then
+        !
+        sstart = 2
+        sstop = nspin
+        !
+        scal = 1.d0 - simplemix2
+        call mix_type_SCAL ( simplemix2, rhout_m, sstart, sstop )
+        call mix_type_SCAL ( scal, rhoin_m, sstart, sstop )
+        call mix_type_AXPY ( 1.d0, rhout_m, rhoin_m, sstart, sstop )
+        !
+     endif
+  endif
   !
 #if defined (__OSCDFT)
   IF (use_oscdft .AND. (oscdft_ctx%inp%oscdft_type==2)) THEN
@@ -523,7 +571,7 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
            oscdft_ctx%constraint(:, :, :, :) = t_cons2(:, :, :, :) + &
                                      alphamix * delta_cons(:, :, :, :)
         ELSE
-           oscdft_ctx%constraint(:, :, :, :) = 0.8 * t_cons1(:, :, :, :) 
+           oscdft_ctx%constraint(:, :, :, :) = 0.8 * t_cons1(:, :, :, :)
         ENDIF
      ENDIF
   ENDIF
@@ -531,6 +579,7 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
   !
   ! ... simple mixing for high_frequencies (and set to zero the smooth ones)
   call high_frequency_mixing ( rhoin, input_rhout, alphamix )
+! call high_frequency_mixing ( rhoin, input_rhout, alphamix, sstart, sstop )
   ! ... add the mixed rho for the smooth frequencies
   call assign_mix_to_scf_type(rhoin_m,rhoin)
   !

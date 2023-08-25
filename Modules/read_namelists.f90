@@ -399,6 +399,8 @@ MODULE read_namelists_module
        diis_rothr  = 0.0_DP
        diis_ethr   = 0.0_DP
        diis_chguess = .FALSE.
+       maxlinmix = 7 
+       simplemix = 1.5_DP
        mixing_mode = 'plain'
        mixing_fixed_ns = 0
        mixing_beta = -1.0_DP
@@ -1158,6 +1160,8 @@ MODULE read_namelists_module
        CALL mp_bcast( mixing_mode,          ionode_id, intra_image_comm )
        CALL mp_bcast( mixing_beta,          ionode_id, intra_image_comm )
        CALL mp_bcast( mixing_ndim,          ionode_id, intra_image_comm )
+       CALL mp_bcast( maxlinmix,            ionode_id, intra_image_comm )
+       CALL mp_bcast( simplemix,            ionode_id, intra_image_comm )
        CALL mp_bcast( tqr,                  ionode_id, intra_image_comm )
        CALL mp_bcast( tq_smoothing,         ionode_id, intra_image_comm )
        CALL mp_bcast( tbeta_smoothing,      ionode_id, intra_image_comm )

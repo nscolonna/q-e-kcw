@@ -86,7 +86,7 @@ SUBROUTINE summary()
     ! atomic coordinate referred to the crystal axes
   REAL(DP) :: xkg(3)
     ! coordinates of the k point in crystal axes
-  CHARACTER :: mixing_style * 9
+  CHARACTER :: mixing_style * 11
   REAL(DP) :: xp
     ! fraction contributing to a given atom type (obsolescent)
   !
@@ -95,6 +95,7 @@ SUBROUTINE summary()
   IF ( imix ==  0 ) mixing_style = 'plain'
   IF ( imix ==  1 ) mixing_style = 'TF'
   IF ( imix ==  2 ) mixing_style = 'local-TF'
+  IF ( imix ==  3 ) mixing_style = 'simple-magn'
   !
   IF ( title /= ' ') WRITE( stdout, "(/,5X,'Title: ',/,5X,A75)" ) title
   !
