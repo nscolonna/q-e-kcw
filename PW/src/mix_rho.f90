@@ -204,15 +204,8 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
   !
   mixrho_iter = iter
   !
-! ...@au =====================  
   sstart = 1
   sstop = nspin
-!=============================  
-  !
-  if ( imix == 3 .and. iter == 1 ) then 
-          print *, ' maxlinmix = ', maxlinmix2
-          print *, ' simplemix = ', simplemix2
-  endif
   !
   if ( imix == 3 ) then
     if ( mixrho_iter <= maxlinmix2 ) then
