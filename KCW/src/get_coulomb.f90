@@ -70,6 +70,8 @@ USE noncollin_module,     ONLY : nspin_mag
 USE constants,            ONLY : tpi
 USE lsda_mod,             ONLY : nspin
 USE cell_base,            ONLY : omega, at
+USE mp_bands,             ONLY : intra_bgrp_comm
+USE mp,                   ONLY : mp_sum
 !
 IMPLICIT NONE
 COMPLEX(DP)                  :: IMAG = (0.D0,1.D0)
@@ -155,6 +157,8 @@ DO jwann = 1, num_wann
           pi_q_unrelax (spin_index(is)) = weight_q * omega * SUM( CONJG(delta_vg (:,is)) * rhog_iwann(:,1) )  
           pi_q_unrelax_(spin_index(is)) = weight_q * omega * SUM( CONJG(delta_vg_(:,is)) * rhog_iwann(:,1) )  
       END DO  
+      CALL mp_sum (pi_q_unrelax,  intra_bgrp_comm)
+      CALL mp_sum (pi_q_unrelax_, intra_bgrp_comm)
       Vcoulomb(:, ir, jwann, iwann) = Vcoulomb(:, ir, jwann, iwann) + pi_q_unrelax(:)
       !
       ! screened potential
@@ -166,6 +170,7 @@ DO jwann = 1, num_wann
                                        sum (CONJG(drhog_scf (:,is1)) * delta_vg(:,is1))*weight_q*omega
         END DO 
       END DO! is
+      CALL mp_sum (pi_q_relax, intra_bgrp_comm)
       pi_q_relax(:) = pi_q_relax(:) + pi_q_unrelax_(:)
       Wcoulomb(:, ir, jwann, iwann) = Wcoulomb(:, ir, jwann, iwann) + pi_q_relax(:)
       IF (jwann .eq. iwann .and. SUM(ABS(iRvect_shifted(:,ir))) .lt. 1.D-06 )&
