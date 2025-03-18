@@ -24,7 +24,7 @@ INTEGER              ::    spin_index
       DO jwann=1, num_wann
         DO is = 1, 2 !one for spin component, other for non spin component
           WRITE(iun_coulomb, *) iwann, jwann, spin_index(is), &
-          real(Wcoulomb(is, ir, jwann, iwann)), aimag(Wcoulomb(is, ir, jwann, iwann)) 
+          real(Vcoulomb(is, ir, jwann, iwann)), aimag(Vcoulomb(is, ir, jwann, iwann)) 
         END DO!is
       END DO!jwann
     END DO!iwann
@@ -90,7 +90,7 @@ INTEGER                      :: ir
 !
 !quantities needed for computing bare_pot for jwann
 !
-COMPLEX(DP), ALLOCATABLE     :: rhog(:,:)
+COMPLEX(DP), ALLOCATABLE     :: rhog(:,:), rhog_iwann(:,:)
 ! ... periodic part of wannier density in G-space
 COMPLEX(DP), ALLOCATABLE     :: delta_vg(:,:)
 ! ... perturbing potential [f_hxc(r,r') x wann(r')] in G-space
@@ -115,6 +115,7 @@ REAL(DP)                     ::x_q_cryst(3)
 !
 !
 ALLOCATE(rhog(ngms,nrho))
+ALLOCATE(rhog_iwann(ngms,nrho))
 ALLOCATE(delta_vg(ngms,nspin_mag))
 ALLOCATE(delta_vg_(ngms,nspin_mag))
 ALLOCATE(vh_rhog(ngms))
@@ -126,6 +127,11 @@ IF (nrho==4) THEN
     CALL errore('output_coulomb', 'non-collinear not implemented &
       for coulomb matrix elements.', 1)
 END IF
+!
+ip=1
+rhor(:,ip) = rhowann(:,iwann,ip)
+CALL bare_pot ( rhor, rhog, vh_rhog, delta_vr, delta_vg, iq, delta_vr_, delta_vg_) 
+rhog_iwann= rhog
 !
 DO jwann = 1, num_wann
   !here rhowann is already filled with the wannier density in real space 
@@ -146,8 +152,8 @@ DO jwann = 1, num_wann
       ! we evaluate 
       !   <jwann, R| Vxc | iwann, 0> = <deltaVg | rhog(iwann)>
       DO is = 1, 2 !one for spin component, other for non spin component
-          pi_q_unrelax (spin_index(is)) = weight_q * omega * SUM( CONJG(delta_vg (:,is)) * rhog(:,1) )  
-          pi_q_unrelax_(spin_index(is)) = weight_q * omega * SUM( CONJG(delta_vg_(:,is)) * rhog(:,1) )  
+          pi_q_unrelax (spin_index(is)) = weight_q * omega * SUM( CONJG(delta_vg (:,is)) * rhog_iwann(:,1) )  
+          pi_q_unrelax_(spin_index(is)) = weight_q * omega * SUM( CONJG(delta_vg_(:,is)) * rhog_iwann(:,1) )  
       END DO  
       Vcoulomb(:, ir, jwann, iwann) = Vcoulomb(:, ir, jwann, iwann) + pi_q_unrelax(:)
       !
@@ -170,6 +176,7 @@ DO jwann = 1, num_wann
 END DO !jwann
 !
 DEALLOCATE(rhog)
+DEALLOCATE(rhog_iwann)
 DEALLOCATE(delta_vg)
 DEALLOCATE(delta_vg_)
 DEALLOCATE(vh_rhog)
