@@ -1,5 +1,7 @@
 #!/bin/sh
 
+nk=2
+
 # run from directory where this script is
 cd `dirname $0`
 EXAMPLE_DIR=`pwd`
@@ -80,6 +82,7 @@ W90_COMMAND="$BIN_DIR/wannier90.x"
 PW2W90_COMMAND="$PARA_PREFIX $BIN_DIR/pw2wannier90.x"
 KCW_COMMAND_noPOSTFIX="$PARA_PREFIX $BIN_DIR/kcw.x"
 KCW_COMMAND="$PARA_PREFIX $BIN_DIR/kcw.x $PARA_POSTFIX"
+KMESH="$BIN_DIR/../external/wannier90/utility/kmesh.pl"
 $ECHO
 $ECHO "  running pw.x as:   $PW_COMMAND"
 $ECHO "  running kcw.x as:   $KCW_COMMAND"
@@ -108,6 +111,46 @@ cat > $PREFIX.scf.in << EOF
   celldm(1)=10.263101844
   nat= 2, ntyp= 1,
   ecutwfc = 20.0,
+  nbnd=4
+  nspin = 2
+  tot_magnetization = 0.00
+/
+&ELECTRONS
+  diagonalization='david'
+  mixing_mode = 'plain'
+  mixing_beta = 0.7
+  conv_thr =  0.5d-12
+/
+ATOMIC_SPECIES
+Si 28.085 Si.upf
+
+ATOMIC_POSITIONS crystal
+Si 0.00 0.00 0.00
+Si 0.25 0.25 0.25
+
+K_POINTS automatic
+4 4 4 0 0 0
+EOF
+$ECHO "  Running the SCF calculation for $PREFIX...\c"
+$PW_COMMAND < $PREFIX.scf.in > $PREFIX.scf.out
+$ECHO " done"
+
+$KMESH $nk $nk $nk > kpoints.txt
+
+cat > ${PREFIX}.nscf.in <<EOF
+&CONTROL
+  calculation='nscf'
+  restart_mode='from_scratch',
+  prefix='$PREFIX'
+  outdir='$TMP_DIR/'
+  pseudo_dir = '$PSEUDO_DIR/'
+  verbosity='high'
+ /
+&SYSTEM
+  ibrav=2,
+  celldm(1)=10.263101844
+  nat= 2, ntyp= 1,
+  ecutwfc = 20.0,
   nbnd=20
   nspin = 2
   tot_magnetization = 0.00
@@ -125,23 +168,18 @@ ATOMIC_POSITIONS crystal
 Si 0.00 0.00 0.00
 Si 0.25 0.25 0.25
 
-K_POINTS crystal
-8
-  0.00000000  0.00000000  0.00000000  1.250000e-01
-  0.00000000  0.00000000  0.50000000  1.250000e-01
-  0.00000000  0.50000000  0.00000000  1.250000e-01
-  0.00000000  0.50000000  0.50000000  1.250000e-01
-  0.50000000  0.00000000  0.00000000  1.250000e-01
-  0.50000000  0.00000000  0.50000000  1.250000e-01
-  0.50000000  0.50000000  0.00000000  1.250000e-01
-  0.50000000  0.50000000  0.50000000  1.250000e-01
+$(cat kpoints.txt)
 EOF
-$ECHO "  Running the SCF calculation for $PREFIX...\c"
-$PW_COMMAND < $PREFIX.scf.in > $PREFIX.scf.out
+
+$ECHO "  Running the NSCF calculation for $PREFIX...\c"
+$PW_COMMAND < $PREFIX.nscf.in > $PREFIX.nscf.out
 $ECHO " done"
+
 
 if [ ! -d wann ]; then mkdir wann; fi
 cd wann
+
+$KMESH $nk $nk $nk wann > kpoints.txt
 
 cat > ${SEEDNAME}.win << EOF
 num_bands         =   20
@@ -181,7 +219,8 @@ Begin Atoms_Frac
 End Atoms_Frac
 
 Begin Projections
-Si : sp3
+Si : s
+Si : p
 End Projections
 
 begin unit_cell_cart
@@ -191,17 +230,10 @@ bohr
 -5.1315510  5.1315510 0.00000
 end unit_cell_cart
 
-mp_grid      = 2 2 2
+mp_grid      = $nk $nk $nk
 
 begin kpoints
-  0.00000000  0.00000000  0.00000000
-  0.00000000  0.00000000  0.50000000
-  0.00000000  0.50000000  0.00000000
-  0.00000000  0.50000000  0.50000000
-  0.50000000  0.00000000  0.00000000
-  0.50000000  0.00000000  0.50000000
-  0.50000000  0.50000000  0.00000000
-  0.50000000  0.50000000  0.50000000
+$(cat kpoints.txt) 
 end kpoints
 EOF
 $ECHO "  Running W90 -pp for $PREFIX EMPTY...\c"
@@ -244,9 +276,9 @@ W2K Silicon
   kcw_at_ks=.false.
   read_unitary_matrix = .true.
   calculation = 'wann2kcw'
-  mp1 = 2
-  mp2 = 2
-  mp3 = 2
+  mp1 = $nk
+  mp2 = $nk
+  mp3 = $nk
   lrpa = .true.
   l_vcut = .true.
 /
@@ -274,9 +306,9 @@ W2K Silicon
   kcw_at_ks=.false.
   read_unitary_matrix = .true.
   calculation = 'screen'
-  mp1 = 2
-  mp2 = 2
-  mp3 = 2
+  mp1 = $nk
+  mp2 = $nk
+  mp3 = $nk
   lrpa = .true.
   l_vcut = .true.
   get_coulomb = .true.
