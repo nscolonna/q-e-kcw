@@ -26,7 +26,7 @@ LEVEL2=../..
 DEPENDS="$LEVEL1/include" 
 # for convenience, used later
 DEPEND1="$LEVEL1/src"
-DEPEND2="$LEVEL2/include $LEVEL2/iotk/src $LEVEL2/FFTXlib $LEVEL2/LAXlib $LEVEL2/UtilXlib $LEVEL2/Modules $LEVEL2/upflib"
+DEPEND2="$LEVEL2/include $LEVEL2/iotk/src $LEVEL2/FFTXlib/src $LEVEL2/LAXlib $LEVEL2/UtilXlib $LEVEL2/Modules $LEVEL2/upflib"
 
 DEPENDS="$DEPEND1 $DEPEND2 $LEVEL2/PW/src $LEVEL2/PHonon/PH $LEVEL2/LR_Modules"
 
