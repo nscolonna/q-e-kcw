@@ -107,6 +107,8 @@ PROGRAM compute_self_hartree
   CALL mp_bcast(assume_isolated, ionode_id, intra_image_comm)
   CALL mp_bcast(io_sp, ionode_id, intra_image_comm)
   CALL mp_bcast(io_real_space, ionode_id, intra_image_comm)
+  CALL mp_bcast(get_coulomb, ionode_id, intra_image_comm)
+  CALL mp_bcast(spin_component, ionode_id, intra_image_comm)
   !
   !
   !
@@ -142,7 +144,7 @@ PROGRAM compute_self_hartree
     ! ... Compute the Self_hartree for each Wannier 
     !
     sh_i = CMPLX(0.D0, 0.D0, kind= DP)
-    CALL bare_coulomb_me (i)
+    IF (get_coulomb) CALL bare_coulomb_me (i)
     CALL self_hartree ( i, sh_i)
     WRITE(stdout,'(5X, "orb, Self hartree ", 1i5, 3x, 1F10.6)') i, REAL(sh_i)
     !
