@@ -35,12 +35,12 @@ PROGRAM compute_self_hartree
   COMPLEX(DP) :: sh_i
   INTEGER :: i
   CHARACTER(LEN=256), EXTERNAL :: trimcheck
-  INTEGER :: ios, nkstot_
+  INTEGER :: ios
   CHARACTER (LEN=256) :: outdir
   LOGICAL, EXTERNAL  :: imatches
   ! 
   NAMELIST / KCW_PP /    outdir, prefix, mp1, mp2, mp3, num_wann, seedname, kcw_iverbosity, &
-                        l_vcut, assume_isolated, io_sp, io_real_space
+                        l_vcut, assume_isolated, io_sp, io_real_space, get_coulomb, spin_component
   !
   ! prefix       : the prefix of files produced by pwscf
   ! outdir       : directory where input, output, temporary files reside
@@ -84,6 +84,8 @@ PROGRAM compute_self_hartree
   assume_isolated     = "none" 
   io_sp               = .FALSE.
   io_real_space       = .FALSE.
+  get_coulomb         = .FALSE. 
+  spin_component      = 1
   ! 
   ! ...  reading the namelist inputki
   !
@@ -116,17 +118,23 @@ PROGRAM compute_self_hartree
   CALL read_file ( )
   !
   IF (nspin == 4) THEN
-    nkstot_ = nkstot
+    nkstot_eff = nkstot
     nrho = 4
   ELSE
-    nkstot_ = nkstot/nspin
+    nkstot_eff = nkstot/nspin
     nrho = 1
   ENDIF
   !
-  IF ( mp1*mp2*mp3 /= nkstot_ ) &
+  IF ( mp1*mp2*mp3 /= nkstot_eff ) &
      CALL errore('compute_self_hartree', ' WRONG number of k points from input, check mp1, mp2, mp3', 1)
   !
   CALL sh_setup () 
+  !
+  IF(get_coulomb) THEN 
+    CALL kcw_R_points()
+    ALLOCATE ( Vcoulomb(2, nkstot, num_wann, num_wann))
+    Vcoulomb = 0.D0
+  END IF
   !
   lrpa = .true.
   WRITE( stdout,'(/,5X,"INFO: WANNIER orbital SH ",/)')
@@ -134,11 +142,13 @@ PROGRAM compute_self_hartree
     ! ... Compute the Self_hartree for each Wannier 
     !
     sh_i = CMPLX(0.D0, 0.D0, kind= DP)
+    CALL bare_coulomb_me (i)
     CALL self_hartree ( i, sh_i)
     WRITE(stdout,'(5X, "orb, Self hartree ", 1i5, 3x, 1F10.6)') i, REAL(sh_i)
     !
   ENDDO
   !
+  IF(get_coulomb) CALL write_coulomb()
   ! Clean and Close 
   CALL mp_global_end()
   CALL environment_end( code )

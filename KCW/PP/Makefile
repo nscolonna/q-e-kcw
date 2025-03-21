@@ -10,14 +10,16 @@ MODFLAGS= $(BASEMOD_FLAGS) \
           $(MOD_FLAG)../../LR_Modules \
           $(MOD_FLAG).
 
-PP_OBJS=bcast_kcw_pp_input.o \
+PP_OBJS=\
+bcast_kcw_pp_input.o \
 input_pp_summary.o \
 kcw_pp_readin.o \
 read_hr.o \
-kcw_bands.o\
+kcw_bands.o
 
 SH_OBJS= sh_setup.o\
-input_pp_summary.o 
+input_pp_summary.o\
+bare_coulomb.o\
 
 KC_OBJS = ../src/libkcw.a
 

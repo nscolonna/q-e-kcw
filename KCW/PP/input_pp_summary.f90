@@ -37,6 +37,7 @@ subroutine input_pp_summary ( )
     WRITE(stdout, 43)  "# have_empty          =", have_empty
     WRITE(stdout, 43)  "# io_sp               =", io_sp
     WRITE(stdout, 43)  "# io_real_space       =", io_real_space
+    WRITE(stdout, 43)  "# get_coulomb         =", get_coulomb
     WRITE(stdout,'(5X, 42("="),/)')
     !
   ENDIF

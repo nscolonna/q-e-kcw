@@ -1,0 +1,189 @@
+
+SUBROUTINE write_coulomb()
+USE kinds,                ONLY : DP
+USE control_kcw,          ONLY : Vcoulomb, Wcoulomb
+USE control_kcw,          ONLY : spin_component, get_coulomb, irvect_shifted
+USE control_kcw,          ONLY : num_wann, nqstot, num_R
+!
+IMPLICIT NONE
+!
+INTEGER              ::    iun_coulomb
+CHARACTER(len=1024)  ::    filename  
+INTEGER              ::    iwann, jwann, ir, is
+INTEGER              ::    spin_index
+
+!
+!
+  filename = 'barecoulomb.txt'
+  iun_coulomb = 237 
+  OPEN (iun_coulomb, file = filename)
+
+  DO ir = 1, num_R
+    WRITE(iun_coulomb, *) irvect_shifted(:, ir) 
+    DO iwann=1, num_wann
+      DO jwann=1, num_wann
+        DO is = 1, 2 !one for spin component, other for non spin component
+          WRITE(iun_coulomb, *) iwann, jwann, spin_index(is), &
+          real(Vcoulomb(is, ir, jwann, iwann)), aimag(Vcoulomb(is, ir, jwann, iwann)) 
+        END DO!is
+      END DO!jwann
+    END DO!iwann
+  END DO!ir
+  CLOSE(iun_coulomb)
+  !
+END SUBROUTINE write_coulomb
+
+SUBROUTINE bare_coulomb_me( iwann )
+
+!this function calculates the Coulomb interaction matrix element:
+! <rho_{R,iwann}|V_{Hxc}|rho_{0,jwann}>
+!
+USE kinds,                ONLY : DP
+USE control_kcw,          ONLY : nqstot, tmp_dir_save, num_wann, nrho
+USE control_kcw,          ONLY : iurho_wann, x_q, irvect_shifted
+USE control_kcw,          ONLY : Vcoulomb, Wcoulomb
+USE control_kcw,          ONLY : spin_component, get_coulomb, num_R
+USE buffers,              ONLY : get_buffer 
+USE io_files,             ONLY : tmp_dir
+USE fft_base,             ONLY : dffts
+USE klist,                ONLY : nkstot
+USE gvecs,                ONLY : ngms
+USE noncollin_module,     ONLY : nspin_mag
+USE constants,            ONLY : tpi
+USE lsda_mod,             ONLY : nspin
+USE cell_base,            ONLY : omega, at
+USE mp_bands,             ONLY : intra_bgrp_comm
+USE mp,                   ONLY : mp_sum
+!
+IMPLICIT NONE
+COMPLEX(DP)                  :: IMAG = (0.D0,1.D0)
+INTEGER, INTENT(IN)          :: iwann
+! (fixed) index of wannier function
+INTEGER                      :: jwann
+! index of wannier functions to loop over
+INTEGER                      :: ip
+! index of nrho to loop over
+INTEGER                      :: ir
+!
+!quantities needed for computing bare_pot for jwann
+!
+INTEGER                      :: iq
+!
+COMPLEX(DP), ALLOCATABLE     :: rhog(:,:), rhog_iwann(:,:)
+! ... periodic part of wannier density in G-space
+COMPLEX(DP), ALLOCATABLE     :: delta_vg(:,:)
+! ... perturbing potential [f_hxc(r,r') x wann(r')] in G-space
+COMPLEX(DP), ALLOCATABLE     :: delta_vg_(:,:)
+! ... perturbing potential [f_hxc(r,r') x wann(r')] in G-space without g=0 contribution
+COMPLEX(DP), ALLOCATABLE     :: vh_rhog(:)
+! ... Hartree perturbing potential [f_hxc(r,r') x wann(r')] in G-space
+COMPLEX(DP), ALLOCATABLE     :: delta_vr(:,:)
+! ... perturbing potential [f_hxc(r,r') x wann(r')] in r-space
+COMPLEX(DP), ALLOCATABLE     :: delta_vr_(:,:)
+! ... perturbing potential [f_hxc(r,r') x wann(r')] in r-space without g=0 contribution
+COMPLEX(DP), ALLOCATABLE     :: rhor(:,:)
+! ... periodic part of wannier density in r-space
+INTEGER                      :: lrrho
+INTEGER                      :: is, is_, is1
+INTEGER                      :: spin_index
+!
+! we are already inside loops over iq and iwann
+!
+COMPLEX(DP)                  :: pi_q_unrelax(2), pi_q_relax(2), pi_q_unrelax_(2)
+REAL(DP)                     ::x_q_cryst(3)
+! The weight of each q point
+REAL(DP)                     :: weight(nqstot)
+COMPLEX(DP), ALLOCATABLE     :: rhowann(:, :, :)
+!
+!
+ALLOCATE(rhog(ngms,nrho))
+ALLOCATE(rhog_iwann(ngms,nrho))
+ALLOCATE(delta_vg(ngms,nspin_mag))
+ALLOCATE(delta_vg_(ngms,nspin_mag))
+ALLOCATE(vh_rhog(ngms))
+ALLOCATE(delta_vr(dffts%nnr,nspin_mag))
+ALLOCATE(delta_vr_(dffts%nnr,nspin_mag))
+ALLOCATE(rhor(dffts%nnr,nrho))
+ALLOCATE (rhowann(dffts%nnr, num_wann, nrho))
+!
+IF (nrho==4) THEN
+    CALL errore('output_coulomb', 'non-collinear not implemented &
+      for coulomb matrix elements.', 1)
+END IF
+!
+DO iq = 1, nqstot 
+   !
+   lrrho=num_wann*dffts%nnr*nrho
+   CALL get_buffer (rhowann, lrrho, iurho_wann, iq)
+   !! Retrive the rho_wann_q(r) from buffer in REAL space
+   !
+   weight(iq) = 1.D0/nqstot ! No SYMM 
+   !
+   ip=1
+   rhor(:,ip) = rhowann(:,iwann,ip)
+   CALL bare_pot ( rhor, rhog, vh_rhog, delta_vr, delta_vg, iq, delta_vr_, delta_vg_) 
+   rhog_iwann= rhog
+   !
+   DO jwann = 1, num_wann
+     !here rhowann is already filled with the wannier density in real space 
+     !for fixed iq
+     !
+     ! get rhog for jwann by fourier transforming rhor 
+     !WARNING! WON'T WORK FOR NON_COLLINEAR
+       DO ir = 1, num_R
+         ip=1
+         rhor(:,ip) = rhowann(:,jwann,ip)
+         ! rho_q(r-R) = rho_q(r) e^{-iqR}
+         x_q_cryst(:) = x_q(:,iq)
+         CALL cryst_to_cart(1,x_q_cryst,at,-1)
+         rhor(:, ip) = rhor(:, ip) * EXP( -IMAG*tpi*DOT_PRODUCT(x_q_cryst(:),irvect_shifted(:,ir)) )
+         CALL bare_pot ( rhor, rhog, vh_rhog, delta_vr, delta_vg, iq, delta_vr_, delta_vg_) 
+         !
+         ! for now we only work with the density, i.e. ip = 1
+         ! we evaluate 
+         !   <jwann, R| Vxc | iwann, 0> = <deltaVg | rhog(iwann)>
+         DO is = 1, 2 !one for spin component, other for non spin component
+!             write(*,*) "NICOLA", iq, iwann, jwann, is, spin_index(is), spin_component
+             pi_q_unrelax (spin_index(is)) = weight(iq) * omega * SUM( CONJG(delta_vg (:,is)) * rhog_iwann(:,1) )  
+             pi_q_unrelax_(spin_index(is)) = weight(iq) * omega * SUM( CONJG(delta_vg_(:,is)) * rhog_iwann(:,1) )  
+         END DO  
+         CALL mp_sum (pi_q_unrelax,  intra_bgrp_comm)
+         CALL mp_sum (pi_q_unrelax_, intra_bgrp_comm)
+         Vcoulomb(:, ir, jwann, iwann) = Vcoulomb(:, ir, jwann, iwann) + pi_q_unrelax(:)
+         !
+         !IF (jwann .eq. iwann .and. SUM(ABS(iRvect_shifted(:,ir))) .lt. 1.D-06 )&
+         !WRITE(*,*) "(TO COMPARE with output) iq = ", iq, "rvect=", irvect_shifted(:, ir), "pi_q_unrelax=", pi_q_unrelax
+         !
+       END DO !ir
+   END DO !jwann
+ !
+ENDDO !qpoints
+!
+DEALLOCATE(rhog)
+DEALLOCATE(rhog_iwann)
+DEALLOCATE(delta_vg)
+DEALLOCATE(delta_vg_)
+DEALLOCATE(vh_rhog)
+DEALLOCATE(delta_vr)
+DEALLOCATE(delta_vr_)
+DEALLOCATE(rhor)
+
+
+END SUBROUTINE
+
+
+
+FUNCTION spin_index(is) 
+  !! spin index for up-up / down-down -> 1 
+  !! spin index for up-down /down-up  -> 2
+  USE control_kcw,     ONLY : spin_component
+  IMPLICIT NONE
+  INTEGER    :: is 
+  INTEGER    :: spin_index 
+
+  IF( is .eq. spin_component ) THEN 
+    spin_index = 1
+  ELSE 
+    spin_index = 2 
+  END IF
+END FUNCTION

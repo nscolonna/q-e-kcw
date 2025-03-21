@@ -1,4 +1,4 @@
-set(src_kcwpp bcast_kcw_pp_input.f90 input_pp_summary.f90 kcw_pp_readin.f90 read_hr.f90 kcw_bands.f90 sh_setup.f90)
+set(src_kcwpp bcast_kcw_pp_input.f90 input_pp_summary.f90 kcw_pp_readin.f90 read_hr.f90 kcw_bands.f90 sh_setup.f90 bare_coulomb.f90)
 
 qe_add_library(qe_kcwpp ${src_kcwpp})
 target_link_libraries(
