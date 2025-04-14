@@ -150,7 +150,7 @@ PROGRAM compute_self_hartree
     !
   ENDDO
   !
-  IF(get_coulomb) CALL write_coulomb()
+  IF(get_coulomb) CALL write_bare_coulomb()
   ! Clean and Close 
   CALL mp_global_end()
   CALL environment_end( code )

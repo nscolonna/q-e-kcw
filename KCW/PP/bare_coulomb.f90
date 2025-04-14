@@ -1,5 +1,5 @@
 
-SUBROUTINE write_coulomb()
+SUBROUTINE write_bare_coulomb()
 USE kinds,                ONLY : DP
 USE control_kcw,          ONLY : Vcoulomb, Wcoulomb
 USE control_kcw,          ONLY : spin_component, get_coulomb, irvect_shifted
@@ -19,11 +19,11 @@ INTEGER              ::    spin_index
   OPEN (iun_coulomb, file = filename)
 
   DO ir = 1, num_R
-    WRITE(iun_coulomb, *) irvect_shifted(:, ir) 
+    WRITE(iun_coulomb, '(3I7)') irvect_shifted(:, ir) 
     DO iwann=1, num_wann
       DO jwann=1, num_wann
         DO is = 1, 2 !one for spin component, other for non spin component
-          WRITE(iun_coulomb, *) iwann, jwann, spin_index(is), &
+          WRITE(iun_coulomb, '(3I5, 3X, 2ES24.16)') iwann, jwann, spin_index(is), &
           real(Vcoulomb(is, ir, jwann, iwann)), aimag(Vcoulomb(is, ir, jwann, iwann)) 
         END DO!is
       END DO!jwann
@@ -31,7 +31,7 @@ INTEGER              ::    spin_index
   END DO!ir
   CLOSE(iun_coulomb)
   !
-END SUBROUTINE write_coulomb
+END SUBROUTINE write_bare_coulomb
 
 SUBROUTINE bare_coulomb_me( iwann )
 
