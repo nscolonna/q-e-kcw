@@ -1,0 +1,29 @@
+W2K Silicon
+&control
+  prefix='Si'
+  outdir='/home/colonna_n/CODES/q-e-kcw/tempdir/'
+  kcw_iverbosity = 2
+  kcw_at_ks=.false.
+  read_unitary_matrix = .true.
+  calculation = 'screen'
+  mp1 = 2
+  mp2 = 2
+  mp3 = 2
+  lrpa = .true.
+  l_vcut = .true.
+  get_coulomb = .true.
+/
+&wannier
+  seedname = 'Si'
+  check_ks = .true.
+  num_wann_occ = 4
+  num_wann_emp = 4
+  have_empty = .false.
+  has_disentangle = .false.
+  l_unique_manifold = .true. 
+/
+&screen
+  tr2    =1.0d-18
+  nmix   = 4
+  niter  = 33
+/
