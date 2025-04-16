@@ -4,6 +4,7 @@ USE kinds,                ONLY : DP
 USE control_kcw,          ONLY : Vcoulomb, Wcoulomb
 USE control_kcw,          ONLY : spin_component, get_coulomb, irvect_shifted
 USE control_kcw,          ONLY : num_wann, nqstot, num_R
+USE noncollin_module,     ONLY : nspin_mag
 !
 IMPLICIT NONE
 !
@@ -22,7 +23,7 @@ INTEGER              ::    spin_index
     WRITE(iun_coulomb, '(3I7)') irvect_shifted(:, ir) 
     DO iwann=1, num_wann
       DO jwann=1, num_wann
-        DO is = 1, 2 !one for spin component, other for non spin component
+        DO is = 1, nspin_mag !one for spin component, other for non spin component
           WRITE(iun_coulomb, '(3I5, 3X, 2ES24.16)') iwann, jwann, spin_index(is), &
           real(Vcoulomb(is, ir, jwann, iwann)), aimag(Vcoulomb(is, ir, jwann, iwann)) 
         END DO!is
@@ -40,7 +41,7 @@ INTEGER              ::    spin_index
     WRITE(iun_coulomb, '(3I7)') irvect_shifted(:, ir) 
     DO iwann=1, num_wann
       DO jwann=1, num_wann
-        DO is = 1, 2 !one for spin component, other for non spin component
+        DO is = 1, nspin_mag !one for spin component, other for non spin component
           WRITE(iun_coulomb, '(3I5, 3X, 2ES24.16)') iwann, jwann, spin_index(is), &
                real(Wcoulomb(is, ir, jwann, iwann)), aimag(Wcoulomb(is, ir, jwann, iwann)) 
         END DO!is
@@ -153,7 +154,7 @@ DO jwann = 1, num_wann
       ! for now we only work with the density, i.e. ip = 1
       ! we evaluate 
       !   <jwann, R| Vxc | iwann, 0> = <deltaVg | rhog(iwann)>
-      DO is = 1, 2 !one for spin component, other for non spin component
+      DO is = 1, nspin_mag !one for spin component, other for non spin component
           pi_q_unrelax (spin_index(is)) = weight_q * omega * SUM( CONJG(delta_vg (:,is)) * rhog_iwann(:,1) )  
           pi_q_unrelax_(spin_index(is)) = weight_q * omega * SUM( CONJG(delta_vg_(:,is)) * rhog_iwann(:,1) )  
       END DO  
@@ -164,8 +165,8 @@ DO jwann = 1, num_wann
       ! screened potential
       ! < jwann, R| W | 0, iwann>
       pi_q_relax(:) = (0.D0, 0.D0)
-      DO is =1, 2
-        DO is1 = 1, 2
+      DO is =1, nspin_mag
+        DO is1 = 1, nspin_mag
           pi_q_relax(spin_index(is)) = pi_q_relax(spin_index(is)) + &
                                        sum (CONJG(drhog_scf (:,is1)) * delta_vg(:,is1))*weight_q*omega
         END DO 
