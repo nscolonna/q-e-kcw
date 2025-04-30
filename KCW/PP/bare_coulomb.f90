@@ -4,6 +4,7 @@ USE kinds,                ONLY : DP
 USE control_kcw,          ONLY : Vcoulomb, Wcoulomb
 USE control_kcw,          ONLY : spin_component, get_coulomb, irvect_shifted
 USE control_kcw,          ONLY : num_wann, nqstot, num_R
+USE noncollin_module,     ONLY : nspin_mag
 !
 IMPLICIT NONE
 !
@@ -22,7 +23,7 @@ INTEGER              ::    spin_index
     WRITE(iun_coulomb, '(3I7)') irvect_shifted(:, ir) 
     DO iwann=1, num_wann
       DO jwann=1, num_wann
-        DO is = 1, 2 !one for spin component, other for non spin component
+        DO is = 1, nspin_mag !one for spin component, other for non spin component
           WRITE(iun_coulomb, '(3I5, 3X, 2ES24.16)') iwann, jwann, spin_index(is), &
           real(Vcoulomb(is, ir, jwann, iwann)), aimag(Vcoulomb(is, ir, jwann, iwann)) 
         END DO!is
@@ -63,7 +64,7 @@ INTEGER                      :: jwann
 ! index of wannier functions to loop over
 INTEGER                      :: ip
 ! index of nrho to loop over
-INTEGER                      :: ir
+INTEGER                      :: ir, irr
 !
 !quantities needed for computing bare_pot for jwann
 !
@@ -81,7 +82,7 @@ COMPLEX(DP), ALLOCATABLE     :: delta_vr(:,:)
 ! ... perturbing potential [f_hxc(r,r') x wann(r')] in r-space
 COMPLEX(DP), ALLOCATABLE     :: delta_vr_(:,:)
 ! ... perturbing potential [f_hxc(r,r') x wann(r')] in r-space without g=0 contribution
-COMPLEX(DP), ALLOCATABLE     :: rhor(:,:)
+COMPLEX(DP), ALLOCATABLE     :: rhor(:,:), rhor_iwann(:,:)
 ! ... periodic part of wannier density in r-space
 INTEGER                      :: lrrho
 INTEGER                      :: is, is_, is1
@@ -104,6 +105,7 @@ ALLOCATE(vh_rhog(ngms))
 ALLOCATE(delta_vr(dffts%nnr,nspin_mag))
 ALLOCATE(delta_vr_(dffts%nnr,nspin_mag))
 ALLOCATE(rhor(dffts%nnr,nrho))
+ALLOCATE(rhor_iwann(dffts%nnr,nrho))
 ALLOCATE (rhowann(dffts%nnr, num_wann, nrho))
 !
 IF (nrho==4) THEN
@@ -122,7 +124,8 @@ DO iq = 1, nqstot
    ip=1
    rhor(:,ip) = rhowann(:,iwann,ip)
    CALL bare_pot ( rhor, rhog, vh_rhog, delta_vr, delta_vg, iq, delta_vr_, delta_vg_) 
-   rhog_iwann= rhog
+   rhog_iwann = rhog
+   rhor_iwann(:,ip) = rhor(:,ip)
    !
    DO jwann = 1, num_wann
      !here rhowann is already filled with the wannier density in real space 
@@ -147,6 +150,16 @@ DO iq = 1, nqstot
              pi_q_unrelax (spin_index(is)) = weight(iq) * omega * SUM( CONJG(delta_vg (:,is)) * rhog_iwann(:,1) )  
              pi_q_unrelax_(spin_index(is)) = weight(iq) * omega * SUM( CONJG(delta_vg_(:,is)) * rhog_iwann(:,1) )  
          END DO  
+         !WRITE(*,*) "rhor_iwann(1:3) =", rhor_iwann (1:3,1)
+         !WRITE(*,*) "delta_vr(1:3) =", delta_vr (1:3,1)
+         !IF (iwann == 1) THEN 
+         ! WRITE(*,*) iwann, jwann, dffts%nnr
+         ! DO irr =1,dffts%nnr;  WRITE(1000,*) irr, REAL(rhor_iwann (irr,1)), AIMAG(rhor_iwann (irr,1)); ENDDO
+         ! DO irr =1,dffts%nnr;  WRITE(1000+jwann,*) irr, REAL(rhor(irr,1)), AIMAG(rhor (irr,1)); ENDDO
+         ! DO irr =1,dffts%nnr;  WRITE(2000+jwann,*) irr, REAL(delta_vr (irr,1)), AIMAG(delta_vr (irr,1)); ENDDO
+         ! WRITE (*,*) "RS", sum (CONJG(rhor_iwann (:,1)) * delta_vr(:,1))/( dffts%nr1*dffts%nr2*dffts%nr3 )
+         ! WRITE (*,*) "GS", pi_q_unrelax(1)
+         !ENDIF 
          CALL mp_sum (pi_q_unrelax,  intra_bgrp_comm)
          CALL mp_sum (pi_q_unrelax_, intra_bgrp_comm)
          Vcoulomb(:, ir, jwann, iwann) = Vcoulomb(:, ir, jwann, iwann) + pi_q_unrelax(:)
