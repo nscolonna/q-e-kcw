@@ -253,11 +253,11 @@ SUBROUTINE dH_ki_full (ik, dH_wann)
      delta_eig(ibnd) = segno * delta_eig(ibnd)
      !
      IF (segno == -1) THEN
-       WRITE(stdout, '(8x, "KI corr const term, sh[n_i], Exc[n], Exc[n-n_i], int{v_xc[n] n_i} ", 4F14.8)') sh, &
-           etxc, etxc_minus1, etmp 
+       WRITE(stdout, '(8x, "KI corr const term, ibnd, ispin, sh[n_i], Exc[n], Exc[n-n_i], int{v_xc[n] n_i} ", 2I5, 4F14.8)') &
+               ibnd, spin_component, sh, etxc, etxc_minus1, etmp 
      ELSE
-       WRITE(stdout, '(8x, "KI corr const term, sh[n_i], Exc[n], Exc[n+n_i], int{v_xc[n] n_i} ", 4F14.8)') sh, &
-           etxc, etxc_minus1, etmp 
+       WRITE(stdout, '(8x, "KI corr const term, ibnd, ispin, sh[n_i], Exc[n], Exc[n+n_i], int{v_xc[n] n_i} ", 2I5, 4F14.8)') &
+               ibnd, spin_component, sh, etxc, etxc_minus1, etmp 
      ENDIF
      IF (lrpa) delta_eig(ibnd) = segno * sh  !! hartree only for debug
      WRITE(stdout,'(8X, "Delta KI", 2F15.8)')  delta_eig(ibnd), delta_eig(ibnd)*alpha_final(ibnd)
@@ -324,8 +324,8 @@ SUBROUTINE dH_ki_full (ik, dH_wann)
         CALL v_xc( rho_minus1, aux_r, aux_g, etxc_minus1, vtxc_minus1, vxc_minus1 )
         nspin=nspin_aux
         !
-        WRITE(stdout , '(8x, "PZ corr const term, sh[n_i], Exc[n_i], int{v_xc[n_i] n_i}", 3F15.8)') &
-            sh, etxc_minus1, vtxc_minus1
+        WRITE(stdout , '(8x, "PZ corr const term, ibnd, ispin, sh[n_i], Exc[n_i], int{v_xc[n_i] n_i}", 2I5, 3F15.8)') &
+            ibnd, spin_component, sh, etxc_minus1, vtxc_minus1
         !
         WRITE(stdout,'(8X, "Delta PZ", 2F15.8)')  -(sh+etxc_minus1), -(sh+etxc_minus1)*alpha_final(ibnd)
         !
