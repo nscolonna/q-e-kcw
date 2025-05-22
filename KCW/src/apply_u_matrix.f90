@@ -21,7 +21,8 @@ subroutine apply_u_matrix(evc_ks, evc_var, occ_mat, ik_eff, n_orb)
   USE io_global,            ONLY : stdout
   USE kinds,                ONLY : DP
   USE control_kcw,          ONLY : unimatrx, unimatrx_opt, &
-                                   num_wann, has_disentangle, kcw_iverbosity
+                                   num_wann, has_disentangle, kcw_iverbosity, &
+                                   num_excluded_bands, ilast_excluded_bands
   USE wvfct,                ONLY : npwx, nbnd
   USE noncollin_module,     ONLY : npol
   USE mp,                   ONLY : mp_bcast, mp_sum
@@ -56,21 +57,25 @@ subroutine apply_u_matrix(evc_ks, evc_var, occ_mat, ik_eff, n_orb)
   !
   COMPLEX(DP), ALLOCATABLE :: aux(:,:), aux1(:,:), Umat(:,:), Umat_opt(:,:), fuv(:,:), c_occ_mat(:,:)
   !
+  INTEGER :: jeff
+  !
   ! ... Rotate the KS orbitals ... 
   ! ... |phi_i> = \sum_j |psi_j>*U_ji
   !
   ALLOCATE ( evc_opt(npwx*npol,num_wann) )
   evc_opt(:,:) = CMPLX(0.D0,0.D0,kind=DP)
   !
-  dim_ks = nbnd 
+  !
+  dim_ks = nbnd-num_excluded_bands 
   IF ( .NOT. has_disentangle) dim_ks = num_wann
   !
   DO i = 1, num_wann
     !
     DO j = 1, dim_ks
+      jeff = j + ilast_excluded_bands
       !
       !evc_opt(:,i) = evc_opt(:,i) + evc_ks(:,j) * unimatrx_opt (i,j,ik_eff)
-      evc_opt(:,i) = evc_opt(:,i) + evc_ks(:,j) * unimatrx_opt (j,i,ik_eff)
+      evc_opt(:,i) = evc_opt(:,i) + evc_ks(:,jeff) * unimatrx_opt (j,i,ik_eff)
       !
     ENDDO
     !

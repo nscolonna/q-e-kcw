@@ -239,7 +239,8 @@ END subroutine read_wannier_unique_manifold
   USE kinds,                ONLY : DP
   USE control_kcw,          ONLY : unimatrx, have_empty, num_wann_occ, seedname, &
                                    has_disentangle, have_empty, num_wann_emp, & 
-                                   unimatrx_opt, num_wann, kcw_iverbosity, spin_component
+                                   unimatrx_opt, num_wann, kcw_iverbosity, spin_component, &
+                                   num_excluded_bands
   USE mp_global,            ONLY : intra_image_comm
   USE mp,                   ONLY : mp_bcast
   USE io_global,            ONLY : ionode, ionode_id
@@ -294,6 +295,8 @@ END subroutine read_wannier_unique_manifold
       nkstot_eff = nkstot/nspin
       nbnd_pw= nint(nelec) / 2
   ENDIF 
+  !
+  nbnd_pw = nbnd_pw - num_excluded_bands
   !
   IF (ionode) THEN
      !

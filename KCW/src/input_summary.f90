@@ -27,23 +27,26 @@ subroutine input_summary ( )
     WRITE(stdout,'(5X,  44("="))')
 !!!! CONTOL NAMELIST
     WRITE( stdout, '(/, 6X, "CONTROL ")') 
-    WRITE(stdout, 41)  "# title               =", TRIM(title)
-    WRITE(stdout, 41)  "# out_dir             =", TRIM(tmp_dir)
-    WRITE(stdout, 42)  "# prefix              =", TRIM(prefix)
-    WRITE(stdout, 42)  "# calculation         =", TRIM(calculation)
-    WRITE(stdout, 45)  "# kcw_iverbosity      =", kcw_iverbosity
-    WRITE(stdout, 43)  "# kcw_at_ks           =", kcw_at_ks     
-    WRITE(stdout, 47)  "# MP grid             =", mp1, mp2, mp3
-    WRITE(stdout, 45)  "# spin_component      =", spin_component
-    WRITE(stdout, 43)  "# homo_only           =", homo_only    
-    WRITE(stdout, 43)  "# read_unitary_matrix =", read_unitary_matrix  
-    WRITE(stdout, 43)  "# check_ks            =", check_ks
-    WRITE(stdout, 43)  "# l_vcut              =", l_vcut    
-    WRITE(stdout, 42)  "# assume_isolated     =", TRIM(assume_isolated)
-    WRITE(stdout, 43)  "# io_sp               =", io_sp
-    WRITE(stdout, 43)  "# io_real_space       =", io_real_space
-    WRITE(stdout, 43)  "# irr_bz              =", irr_bz
-    WRITE(stdout, 43)  "# use_wct         =", use_wct
+    WRITE(stdout, 41)  "# title                 =", TRIM(title)
+    WRITE(stdout, 41)  "# out_dir               =", TRIM(tmp_dir)
+    WRITE(stdout, 42)  "# prefix                =", TRIM(prefix)
+    WRITE(stdout, 42)  "# calculation           =", TRIM(calculation)
+    WRITE(stdout, 45)  "# kcw_iverbosity        =", kcw_iverbosity
+    WRITE(stdout, 43)  "# kcw_at_ks             =", kcw_at_ks     
+    WRITE(stdout, 47)  "# MP grid               =", mp1, mp2, mp3
+    WRITE(stdout, 45)  "# spin_component        =", spin_component
+    WRITE(stdout, 43)  "# homo_only             =", homo_only    
+    WRITE(stdout, 43)  "# read_unitary_matrix   =", read_unitary_matrix  
+    WRITE(stdout, 43)  "# check_ks              =", check_ks
+    WRITE(stdout, 43)  "# l_vcut                =", l_vcut    
+    WRITE(stdout, 42)  "# assume_isolated       =", TRIM(assume_isolated)
+    WRITE(stdout, 43)  "# io_sp                 =", io_sp
+    WRITE(stdout, 43)  "# io_real_space         =", io_real_space
+    WRITE(stdout, 43)  "# irr_bz                =", irr_bz
+    WRITE(stdout, 43)  "# use_wct               =", use_wct
+    WRITE(stdout, 45)  "# num_excluded_bands    =", num_excluded_bands
+    WRITE(stdout, 45)  "# istart_excluded_bands =", istart_excluded_bands
+    WRITE(stdout, 45)  "# ilast_excluded_bands  =", ilast_excluded_bands
     !
     IF ( .NOT. kcw_at_ks .AND. .NOT. calculation=='cc' ) THEN 
 !!! WANNIER

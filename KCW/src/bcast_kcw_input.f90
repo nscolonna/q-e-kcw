@@ -67,6 +67,9 @@ subroutine bcast_kcw_input ( )
   call mp_bcast ( io_real_space,       ionode_id, intra_image_comm )
   call mp_bcast ( irr_bz,              ionode_id, intra_image_comm )
   call mp_bcast ( use_wct,             ionode_id, intra_image_comm )
+  call mp_bcast ( num_excluded_bands,  ionode_id, intra_image_comm )
+  call mp_bcast ( istart_excluded_bands,  ionode_id, intra_image_comm )
+  call mp_bcast ( ilast_excluded_bands,  ionode_id, intra_image_comm )
    !
 #endif
   !

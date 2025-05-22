@@ -59,7 +59,8 @@ SUBROUTINE kcw_readin()
                         mp1, mp2, mp3, lrpa, io_sp, io_real_space, irr_bz, use_wct 
   !
   NAMELIST / WANNIER /  num_wann_occ, num_wann_emp, have_empty, has_disentangle, &
-                        seedname, check_ks, l_unique_manifold
+                        seedname, check_ks, l_unique_manifold, &
+                        istart_excluded_bands, ilast_excluded_bands, num_excluded_bands
   !
   NAMELIST / SCREEN /   fix_orb, niter, nmix, tr2, i_orb, eps_inf, check_spread, alpha_mix
   !
@@ -189,6 +190,9 @@ SUBROUTINE kcw_readin()
   io_real_space       = .FALSE.
   irr_bz              = .FALSE.
   use_wct             = .FALSE.
+  num_excluded_bands  = 0
+  istart_excluded_bands = 0
+  ilast_excluded_bands = 0
   ! 
   ! ...  reading the namelists (if needed)
   !
