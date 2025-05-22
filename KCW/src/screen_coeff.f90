@@ -21,7 +21,7 @@ SUBROUTINE screen_coeff ()
   USE control_kcw,          ONLY : kcw_iverbosity, spin_component, num_wann, iorb_start, l_do_alpha, &
                                    iorb_end, alpha_final, nqstot, eps_inf, l_vcut, l_unique_manifold, &  
                                    group_alpha, tmp_dir_kcw, iurho_wann, tmp_dir_kcwq, x_q, tmp_dir_save, &
-                                   i_orb, nrho, wq_ibz, fbz2ibz, irr_bz, setup_pw
+                                   i_orb, nrho, wq_ibz, fbz2ibz, irr_bz, setup_pw, num_excluded_bands
   USE noncollin_module,  ONLY : domag, noncolin, m_loc, angle1, angle2, ux, nspin_mag, npol
   USE buffers,              ONLY : get_buffer, save_buffer
   USE io_global,            ONLY : stdout, ionode
@@ -153,7 +153,7 @@ SUBROUTINE screen_coeff ()
     !
     ALLOCATE ( rhog (ngms,nrho) , delta_vg(ngms,nspin_mag), vh_rhog(ngms), drhog_scf (ngms, nspin_mag), delta_vg_(ngms,nspin_mag) )
     !
-    IF ( lgamma .AND. .NOT. l_unique_manifold) CALL check_density (rhowann) 
+    IF ( lgamma .AND. .NOT. (l_unique_manifold .OR. (num_excluded_bands .gt. 0) ) ) CALL check_density (rhowann) 
     !
     DO iwann = iorb_start, iorb_end  ! for each wannier, that is actually the perturbation
       !
