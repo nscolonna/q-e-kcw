@@ -47,7 +47,8 @@ END subroutine read_wannier
   !
   USE kinds,                ONLY : DP
   USE control_kcw,          ONLY : unimatrx, seedname, has_disentangle, &
-                                   unimatrx_opt, num_wann, kcw_iverbosity
+                                   unimatrx_opt, num_wann, kcw_iverbosity, &
+                                   num_excluded_bands
   USE mp_global,            ONLY : intra_image_comm
   USE mp,                   ONLY : mp_bcast
   USE io_global,            ONLY : ionode, ionode_id
@@ -74,7 +75,7 @@ END subroutine read_wannier
   CHARACTER (len=256) :: u_file, u_dis_file, dum
   ! ... the name of the file containing the U matrix
   !
-  INTEGER i, j, nkstot_eff
+  INTEGER i, j, nkstot_eff, nbnd_pw
   ! 
   INTEGER ierr
   !
@@ -88,6 +89,8 @@ END subroutine read_wannier
   !
   ! ... The U matrix for empty states 
   !
+  nbnd_pw = nbnd
+  nbnd_pw = nbnd-num_excluded_bands
   IF (has_disentangle) THEN
      !
      u_dis_file=TRIM( seedname ) // '_u_dis.mat'
@@ -108,7 +111,7 @@ END subroutine read_wannier
         IF (num_wann_file /= num_wann .AND. num_wann /= 0) &
               CALL errore ('read_wannier', 'Mismatch in num_wann from input vs from U Optimal matrix', 1)
         !
-        IF (num_ks_file /=  nbnd ) &
+        IF (num_ks_file /=  nbnd_pw ) &
              CALL errore ('read_wannier', 'Mismatch between num KS state from PW and Wann90', 1)
         !
      ENDIF
@@ -389,6 +392,7 @@ END subroutine read_wannier_unique_manifold
   u_file=TRIM( seedname ) // '_emp_u.mat'
   !
   ! ... The U matrix for empty states 
+  nbnd_pw = nbnd - num_excluded_bands
   IF (has_disentangle) THEN
      !
      u_dis_file=TRIM( seedname ) // '_emp_u_dis.mat'
@@ -409,7 +413,7 @@ END subroutine read_wannier_unique_manifold
         IF (num_wann_file /= num_wann_emp .AND. num_wann_emp /= 0) &
               CALL errore ('read_wannier', 'Mismatch in num_wann from input vs from U Optimal matrix', 1)
         !
-        IF (num_ks_file /= ( nbnd - num_wann_occ ) ) &
+        IF (num_ks_file /= ( nbnd_pw - num_wann_occ ) ) &
              CALL errore ('read_wannier', 'Mismatch between num empty bands and num empty wann', 1)
         !
      ENDIF
@@ -502,7 +506,7 @@ END subroutine read_wannier_unique_manifold
   !
   ! Store the result in a unique matrix
   ALLOCATE (unimatrx (num_wann, num_wann, nkstot_eff))
-  ALLOCATE (unimatrx_opt (nbnd, num_wann, nkstot_eff))
+  ALLOCATE (unimatrx_opt (nbnd_pw, num_wann, nkstot_eff))
   !
   unimatrx=CMPLX(0.D0,0.D0, kind=DP)
   unimatrx_opt=CMPLX(0.D0,0.D0, kind=DP)
@@ -559,7 +563,7 @@ END subroutine read_wannier_unique_manifold
   ! WRITE
   DO ik =1, nkstot_eff
     WRITE (*, *) xk_file(1,ik), xk_file(2,ik), xk_file(3,ik)
-    DO i=1,nbnd
+    DO i=1,nbnd_pw
        WRITE (*,'(10(f8.4,sp,f8.4))') (unimatrx_opt(j,i,ik),j=1,num_wann)
     ENDDO
     WRITE(*,*)
