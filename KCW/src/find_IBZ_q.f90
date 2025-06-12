@@ -60,13 +60,19 @@ SUBROUTINE find_IBZ_q()
     COMPLEX (DP) :: int_rho_Rq, eiRqR
     INTEGER :: is_sym( nsym )
     LOGICAL :: respected 
+    INTEGER :: nkstot_eff
     !
     !
     CALL start_clock ( 'check_symm' )
     !
+    IF (nspin == 4) THEN
+      nkstot_eff = nkstot
+    ELSE
+      nkstot_eff = nkstot/nspin
+    ENDIF 
     IMAG = CMPLX(0.D0, 1.D0, kind=DP)
     ALLOCATE ( rhog (ngms) )
-    ALLOCATE ( rhowann ( dffts%nnr, nkstot/nspin, num_wann, nrho) )
+    ALLOCATE ( rhowann ( dffts%nnr, nkstot_eff, num_wann, nrho) )
     ALLOCATE ( rhowann_aux(dffts%nnr) )
     ALLOCATE ( rhog_all(ngms,nrho) )
     ALLOCATE ( rho_rotated( dffts%nnr, nrho) )
@@ -125,6 +131,11 @@ SUBROUTINE find_IBZ_q()
           !end of storing rhowann
           !
         END DO ! ip
+        ! FIXME DEBUG NsC
+        !WRITE(*,*) "NICOLA: Overwriting wannier density to force these ot be along z" 
+        !rhowann(:,iq,iwann,2) = 0.00
+        !rhowann(:,iq,iwann,3) = 0.00
+        !rhowann(:,iq,iwann,4) = rhowann(:,iq,iwann,1)
       END DO!iwann
     END DO !iq
     !
