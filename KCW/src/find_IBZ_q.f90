@@ -60,13 +60,19 @@ SUBROUTINE find_IBZ_q()
     COMPLEX (DP) :: int_rho_Rq, eiRqR
     INTEGER :: is_sym( nsym )
     LOGICAL :: respected 
+    INTEGER :: nkstot_eff
     !
     !
     CALL start_clock ( 'check_symm' )
     !
+    IF (nspin == 4) THEN
+      nkstot_eff = nkstot
+    ELSE
+      nkstot_eff = nkstot/nspin
+    ENDIF 
     IMAG = CMPLX(0.D0, 1.D0, kind=DP)
     ALLOCATE ( rhog (ngms) )
-    ALLOCATE ( rhowann ( dffts%nnr, nkstot/nspin, num_wann, nrho) )
+    ALLOCATE ( rhowann ( dffts%nnr, nkstot_eff, num_wann, nrho) )
     ALLOCATE ( rhowann_aux(dffts%nnr) )
     ALLOCATE ( rhog_all(ngms,nrho) )
     ALLOCATE ( rho_rotated( dffts%nnr, nrho) )
@@ -125,6 +131,11 @@ SUBROUTINE find_IBZ_q()
           !end of storing rhowann
           !
         END DO ! ip
+        ! FIXME DEBUG NsC
+        !WRITE(*,*) "NICOLA: Overwriting wannier density to force these ot be along z" 
+        !rhowann(:,iq,iwann,2) = 0.00
+        !rhowann(:,iq,iwann,3) = 0.00
+        !rhowann(:,iq,iwann,4) = rhowann(:,iq,iwann,1)
       END DO!iwann
     END DO !iq
     !
@@ -212,7 +223,7 @@ SUBROUTINE find_IBZ_q()
             ! integrate difference and normalize with respect to number of r points in the grid
             !delta_rho = SUM( ABS(rhowann_aux(:)) )/(dffts%nr1*dffts%nr2*dffts%nr3)
             delta_rho = delta_rho + SUM( ABS(rhowann_aux(:)) )/(nrho*dffts%nr1*dffts%nr2*dffts%nr3)
-            int_rho_Rq = int_rho_Rq + SUM( phase(:)*rhowann(:,iRq,iwann,ip)  ) / (nrho*dffts%nr1*dffts%nr2*dffts%nr3)
+            !int_rho_Rq = int_rho_Rq + SUM( phase(:)*rhowann(:,iRq,iwann,ip)  ) / (nrho*dffts%nr1*dffts%nr2*dffts%nr3)
           END DO
           CALL mp_sum (delta_rho, intra_bgrp_comm)
           !
@@ -227,6 +238,10 @@ SUBROUTINE find_IBZ_q()
             ! \rho_q^{0n}(R^-1r -f) in \rho_Rq^{Ln}(r) = e^{-i(Rq).L}\rho_Rq^{0n}(r)
             ! with L any lattice vector in the SC to reduce the number of q points. 
             !
+            ! The following is not true anymore when we have the ABS value (as it should have)
+            ! We cannot use the identity in the second line. The integrale needs to be calculated 
+            ! for each R. 
+            ! WRONG! 
             ! delta_rho_R = int [\rho_q^{0n}(R^-1r -f) - e^{-i(Rq).L}\rho_Rq^{0n}(r)] =
             !             = int [\rho_q^{0n}(R^-1r -f) - \rho_Rq^{0n}(r)] + (1- e^{-i(Rq).L}) * \int [\rho_Rq^{0n}(r)]
             ! 
@@ -237,7 +252,12 @@ SUBROUTINE find_IBZ_q()
             !
             DO ir = 1, nqstot
               eiRqR=EXP( -IMAG*tpi*DOT_PRODUCT(x_q(:,iRq),Rvect(:,ir)) )
-              delta_rho_R = delta_rho + (CMPLX(1.D0,0.D0, kind=DP) - eiRqR)*int_rho_Rq
+              delta_rho_R = 0.D0
+              DO ip = 1, nrho
+                rhowann_aux(:) = rho_rotated(:,ip) - phase(:)*eiRqR*rhowann(:,iRq,iwann,ip)
+                delta_rho_R = delta_rho_R + SUM( ABS(rhowann_aux(:)) )/(nrho*dffts%nr1*dffts%nr2*dffts%nr3)
+              ENDDO
+              !delta_rho_R = delta_rho + (CMPLX(1.D0,0.D0, kind=DP) - eiRqR)*int_rho_Rq
               !WRITE (stdout, *) "          ir  =", ir,  "Rvect  =", Rvect(1:3,ir)
               !WRITE (stdout, *) "          iRq =", iRq, "x(iRq) =", x_q(1:3,iRq)
               !WRITE (stdout, *) "          \int rho_Rq(r) dr = ", int_rho_Rq, "exp(-iRq*Rvec) =", eiRqR
