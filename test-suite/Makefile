@@ -41,7 +41,7 @@ pseudo :
 	@./check_pseudo.sh kcw_
 	@./check_pseudo.sh oscdft_
 
-run-tests : run-tests-pw run-tests-cp run-tests-ph run-tests-pp run-tests-hp run-tests-tddfpt run-tests-kcw
+run-tests : run-tests-pw run-tests-cp run-tests-ph run-tests-pp run-tests-hp run-tests-tddfpt run-tests-kcw run-tests-pioud
 
 run-tests-cp : prolog pseudo
 	env QE_USE_MPI=$(NPROCS) ${TESTCODE_DIR}/bin/testcode.py --verbose --category=cp_all
@@ -78,6 +78,9 @@ run-tests-all_currents : prolog pseudo
 
 run-tests-oscdft : prolog pseudo
 	env QE_USE_MPI=$(NPROCS) ${TESTCODE_DIR}/bin/testcode.py --verbose --category=oscdft_all
+
+run-tests-pioud : prolog pseudo
+	env QE_USE_MPI=$(NPROCS) ${TESTCODE_DIR}/bin/testcode.py --verbose --category=pioud_all
 
 run-travis : clean prolog pseudo
 	env QE_USE_MPI=$(NPROCS) ${TESTCODE_DIR}/bin/testcode.py --verbose --category=epw_base
