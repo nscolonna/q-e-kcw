@@ -80,6 +80,7 @@ SUBROUTINE rotate_ks ()
      npw = ngk(ik)
      !
      CALL get_buffer ( evc, nwordwfc, iuwfc, ik ) 
+     !$acc update device(evc)
      !
      IF ( nkb > 0 ) CALL init_us_2( npw, igk_k(1,ik), xk(1,ik), vkb )
      !

@@ -43,7 +43,10 @@ PROGRAM kcw
   LOGICAL,EXTERNAL :: check_gpu_support 
   !
   use_gpu = check_gpu_support()
-  IF(use_gpu) Call errore('KCW', 'KCW with GPU NYI', 1)
+  IF(use_gpu) THEN
+      print*,'    !!!!!!!!!!!!!!!! KCW  Janusz GPU ON !!!!!!!!'
+     !! Call errore('KCW', 'KCW with GPU NYI', 1)
+  END IF   
   !
   ! 1) Initialize MPI, clocks, print initial messages
   CALL mp_startup ( )
