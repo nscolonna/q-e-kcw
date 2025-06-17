@@ -37,12 +37,12 @@ for DIR in "$BIN_DIR" "$PSEUDO_DIR" ; do
         exit 1
     fi
 done
-for DIR in "$TMP_DIR" "$EXAMPLE_DIR/results_projW_sp3" ; do
+for DIR in "$TMP_DIR" "$EXAMPLE_DIR/results_MLWF_sp3" ; do
     if test ! -d $DIR ; then
         mkdir $DIR
     fi
 done
-cd $EXAMPLE_DIR/results_projW_sp3
+cd $EXAMPLE_DIR/results_MLWF_sp3
 
 # check for executables
 for FILE in $BIN_LIST ; do
