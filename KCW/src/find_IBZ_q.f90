@@ -105,6 +105,7 @@ SUBROUTINE find_IBZ_q()
           & // TRIM(int_to_char(iq))//'/'
       !
       DO iwann=1, num_wann
+        !
         DO ip = 1, nrho
           !
           !read density rhowann from file, store it in rho_iwann
@@ -131,11 +132,7 @@ SUBROUTINE find_IBZ_q()
           !end of storing rhowann
           !
         END DO ! ip
-        ! FIXME DEBUG NsC
-        !WRITE(*,*) "NICOLA: Overwriting wannier density to force these ot be along z" 
-        !rhowann(:,iq,iwann,2) = 0.00
-        !rhowann(:,iq,iwann,3) = 0.00
-        !rhowann(:,iq,iwann,4) = rhowann(:,iq,iwann,1)
+        !
       END DO!iwann
     END DO !iq
     !
