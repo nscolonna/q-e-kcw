@@ -220,7 +220,7 @@ SUBROUTINE sternheimer_kernel(first_iter, time_reversed, npert, lrdvpsi, iudvpsi
             dvpsi = dvpsi + aux2
             !
             !  In the case of US pseudopotentials there is an additional
-            !  selfconsist term which comes from the dependence of D on
+            !  self-consistent term which comes from the dependence of D on
             !  V_{eff} on the bare change of the potential
             !
             IF (time_reversed) THEN
@@ -234,7 +234,7 @@ SUBROUTINE sternheimer_kernel(first_iter, time_reversed, npert, lrdvpsi, iudvpsi
             !
             IF (lda_plus_u .AND. (.NOT. exclude_hubbard_)) CALL adddvhubscf(ipert, ik)
             !
-         ENDIF
+         ENDIF ! .NOT. first_iter
          !
          ! Orthogonalize dvpsi to valence states
          !
