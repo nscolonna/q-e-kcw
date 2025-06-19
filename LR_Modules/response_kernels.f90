@@ -193,6 +193,9 @@ SUBROUTINE sternheimer_kernel(first_iter, time_reversed, npert, lrdvpsi, iudvpsi
       !
       CALL init_us_2(npwq, igk_k(1, ikq), xk(1, ikq), vkb, .true.)
       !$acc update host(vkb)
+      !
+      ! compute the kinetic energy g2kin: (k+q+G)^2
+      !
       CALL g2_kin(ikq)
       !
       ! compute preconditioning matrix h_diag used by cgsolve_all

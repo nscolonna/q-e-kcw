@@ -21,9 +21,7 @@ SUBROUTINE lr_init_nfo()
   USE klist,                ONLY : nks,xk,ngk,igk_k
   USE wvfct,                ONLY : nbnd
   USE lr_variables,         ONLY : lr_verbosity, eels, size_evc, calculator, &
-                                 & iund0psi, iudwf, iu1dwf,&
-                                 & iundvpsi, magnons, iunTwfc, & 
-                                 & restart
+                                   iund0psi, iudwf, iundvpsi, magnons, iunTwfc, restart
   USE io_global,            ONLY : stdout
   USE constants,            ONLY : tpi, eps8
   USE noncollin_module,     ONLY : npol, nspin_mag
@@ -133,8 +131,6 @@ SUBROUTINE lr_init_nfo()
      IF (trim(calculator)=='sternheimer') THEN
         CALL open_buffer ( iundvpsi, 'dvpsi.', nwordwfc, io_level, exst_mem, exst)
         CALL open_buffer ( iudwf, 'dwf', nwordwfc, io_level, exst_mem, exst)
-        CALL open_buffer ( iu1dwf, 'mwf', nwordwfc, io_level, exst_mem, exst)
-        !
      ENDIF
      !
      CALL open_buffer (iunwfc, 'wfc', nwordwfc, io_level, exst_mem, exst)

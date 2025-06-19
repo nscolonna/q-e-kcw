@@ -70,8 +70,7 @@ SUBROUTINE one_sternheimer_step(iu, flag)
     USE lr_variables,           ONLY : fru, fiu, iundvpsi, iudwf, &
                                        iudrho, n_ipol, lr_verbosity, &
                                        chirr, chirz, chizr, chizz, epsm1, &
-                                       current_w, lr1dwf, iu1dwf, itermax!, &
-                                       !intq, intq_nc
+                                       current_w, itermax
     USE paw_add_symmetry,       ONLY : paw_deqsymmetrize
     USE wavefunctions,          ONLY : psic
     USE lr_sym_mod,             ONLY : psymeq
@@ -116,6 +115,10 @@ SUBROUTINE one_sternheimer_step(iu, flag)
     INTEGER :: kter, iter0, ipol, ibnd, iter, lter, ik, ikk, ikq, &
                ig, is, nrec, ndim, npw, npwq, ios
     ! counters
+    INTEGER :: nsolv
+    !! Number of linear systems to solve. (1 for zero frequency, 2 for finite frequency)
+    INTEGER :: isolv
+    !! Index of the linear system to solve.
     INTEGER :: ltaver, lintercall, jpol, nwordd0psi
     REAL(DP) :: xqmod2, alpha_pv0
     !
@@ -203,12 +206,14 @@ SUBROUTINE one_sternheimer_step(iu, flag)
     ENDIF
     !
     IF (.NOT. ALLOCATED(psic)) ALLOCATE(psic(dfftp%nnr))
-
-!    nwordd0psi = 2 * nbnd * npwx * npol * nksq
-!    CALL diropn ( iund0psi, 'dvpsi.', nwordd0psi, exst)
-!
-!    CALL diropn ( iudwf, 'dwf', nwordd0psi, exst)
-!    CALL diropn ( iu1dwf, 'mwf', nwordd0psi, exst)
+    !
+    IF (ldpsi1) THEN
+       nsolv = 2  ! Finite frequency, solve original and time-reversed Sternheimer equation
+    ELSE
+       nsolv = 1  ! Zero frequency, solve only one Sternheimer equation
+       ! For noncollinear magnetism, one needs to solve two Sternheimer equations even for
+       ! zero frequency. This is not implemented here.
+    ENDIF
     !
     ! Loop over the iterations
     !
@@ -225,30 +230,39 @@ SUBROUTINE one_sternheimer_step(iu, flag)
        !
        IF (noncolin) dbecsum_nc = (0.0d0, 0.0d0)
        !
+       ! Set threshold for iterative solution of the linear system (ccgsolve_all)
+       !
+       IF (iter == 1) THEN
+          thresh = 1.d-2
+          IF (lnoloc) thresh = 1.d-5
+       ELSE
+          thresh = min(1.d-1 * sqrt(dr2), thresh)
+       ENDIF
+       !
        DO ik = 1, nksq
           !
           ikk  = ikks(ik)
           ikq  = ikqs(ik)
           npw  = ngk(ikk)
           npwq = ngk(ikq)
-        if (lsda) current_spin = isk (ikk)
+          IF (lsda) current_spin = isk (ikk)
+          !
+          ! Read unperturbed wavefuctions evc (wfct at k) 
+          ! and evq (wfct at k+q)
+          !
+          IF (nksq > 1) THEN 
+             CALL get_buffer(evc, nwordwfc, iunwfc, ikk)
+             CALL get_buffer(evq, nwordwfc, iunwfc, ikq)
+          ENDIF
           !
           ! Calculate beta-functions vkb at k+q (Kleinman-Bylander projectors)
           ! The vkb's are needed for the non-local potential in h_psi,
           ! and for the ultrasoft term.
           !
-          CALL init_us_2 (npwq, igk_k(1,ikq), xk(1,ikq), vkb, .true.)
-          !
+          CALL init_us_2(npwq, igk_k(1, ikq), xk(1, ikq), vkb, .true.)
           !$acc update host(vkb)
-          ! Read unperturbed wavefuctions evc (wfct at k) 
-          ! and evq (wfct at k+q)
           !
-          IF (nksq > 1) THEN 
-             CALL get_buffer (evc, nwordwfc, iunwfc, ikk)
-             CALL get_buffer (evq, nwordwfc, iunwfc, ikq)
-          ENDIF
-          !
-          !  Compute the kinetic energy g2kin: (k+q+G)^2
+          ! compute the kinetic energy g2kin: (k+q+G)^2
           !
           CALL g2_kin(ikq)
           !
@@ -304,6 +318,7 @@ SUBROUTINE one_sternheimer_step(iu, flag)
           DO ipol = 1, n_ipol
              !
              nrec = (ipol - 1) * nksq + ik
+            !  IF (isolv == 2) nrec = nrec + n_ipol * nksq
              !
              IF (iter ==1) THEN
                 !
@@ -353,24 +368,12 @@ SUBROUTINE one_sternheimer_step(iu, flag)
                 IF (ldpsi1) dpsi1(:,:)=(0.d0,0.d0)
                 dvscfin(:,:,:)=(0.d0,0.d0)
                 !
-                ! starting threshold for the iterative solution of the linear
-                ! system
-                !
-                thresh = 1.d-2
-                IF (lnoloc) thresh = 1.d-5
-                !
              ELSE
                 !
                 ! starting value for  delta_psi is read from iudwf
                 !
-                nrec = (ipol - 1) * nksq + ik
                 CALL get_buffer (dpsi, nwordwfc, iudwf, nrec)
-!                call get_buffer (dpsi, lrdwf, iudwf, nrec)
-                IF (ldpsi1) CALL get_buffer (dpsi1, nwordwfc, iu1dwf, nrec)
-                !
-                ! threshold for iterative solution of the linear system
-                !
-                thresh = min (0.1d0 * sqrt (dr2), thresh)
+                IF (ldpsi1) CALL get_buffer (dpsi1, nwordwfc, iudwf, nrec + n_ipol * nksq)
                 !
              ENDIF
              !
@@ -408,9 +411,7 @@ SUBROUTINE one_sternheimer_step(iu, flag)
              !
              ! writes delta_psi on iunit iudwf, k=kpoint,
              !
-             nrec = (ipol - 1) * nksq + ik
              CALL save_buffer (dpsi, nwordwfc, iudwf, nrec)
-!             call save_buffer(dpsi, lrdwf, iudwf, nrec)
              !
 
              ! calculates dvscf, sum over k => dvscf_q_ipert
@@ -438,8 +439,7 @@ SUBROUTINE one_sternheimer_step(iu, flag)
                 !
                 ! writes delta_psi on iunit iudwf, k=kpoint,
                 !
-                nrec = (ipol - 1) * nksq + ik
-                CALL save_buffer(dpsi1, nwordwfc, iu1dwf, nrec)
+                CALL save_buffer(dpsi1, nwordwfc, iudwf, nrec + n_ipol * nksq)
                 !
                 ! calculates dvscf, sum over k => dvscf_q_ipert
                 !
@@ -461,7 +461,6 @@ SUBROUTINE one_sternheimer_step(iu, flag)
 !                             CALL asyn_master(all_done_asyn)
        ENDDO ! on k points
        !
-
        current_w=w
        !
        !  The calculation of dbecsum is distributed across processors
@@ -671,12 +670,7 @@ SUBROUTINE one_sternheimer_step(iu, flag)
     deallocate (dvscfin)
     if (noncolin) deallocate(dbecsum_nc)
     deallocate(aux2)
-
-!    CLOSE( unit = iund0psi)
-!    CLOSE( unit = iudwf)
-!    CLOSE( unit = iu1dwf)
-
-
+    !
     alpha_pv=alpha_pv0
     !
     CALL stop_clock ('stern_step')

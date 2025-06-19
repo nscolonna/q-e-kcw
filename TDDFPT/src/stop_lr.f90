@@ -17,7 +17,7 @@ SUBROUTINE stop_lr( full_run  )
                                  & gamma_store, zeta_store, norm0, code1,code2,  &
                                  & lr_verbosity, itermax, bgz_suffix,            &
                                  & eels, q1, q2, q3, calculator, iundvpsi, iudwf,&
-                                 & iu1dwf, magnons, code3, alpha_magnons_store,  &  
+                                 & magnons, code3, alpha_magnons_store,  &
                                  & gamma_magnons_store, n_op
   USE io_global,            ONLY : ionode, stdout
   USE io_files,             ONLY : tmp_dir, prefix, iunwfc
@@ -182,7 +182,6 @@ SUBROUTINE stop_lr( full_run  )
   IF ( trim(calculator)=='sternheimer' ) THEN
      CALL close_buffer ( iundvpsi,'delete' )
      CALL close_buffer ( iudwf,'delete' )
-     CALL close_buffer ( iu1dwf,'delete' )
   ENDIF
   !
   STOP
