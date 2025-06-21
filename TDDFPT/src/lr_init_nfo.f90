@@ -21,7 +21,7 @@ SUBROUTINE lr_init_nfo()
   USE klist,                ONLY : nks,xk,ngk,igk_k
   USE wvfct,                ONLY : nbnd
   USE lr_variables,         ONLY : lr_verbosity, eels, size_evc, calculator, &
-                                   iund0psi, iudwf, iundvpsi, magnons, iunTwfc, restart
+                                   iund0psi, iundvpsi, magnons, iunTwfc, restart
   USE io_global,            ONLY : stdout
   USE constants,            ONLY : tpi, eps8
   USE noncollin_module,     ONLY : npol, nspin_mag
@@ -40,6 +40,7 @@ SUBROUTINE lr_init_nfo()
   USE lrus,                 ONLY : becp1
   USE control_lr,           ONLY : alpha_pv, alpha_mix, tr2_ph, nbnd_occ, &
                                    nbnd_occx
+  USE units_lr,             ONLY : lrdwf, iudwf
   USE qpoint,               ONLY : xq, ikks, ikqs, nksq, eigqts, npwq
   USE eqv,                  ONLY : evq
   USE buffers,              ONLY : open_buffer, get_buffer, save_buffer
@@ -128,9 +129,12 @@ SUBROUTINE lr_init_nfo()
      !
      size_evc = nbnd * npwx * npol * nksq
      nwordwfc = nbnd * npwx * npol
+     lrdwf = nbnd * npwx * npol
+     iudwf = 24
+     !
      IF (trim(calculator)=='sternheimer') THEN
         CALL open_buffer ( iundvpsi, 'dvpsi.', nwordwfc, io_level, exst_mem, exst)
-        CALL open_buffer ( iudwf, 'dwf', nwordwfc, io_level, exst_mem, exst)
+        CALL open_buffer ( iudwf, 'dwf', lrdwf, io_level, exst_mem, exst)
      ENDIF
      !
      CALL open_buffer (iunwfc, 'wfc', nwordwfc, io_level, exst_mem, exst)

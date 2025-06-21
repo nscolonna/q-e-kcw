@@ -63,7 +63,6 @@ MODULE lr_variables
                               epsm1(:)     ! epsm1
   LOGICAL, ALLOCATABLE :: comp_f(:)
   REAL(kind=dp) :: deltaf
-  INTEGER :: iudwf = 24
   INTEGER :: iudrho = 23
   REAL(kind=dp) :: increment
   INTEGER :: units

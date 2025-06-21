@@ -51,7 +51,7 @@ SUBROUTINE one_sternheimer_step(iu, flag)
     USE paw_variables,          ONLY : okpaw
     USE paw_onecenter,          ONLY : paw_dpotential
     USE eqv,                    ONLY : dpsi, dvpsi, evq
-    USE units_lr,               ONLY : lrwfc, iuwfc
+    USE units_lr,               ONLY : lrwfc, iuwfc, iudwf, lrdwf
     USE control_lr,             ONLY : lgamma, alpha_pv, nbnd_occ, &
                                        ext_recover, rec_code, &
                                        lnoloc, convt, tr2_ph, &
@@ -67,7 +67,7 @@ SUBROUTINE one_sternheimer_step(iu, flag)
     USE mp_images,              ONLY : root_image, my_image_id
     USE mp,                     ONLY : mp_sum
     USE fft_helper_subroutines, ONLY : fftx_ntgrp
-    USE lr_variables,           ONLY : fru, fiu, iundvpsi, iudwf, &
+    USE lr_variables,           ONLY : fru, fiu, iundvpsi, &
                                        iudrho, n_ipol, lr_verbosity, &
                                        chirr, chirz, chizr, chizz, epsm1, &
                                        current_w, itermax
@@ -76,6 +76,7 @@ SUBROUTINE one_sternheimer_step(iu, flag)
     USE lr_sym_mod,             ONLY : psymeq
     USE apply_dpot_mod,         ONLY : apply_dpot_allocate, apply_dpot_deallocate, &
                                        apply_dpot_bands
+    USE response_kernels,      ONLY : sternheimer_kernel
     USE uspp_init,             ONLY : init_us_2
     !
     IMPLICIT NONE
@@ -85,10 +86,10 @@ SUBROUTINE one_sternheimer_step(iu, flag)
                                   ! charge magnetization responses
                                   ! if 2 and lsda computes the magnetization
                                   ! magnetization response
-    REAL(DP) ::  thresh, anorm, averlt, dr2
+    REAL(DP) ::  thresh, anorm, avg_iter, dr2
     ! thresh: convergence threshold
     ! anorm : the norm of the error
-    ! averlt: average number of iterations
+    ! avg_iter: average number of iterations
     ! dr2   : self-consistency error
     COMPLEX(DP), ALLOCATABLE :: h_diag (:,:)
     COMPLEX(DP), ALLOCATABLE :: h_diag1 (:,:)
@@ -114,7 +115,7 @@ SUBROUTINE one_sternheimer_step(iu, flag)
     !! Number of linear systems to solve. (1 for zero frequency, 2 for finite frequency)
     INTEGER :: isolv
     !! Index of the linear system to solve.
-    INTEGER :: ltaver, lintercall
+    INTEGER :: tot_num_iter, tot_cg_calls
     REAL(DP) :: xqmod2, alpha_pv0
     !
     REAL(DP) :: tcpu, get_clock
@@ -143,6 +144,8 @@ SUBROUTINE one_sternheimer_step(iu, flag)
     !! change of scf potential (output before mixing)
     !
     ! Input variables in sternheimer_kernel
+    LOGICAL :: all_conv
+    !! True if sternheimer_kernel is converged at all k points and perturbations
     LOGICAL :: first_iter
     !! true if the first iteration.
     INTEGER :: npert
@@ -301,8 +304,8 @@ SUBROUTINE one_sternheimer_step(iu, flag)
        iter = kter + iter0
        first_iter = (iter == 1)
        !
-       ltaver = 0
-       lintercall = 0
+       tot_num_iter = 0
+       tot_cg_calls = 0
        !
        drhoout(:,:,:) = (0.0d0, 0.0d0)
        dbecsum(:,:,:,:) = (0.0d0, 0.0d0)
@@ -319,6 +322,8 @@ SUBROUTINE one_sternheimer_step(iu, flag)
        !
        ! BEGIN sternheimer_kernel
        !
+
+IF (ldpsi1) THEN
        DO ik = 1, nksq
           !
           ikk  = ikks(ik)
@@ -350,49 +355,32 @@ SUBROUTINE one_sternheimer_step(iu, flag)
           !
           ! IF omega non zero
           !
-          IF (ldpsi1) THEN
-             h_diag=(0.0_DP,0.0_DP)
-             h_diag1=(0.0_DP,0.0_DP)
-             CALL usnldiag( npwq, npol, h_dia, s_dia )
+          h_diag=(0.0_DP,0.0_DP)
+          h_diag1=(0.0_DP,0.0_DP)
+          CALL usnldiag( npwq, npol, h_dia, s_dia )
+          !
+          DO ibnd = 1, nbnd_occ (ikk)
              !
-             DO ibnd = 1, nbnd_occ (ikk)
-                !
-                DO ig = 1, npwq
-                   aa=h_dia(ig,1)- (et(ibnd,ikk)+w)*s_dia(ig,1)
-                   IF (ABS(aa)<1.0_DP) aa=1.0_DP
-                   h_diag(ig,ibnd)=CMPLX(1.0d0, 0.d0,kind=DP) / aa
-                   aa=h_dia(ig,1)- (et(ibnd,ikk)-w)*s_dia(ig,1)
-                   IF (ABS(aa)<1.0_DP) aa=1.0_DP
-                   h_diag1(ig,ibnd)=CMPLX(1.0d0, 0.d0,kind=DP) / aa
-                ENDDO
-                !
-                IF (noncolin) THEN
-                   DO ig = 1, npwq
-                      aa=h_dia(ig,2)- (et(ibnd,ikk)+w)*s_dia(ig,2)
-                      IF (ABS(aa)<1.0_DP) aa=1.0_DP
-                      h_diag(ig+npwx,ibnd)=CMPLX(1.d0, 0.d0,kind=DP) / aa
-                      aa=h_dia(ig,2)- (et(ibnd,ikk)-w)*s_dia(ig,2)
-                      IF (ABS(aa)<1.0_DP) aa=1.0_DP
-                      h_diag1(ig+npwx,ibnd)=CMPLX(1.d0, 0.d0,kind=DP) / aa
-                   ENDDO
-                ENDIF
+             DO ig = 1, npwq
+                aa=h_dia(ig,1)- (et(ibnd,ikk)+w)*s_dia(ig,1)
+                IF (ABS(aa)<1.0_DP) aa=1.0_DP
+                h_diag(ig,ibnd)=CMPLX(1.0d0, 0.d0,kind=DP) / aa
+                aa=h_dia(ig,1)- (et(ibnd,ikk)-w)*s_dia(ig,1)
+                IF (ABS(aa)<1.0_DP) aa=1.0_DP
+                h_diag1(ig,ibnd)=CMPLX(1.0d0, 0.d0,kind=DP) / aa
              ENDDO
-          ELSE
-             CALL h_prec (ik, evc, h_diagr)
              !
-             DO ibnd = 1, nbnd_occ (ikk)
-                !
+             IF (noncolin) THEN
                 DO ig = 1, npwq
-                   aa=1.0_DP / h_diagr(ig,ibnd)-et(ibnd,ikk)-REAL(w,KIND=DP)
-                   h_diagr(ig,ibnd)=1.d0 /max(1.0d0,aa)
+                   aa=h_dia(ig,2)- (et(ibnd,ikk)+w)*s_dia(ig,2)
+                   IF (ABS(aa)<1.0_DP) aa=1.0_DP
+                   h_diag(ig+npwx,ibnd)=CMPLX(1.d0, 0.d0,kind=DP) / aa
+                   aa=h_dia(ig,2)- (et(ibnd,ikk)-w)*s_dia(ig,2)
+                   IF (ABS(aa)<1.0_DP) aa=1.0_DP
+                   h_diag1(ig+npwx,ibnd)=CMPLX(1.d0, 0.d0,kind=DP) / aa
                 ENDDO
-                IF (noncolin) THEN
-                   DO ig = 1, npwq
-                      h_diagr(ig+npwx,ibnd)= h_diagr(ig,ibnd)
-                   ENDDO
-                ENDIF
-             ENDDO
-          ENDIF
+             ENDIF
+          ENDDO
           !
           ! do over polarization
           !
@@ -423,10 +411,9 @@ SUBROUTINE one_sternheimer_step(iu, flag)
              !
              ! Orthogonalize dvpsi to valence states: ps = <evq|dvpsi>
              !
-             IF (ldpsi1) THEN
-                dvpsi1=dvpsi
-                CALL orthogonalize_omega(dvpsi1, evq, ikk, ikq, dpsi, npwq, -w)
-             ENDIF
+             dvpsi1=dvpsi
+             CALL orthogonalize_omega(dvpsi1, evq, ikk, ikq, dpsi, npwq, -w)
+             !
              CALL orthogonalize_omega(dvpsi, evq, ikk, ikq, dpsi, npwq, w)
              !
              IF (first_iter) THEN
@@ -440,8 +427,8 @@ SUBROUTINE one_sternheimer_step(iu, flag)
                 !
                 ! starting value for  delta_psi is read from iudwf
                 !
-                CALL get_buffer (dpsi, nwordwfc, iudwf, nrec)
-                IF (ldpsi1) CALL get_buffer (dpsi1, nwordwfc, iudwf, nrec + npert * nksq)
+                CALL get_buffer (dpsi, lrdwf, iudwf, nrec)
+                IF (ldpsi1) CALL get_buffer (dpsi1, lrdwf, iudwf, nrec + npert * nksq)
                 !
              ENDIF
              !
@@ -451,64 +438,49 @@ SUBROUTINE one_sternheimer_step(iu, flag)
              conv_root = .true.
              !
              current_w=w
-             IF (ldpsi1) THEN
-                !
-                ! Complex or imaginary frequency. Use bicojugate gradient.
-                !
-
-                CALL ccgsolve_all (ch_psi_all_complex,ccg_psi,et(1,ikk),dvpsi,dpsi, &
-                                    h_diag,npwx,npwq,thresh,ik,lter,conv_root,anorm,&
-                                                        nbnd_occ(ikk),npol,current_w)
-
-                !
-             ELSE
-                !
-                ! zero frequency. The standard QE solver
-                !
-                CALL cgsolve_all (ch_psi_all,cg_psi,et(1,ikk),dvpsi,dpsi, &
-                  h_diagr,npwx,npwq,thresh,ik,lter,conv_root,anorm,&
-                                                          nbnd_occ(ikk),npol)
-                !
-             ENDIF
              !
-             ltaver = ltaver + lter
-             lintercall = lintercall + 1
+             ! Complex or imaginary frequency. Use bicojugate gradient.
+             !
+
+             CALL ccgsolve_all (ch_psi_all_complex,ccg_psi,et(1,ikk),dvpsi,dpsi, &
+                                 h_diag,npwx,npwq,thresh,ik,lter,conv_root,anorm,&
+                                                     nbnd_occ(ikk),npol,current_w)
+             !
+             tot_num_iter = tot_num_iter + lter
+             tot_cg_calls = tot_cg_calls + 1
              IF (.not.conv_root) WRITE( stdout, "(5x,'kpoint',i4,' ibnd',i4, &
                   &         ' solve_e: root not converged ',es10.3)") ik &
                   &, ibnd, anorm
              !
              ! writes delta_psi on iunit iudwf, k=kpoint,
              !
-             CALL save_buffer (dpsi, nwordwfc, iudwf, nrec)
+             CALL save_buffer (dpsi, lrdwf, iudwf, nrec)
              !
              !
-             IF (ldpsi1) THEN
-                !
-                ! complex frequency, two wavefunctions must be computed
-                !
-                ! In this case compute also the wavefunction at frequency -w.
-                !
-                current_w=-w
+             !
+             ! complex frequency, two wavefunctions must be computed
+             !
+             ! In this case compute also the wavefunction at frequency -w.
+             !
+             current_w=-w
 
-                CALL ccgsolve_all (ch_psi_all_complex,ccg_psi,et(1,ikk),dvpsi1,dpsi1, &
-                                    h_diag1,npwx,npwq,thresh,ik,lter,conv_root,anorm,&
-                                                          nbnd_occ(ikk),npol,current_w)
+             CALL ccgsolve_all (ch_psi_all_complex,ccg_psi,et(1,ikk),dvpsi1,dpsi1, &
+                                 h_diag1,npwx,npwq,thresh,ik,lter,conv_root,anorm,&
+                                                       nbnd_occ(ikk),npol,current_w)
 
-                ltaver = ltaver + lter
-                lintercall = lintercall + 1
-                IF (.not.conv_root) WRITE( stdout, "(5x,'kpoint',i4, &
-                  &         ' solve_e: root not converged ',es10.3)") ik &
-                  &, anorm
-                !
-                ! writes delta_psi on iunit iudwf, k=kpoint,
-                !
-                CALL save_buffer(dpsi1, nwordwfc, iudwf, nrec + npert * nksq)
-                !
-                ! calculates dvscf, sum over k => dvscf_q_ipert
-                !
-                CALL DAXPY(npwx*nbnd_occ(ikk)*npol*2, 1.0_DP, dpsi1, 1, dpsi, 1)
-                !
-             ENDIF
+             tot_num_iter = tot_num_iter + lter
+             tot_cg_calls = tot_cg_calls + 1
+             IF (.not.conv_root) WRITE( stdout, "(5x,'kpoint',i4, &
+               &         ' solve_e: root not converged ',es10.3)") ik &
+               &, anorm
+             !
+             ! writes delta_psi on iunit iudwf, k=kpoint,
+             !
+             CALL save_buffer(dpsi1, lrdwf, iudwf, nrec + npert * nksq)
+             !
+             ! calculates dvscf, sum over k => dvscf_q_ipert
+             !
+             CALL DAXPY(npwx*nbnd_occ(ikk)*npol*2, 1.0_DP, dpsi1, 1, dpsi, 1)
              !
              ! calculates dvscf, sum over k => dvscf_q_ipert
              !
@@ -525,11 +497,28 @@ SUBROUTINE one_sternheimer_step(iu, flag)
           !
        ENDDO ! ik
        !
-       ! END sternheimer_kernel
+       CALL mp_sum(tot_num_iter,inter_pool_comm)
+       CALL mp_sum(tot_cg_calls,inter_pool_comm)
+       avg_iter = DBLE (tot_num_iter) / DBLE (tot_cg_calls)
        !
        ! drhos should be the argument of sternheimer_kernel
        !
+       current_w=w
        drhos(:, :, :) = drhoout(:, :, :)
+       !
+ELSE  ! .NOT. ldpsi1 (ordinary sternheimer_kernel)
+       !
+       ! Zero-frequency case. Use ordinary sternheimer_kernel
+       !
+       ! Compute drhos, the charge density response to the total potential
+       !
+       isolv = 1  ! noncolin .AND. domag not implemented
+       CALL sternheimer_kernel(first_iter, isolv==2, npert, nwordwfc, iundvpsi, &
+          thresh, dvscfs, all_conv, avg_iter, drhos, dbecsum, dbecsum_nc)
+       !
+ENDIF  ! ldpsi1
+       !
+       ! END sternheimer_kernel
        !
        IF (nsolv == 2) THEN
           drhos = drhos / 2.0_dp
@@ -539,8 +528,6 @@ SUBROUTINE one_sternheimer_step(iu, flag)
              dbecsum = dbecsum / 2.0_dp
           ENDIF
        ENDIF
-       !
-       current_w=w
        !
        !  The calculation of dbecsum is distributed across processors
        !  (see addusdbec) - we sum over processors the contributions
@@ -625,15 +612,10 @@ SUBROUTINE one_sternheimer_step(iu, flag)
        !
        CALL newdq(dvscfp, 1)
        !
-       CALL mp_sum(ltaver,inter_pool_comm)
-       CALL mp_sum(lintercall,inter_pool_comm)
-       !
-       averlt = DBLE (ltaver) / DBLE (lintercall)
-       !
 !       tcpu = get_clock ('PHONON')
        tcpu = get_clock ('ccgsolve')
        WRITE( stdout, '(/,5x," iter # ",i3," total cpu time :",f8.1, &
-            &      " secs   av.it.: ",f5.1)') iter, tcpu, averlt
+            &      " secs   av.it.: ",f5.1)') iter, tcpu, avg_iter
        WRITE( stdout, "(5x,' thresh=',es10.3, ' alpha_mix = ',f6.3, &
             &      ' |ddv_scf|^2 = ',es10.3 )") thresh, alpha_mix (kter), dr2
        !
