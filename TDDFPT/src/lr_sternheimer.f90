@@ -38,7 +38,7 @@ SUBROUTINE one_sternheimer_step(iu, flag)
     USE gvecs,                  ONLY : doublegrid
     USE fft_base,               ONLY : dfftp, dffts
     USE lsda_mod,               ONLY : lsda, nspin, current_spin, isk
-    USE wvfct,                  ONLY : nbnd, npwx, g2kin,  et
+    USE wvfct,                  ONLY : nbnd, npwx, et
     USE klist,                  ONLY : ngk, igk_k
     USE check_stop,             ONLY : check_stop_now
     USE buffers,                ONLY : get_buffer, save_buffer
@@ -93,9 +93,6 @@ SUBROUTINE one_sternheimer_step(iu, flag)
     ! dr2   : self-consistency error
     COMPLEX(DP), ALLOCATABLE :: h_diag (:,:)
     COMPLEX(DP), ALLOCATABLE :: h_diag1 (:,:)
-    REAL(DP),    ALLOCATABLE :: h_diagr (:,:)
-    REAL(DP),    ALLOCATABLE :: h_dia (:,:), s_dia(:,:)
-    ! h_diag: diagonal part of the Hamiltonian
     !
     COMPLEX(DP) , ALLOCATABLE ::   &
                    dpsi1(:,:),   &
@@ -103,13 +100,12 @@ SUBROUTINE one_sternheimer_step(iu, flag)
                    dbecsum(:,:,:,:), & ! the becsum with dpsi
                    dbecsum_nc(:,:,:,:,:), & ! the becsum with dpsi
                    mixin(:), mixout(:), &  ! auxiliary for paw mixing
-                   ps (:,:), &
                    aux2(:,:), dvpsi1(:,:)
     !
     LOGICAL :: conv_root
     ! conv_root: true if linear system is converged
     INTEGER :: kter, iter0, ibnd, iter, lter, ik, ikk, ikq, &
-               ig, is, nrec, ndim, npw, npwq
+               is, nrec, ndim, npw, npwq
     ! counters
     INTEGER :: nsolv
     !! Number of linear systems to solve. (1 for zero frequency, 2 for finite frequency)
@@ -122,7 +118,6 @@ SUBROUTINE one_sternheimer_step(iu, flag)
     ! timing variables
     !
     COMPLEX(DP) :: w  !frequency
-    REAL(DP) :: aa
     LOGICAL :: ldpsi1
     !
     EXTERNAL ch_psi_all, cg_psi
@@ -189,10 +184,6 @@ SUBROUTINE one_sternheimer_step(iu, flag)
        ALLOCATE (dvpsi1(npwx*npol,nbnd))
        ALLOCATE (h_diag(npwx*npol, nbnd))
        ALLOCATE (h_diag1(npwx*npol, nbnd))
-       ALLOCATE (h_dia(npwx,npol))
-       ALLOCATE (s_dia(npwx,npol))
-    ELSE
-       ALLOCATE (h_diagr(npwx*npol, nbnd))
     ENDIF
     ALLOCATE (aux2(npwx*npol, nbnd))
     ALLOCATE(dvscftmp(dfftp%nnr, nspin_mag, npert))
@@ -355,32 +346,8 @@ IF (ldpsi1) THEN
           !
           ! IF omega non zero
           !
-          h_diag=(0.0_DP,0.0_DP)
-          h_diag1=(0.0_DP,0.0_DP)
-          CALL usnldiag( npwq, npol, h_dia, s_dia )
-          !
-          DO ibnd = 1, nbnd_occ (ikk)
-             !
-             DO ig = 1, npwq
-                aa=h_dia(ig,1)- (et(ibnd,ikk)+w)*s_dia(ig,1)
-                IF (ABS(aa)<1.0_DP) aa=1.0_DP
-                h_diag(ig,ibnd)=CMPLX(1.0d0, 0.d0,kind=DP) / aa
-                aa=h_dia(ig,1)- (et(ibnd,ikk)-w)*s_dia(ig,1)
-                IF (ABS(aa)<1.0_DP) aa=1.0_DP
-                h_diag1(ig,ibnd)=CMPLX(1.0d0, 0.d0,kind=DP) / aa
-             ENDDO
-             !
-             IF (noncolin) THEN
-                DO ig = 1, npwq
-                   aa=h_dia(ig,2)- (et(ibnd,ikk)+w)*s_dia(ig,2)
-                   IF (ABS(aa)<1.0_DP) aa=1.0_DP
-                   h_diag(ig+npwx,ibnd)=CMPLX(1.d0, 0.d0,kind=DP) / aa
-                   aa=h_dia(ig,2)- (et(ibnd,ikk)-w)*s_dia(ig,2)
-                   IF (ABS(aa)<1.0_DP) aa=1.0_DP
-                   h_diag1(ig+npwx,ibnd)=CMPLX(1.d0, 0.d0,kind=DP) / aa
-                ENDDO
-             ENDIF
-          ENDDO
+          CALL h_prec_freq(ik, +w, h_diag )
+          CALL h_prec_freq(ik, -w, h_diag1)
           !
           ! do over polarization
           !
@@ -712,10 +679,6 @@ ENDIF  ! ldpsi1
        deallocate (dvpsi1)
        deallocate (h_diag)
        deallocate (h_diag1)
-       deallocate (h_dia)
-       deallocate (s_dia)
-    ELSE
-       deallocate (h_diagr)
     ENDIF
     deallocate (dbecsum)
     IF (okpaw) THEN
