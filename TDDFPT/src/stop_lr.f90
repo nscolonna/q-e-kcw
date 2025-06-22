@@ -20,7 +20,7 @@ SUBROUTINE stop_lr( full_run  )
                                  & magnons, code3, alpha_magnons_store,  &
                                  & gamma_magnons_store, n_op
   USE io_global,            ONLY : ionode, stdout
-  USE io_files,             ONLY : tmp_dir, prefix, iunwfc
+  USE io_files,             ONLY : tmp_dir, prefix
   USE environment,          ONLY : environment_end
   USE lsda_mod,             ONLY : nspin
   USE noncollin_module,     ONLY : noncolin
@@ -28,7 +28,7 @@ SUBROUTINE stop_lr( full_run  )
   USE cell_base,            ONLY : celldm, at, bg, alat, omega
   USE klist,                ONLY : nelec
   USE buffers,              ONLY : close_buffer
-  USE units_lr,             ONLY : iudwf
+  USE units_lr,             ONLY : iudwf, iuwfc
   !
 #if defined (__ENVIRON)
   USE plugin_flags,        ONLY : use_environ
@@ -179,7 +179,7 @@ SUBROUTINE stop_lr( full_run  )
   !
   ! EELS: Close the file where it read the wavefunctions at k and k+q.
   !
-  IF (eels) CALL close_buffer(iunwfc, 'keep')
+  IF (eels) CALL close_buffer(iuwfc, 'keep')
   IF ( trim(calculator)=='sternheimer' ) THEN
      CALL close_buffer ( iundvpsi,'delete' )
      CALL close_buffer ( iudwf,'delete' )

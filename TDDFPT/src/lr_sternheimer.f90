@@ -30,7 +30,7 @@ SUBROUTINE one_sternheimer_step(iu, flag)
     USE constants,              ONLY : e2, fpi, rytoev
     USE ions_base,              ONLY : nat
     USE io_global,              ONLY : stdout, ionode
-    USE io_files,               ONLY : diropn, nwordwfc, iunwfc
+    USE io_files,               ONLY : diropn, nwordwfc
     USE cell_base,              ONLY : tpiba2
     USE fft_interfaces,         ONLY : fwfft
     USE fft_interfaces,         ONLY : fft_interpolate
@@ -259,7 +259,7 @@ SUBROUTINE one_sternheimer_step(iu, flag)
        ! and evq (wfct at k+q)
        !
        IF (nksq > 1) THEN
-          CALL get_buffer(evc, nwordwfc, iunwfc, ikk)
+          CALL get_buffer(evc, lrwfc, iuwfc, ikk)
        ENDIF
        !
        ! Calculate beta-functions vkb at k+q (Kleinman-Bylander projectors)
@@ -329,8 +329,8 @@ IF (ldpsi1) THEN
           ! and evq (wfct at k+q)
           !
           IF (nksq > 1) THEN
-             CALL get_buffer(evc, nwordwfc, iunwfc, ikk)
-             CALL get_buffer(evq, nwordwfc, iunwfc, ikq)
+             CALL get_buffer(evc, lrwfc, iuwfc, ikk)
+             CALL get_buffer(evq, lrwfc, iuwfc, ikq)
           ENDIF
           !
           ! Calculate beta-functions vkb at k+q (Kleinman-Bylander projectors)
