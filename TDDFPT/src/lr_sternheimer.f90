@@ -76,7 +76,7 @@ SUBROUTINE one_sternheimer_step(iu, flag)
     USE lr_sym_mod,             ONLY : psymeq
     USE apply_dpot_mod,         ONLY : apply_dpot_allocate, apply_dpot_deallocate, &
                                        apply_dpot_bands
-    USE response_kernels,      ONLY : sternheimer_kernel
+    USE response_kernels,      ONLY : sternheimer_kernel, sternheimer_kernel_freq
     USE uspp_init,             ONLY : init_us_2
     !
     IMPLICIT NONE
@@ -139,6 +139,8 @@ SUBROUTINE one_sternheimer_step(iu, flag)
     !! change of scf potential (output before mixing)
     !
     ! Input variables in sternheimer_kernel
+    LOGICAL :: time_reversed
+    !! True if solving a time-reversed Sternheimer equation
     LOGICAL :: all_conv
     !! True if sternheimer_kernel is converged at all k points and perturbations
     LOGICAL :: first_iter
@@ -298,7 +300,7 @@ SUBROUTINE one_sternheimer_step(iu, flag)
        tot_num_iter = 0
        tot_cg_calls = 0
        !
-       drhoout(:,:,:) = (0.0d0, 0.0d0)
+       drhos(:,:,:) = (0.0d0, 0.0d0)
        dbecsum(:,:,:,:) = (0.0d0, 0.0d0)
        IF (noncolin) dbecsum_nc = (0.0d0, 0.0d0)
        !
@@ -311,181 +313,23 @@ SUBROUTINE one_sternheimer_step(iu, flag)
           thresh = min(1.d-1 * sqrt(dr2), thresh)
        ENDIF
        !
-       ! BEGIN sternheimer_kernel
-       !
-
-IF (ldpsi1) THEN
-       DO ik = 1, nksq
-          !
-          ikk  = ikks(ik)
-          ikq  = ikqs(ik)
-          npw  = ngk(ikk)
-          npwq = ngk(ikq)
-          IF (lsda) current_spin = isk (ikk)
-          !
-          rsign = 1.d0  ! Should be -1 when solving time-reversed Sternheimer for magnetic systems
-          !
-          ! Read unperturbed wavefuctions evc (wfct at k)
-          ! and evq (wfct at k+q)
-          !
-          IF (nksq > 1) THEN
-             CALL get_buffer(evc, lrwfc, iuwfc, ikk)
-             CALL get_buffer(evq, lrwfc, iuwfc, ikq)
-          ENDIF
-          !
-          ! Calculate beta-functions vkb at k+q (Kleinman-Bylander projectors)
-          ! The vkb's are needed for the non-local potential in h_psi,
-          ! and for the ultrasoft term.
-          !
-          CALL init_us_2(npwq, igk_k(1, ikq), xk(1, ikq), vkb, .true.)
-          !$acc update host(vkb)
-          !
-          ! compute the kinetic energy g2kin: (k+q+G)^2
-          !
-          CALL g2_kin(ikq)
-          !
-          ! IF omega non zero
-          !
-          CALL h_prec_freq(ik, +w, h_diag )
-          CALL h_prec_freq(ik, -w, h_diag1)
-          !
-          ! do over polarization
-          !
-          DO ipert = 1, npert
-             !
-             nrec = (ipert - 1) * nksq + ik
-            !  IF (isolv == 2) nrec = nrec + npert * nksq
-             !
-             ! Read dvbare_q*psi_kpoint read from file
-             !
-             CALL get_buffer (dvpsi, nwordwfc, iundvpsi, nrec)
-             !
-             IF (.NOT. first_iter) THEN
-                !
-                ! calculates dvscf_q*psi_k in G_space, for all bands, k=kpoint
-                ! dvscf_q from previous iteration (mix_potential)
-                !
-                CALL apply_dpot_bands(ik, nbnd_occ(ikk), dvscfs(:, :, ipert), evc, aux2)
-                dvpsi = dvpsi + aux2
-                !
-                !  In the case of US pseudopotentials there is an additional
-                !  self-consistent term which comes from the dependence of D on
-                !  V_{eff} on the bare change of the potential
-                !
-                CALL adddvscf(ipert, ik)
-                !
-             ENDIF ! .NOT. first_iter
-             !
-             ! Orthogonalize dvpsi to valence states: ps = <evq|dvpsi>
-             !
-             dvpsi1=dvpsi
-             CALL orthogonalize_omega(dvpsi1, evq, ikk, ikq, dpsi, npwq, -w)
-             !
-             CALL orthogonalize_omega(dvpsi, evq, ikk, ikq, dpsi, npwq, w)
-             !
-             IF (first_iter) THEN
-                !
-                !  At the first iteration dpsi is set to zero
-                !
-                dpsi(:,:)=(0.d0,0.d0)
-                IF (ldpsi1) dpsi1(:,:)=(0.d0,0.d0)
-                !
-             ELSE
-                !
-                ! starting value for  delta_psi is read from iudwf
-                !
-                CALL get_buffer (dpsi, lrdwf, iudwf, nrec)
-                IF (ldpsi1) CALL get_buffer (dpsi1, lrdwf, iudwf, nrec + npert * nksq)
-                !
-             ENDIF
-             !
-             ! iterative solution of the linear system (H-e)*dpsi=dvpsi
-             ! dvpsi=-P_c+ (dvbare+dvscf)*psi , dvscf fixed.
-             !
-             conv_root = .true.
-             !
-             current_w=w
-             !
-             ! Complex or imaginary frequency. Use bicojugate gradient.
-             !
-
-             CALL ccgsolve_all (ch_psi_all_complex,ccg_psi,et(1,ikk),dvpsi,dpsi, &
-                                 h_diag,npwx,npwq,thresh,ik,lter,conv_root,anorm,&
-                                                     nbnd_occ(ikk),npol,current_w)
-             !
-             tot_num_iter = tot_num_iter + lter
-             tot_cg_calls = tot_cg_calls + 1
-             IF (.not.conv_root) WRITE( stdout, "(5x,'kpoint',i4,' ibnd',i4, &
-                  &         ' solve_e: root not converged ',es10.3)") ik &
-                  &, ibnd, anorm
-             !
-             ! writes delta_psi on iunit iudwf, k=kpoint,
-             !
-             CALL save_buffer (dpsi, lrdwf, iudwf, nrec)
-             !
-             !
-             !
-             ! complex frequency, two wavefunctions must be computed
-             !
-             ! In this case compute also the wavefunction at frequency -w.
-             !
-             current_w=-w
-
-             CALL ccgsolve_all (ch_psi_all_complex,ccg_psi,et(1,ikk),dvpsi1,dpsi1, &
-                                 h_diag1,npwx,npwq,thresh,ik,lter,conv_root,anorm,&
-                                                       nbnd_occ(ikk),npol,current_w)
-
-             tot_num_iter = tot_num_iter + lter
-             tot_cg_calls = tot_cg_calls + 1
-             IF (.not.conv_root) WRITE( stdout, "(5x,'kpoint',i4, &
-               &         ' solve_e: root not converged ',es10.3)") ik &
-               &, anorm
-             !
-             ! writes delta_psi on iunit iudwf, k=kpoint,
-             !
-             CALL save_buffer(dpsi1, lrdwf, iudwf, nrec + npert * nksq)
-             !
-             ! calculates dvscf, sum over k => dvscf_q_ipert
-             !
-             CALL DAXPY(npwx*nbnd_occ(ikk)*npol*2, 1.0_DP, dpsi1, 1, dpsi, 1)
-             !
-             ! calculates dvscf, sum over k => dvscf_q_ipert
-             !
-             IF (noncolin) THEN
-                CALL incdrhoscf_nc(drhoout(1,1,ipert), wk(ikk), ik, &
-                                   dbecsum_nc(1,1,1,1,ipert), dpsi, rsign)
-             ELSE
-
-                CALL incdrhoscf(drhoout(1,current_spin,ipert), wk(ikk), &
-                                ik, dbecsum(1,1,current_spin,ipert), dpsi)
-             ENDIF
-             !
-          ENDDO  ! ipert
-          !
-       ENDDO ! ik
-       !
-       CALL mp_sum(tot_num_iter,inter_pool_comm)
-       CALL mp_sum(tot_cg_calls,inter_pool_comm)
-       avg_iter = DBLE (tot_num_iter) / DBLE (tot_cg_calls)
-       !
-       ! drhos should be the argument of sternheimer_kernel
-       !
-       current_w=w
-       drhos(:, :, :) = drhoout(:, :, :)
-       !
-ELSE  ! .NOT. ldpsi1 (ordinary sternheimer_kernel)
-       !
-       ! Zero-frequency case. Use ordinary sternheimer_kernel
-       !
        ! Compute drhos, the charge density response to the total potential
        !
-       isolv = 1  ! noncolin .AND. domag not implemented
-       CALL sternheimer_kernel(first_iter, isolv==2, npert, nwordwfc, iundvpsi, &
-          thresh, dvscfs, all_conv, avg_iter, drhos, dbecsum, dbecsum_nc)
+       time_reversed = .FALSE.  ! magnetic case not implemented
        !
-ENDIF  ! ldpsi1
-       !
-       ! END sternheimer_kernel
+       IF (ldpsi1) THEN
+          !
+          ! Finite-frequency Sternheimer equation
+          CALL sternheimer_kernel_freq(first_iter, time_reversed, npert, nwordwfc, iundvpsi, &
+             thresh, w, dvscfs, all_conv, avg_iter, drhos, dbecsum, dbecsum_nc)
+          !
+       ELSE
+          !
+          ! Zero-frequency Sternheimer equation
+          CALL sternheimer_kernel(first_iter, time_reversed, npert, nwordwfc, iundvpsi, &
+             thresh, dvscfs, all_conv, avg_iter, drhos, dbecsum, dbecsum_nc)
+          !
+       ENDIF
        !
        IF (nsolv == 2) THEN
           drhos = drhos / 2.0_dp

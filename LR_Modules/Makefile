@@ -47,6 +47,7 @@ psymdvscf.o \
 symdvscf.o \
 sym_dmag.o \
 orthogonalize.o \
+orthogonalize_omega.o \
 setup_nscf.o \
 set_dbecsum_nc.o \
 set_int3_nc.o \
