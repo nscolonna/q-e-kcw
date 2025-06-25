@@ -37,7 +37,7 @@ SUBROUTINE phq_readin()
                             search_sym, lqdir, electron_phonon, tmp_dir_phq, &
                             qplot, only_init, only_wfc, &
                             low_directory_check, nk1, nk2, nk3, k1, k2, k3, &
-                            dftd3_hess
+                            dftd3_hess, lmultipole
   USE save_ph,       ONLY : tmp_dir_save, save_ph_input_variables
   USE gamma_gamma,   ONLY : asr
   USE partial,       ONLY : atomo, nat_todo, nat_todo_input
@@ -63,7 +63,7 @@ SUBROUTINE phq_readin()
 
   USE qpoint,        ONLY : nksq, xq
   USE control_lr,    ONLY : lgamma, lrpa, alpha_mix, lgamma_gamma, tr2_ph, niter_ph, &
-                            nmix_ph, maxter, reduce_io, rec_code_read, lmultipole, lnolr
+                            nmix_ph, maxter, reduce_io, rec_code_read, lnolr
   ! YAMBO >
   USE YAMBO,         ONLY : elph_yambo,dvscf_yambo
   ! YAMBO <

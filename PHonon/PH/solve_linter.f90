@@ -50,7 +50,7 @@ SUBROUTINE solve_linter (irr, imode0, npe, drhos, drhop)
   USE paw_onecenter,        ONLY : paw_dpotential
   USE buffers,              ONLY : save_buffer, get_buffer
   USE ldaU,                 ONLY : lda_plus_u
-  USE control_ph,           ONLY : ext_recover
+  USE control_ph,           ONLY : ext_recover, lmultipole
   USE el_phon,              ONLY : elph
   USE uspp,                 ONLY : nlcc_any
   USE units_ph,             ONLY : iudrho, lrdrho, iubar, lrbar, &
@@ -66,7 +66,7 @@ SUBROUTINE solve_linter (irr, imode0, npe, drhos, drhop)
   USE eqv,                  ONLY : dvpsi
   USE qpoint,               ONLY : xq, nksq, ikks, ikqs
   USE qpoint_aux,           ONLY : ikmks, becpt, alphapt
-  USE control_lr,           ONLY : convt, rec_code, rec_code_read, where_rec, lmultipole
+  USE control_lr,           ONLY : convt, rec_code, rec_code_read, where_rec
   USE uspp_init,            ONLY : init_us_2
   USE lr_nc_mag,            ONLY : int1_nc_save, deeq_nc_save
   USE dfpt_kernels,         ONLY : dfpt_kernel
@@ -253,8 +253,15 @@ SUBROUTINE solve_linter (irr, imode0, npe, drhos, drhop)
   !
   !    Solve DFPT fixed-point equation
   !
-  CALL dfpt_kernel('PHONON', npe, iter0, lrbar, iubar, dr2, drhos, drhop, dvscfs, &
-                   dvscfp, dbecsum, irr, imode0, 'phonon', drhoc = drhoc)
+  IF (lmultipole) THEN
+     ! Multipole perturbation, no core charge
+     CALL dfpt_kernel('PHONON', npe, iter0, lrbar, iubar, dr2, drhos, drhop, dvscfs, &
+                      dvscfp, dbecsum, irr, imode0, 'phonon')
+  ELSE
+     ! Phonon perturbation, core charge perturbation is included
+     CALL dfpt_kernel('PHONON', npe, iter0, lrbar, iubar, dr2, drhos, drhop, dvscfs, &
+                      dvscfp, dbecsum, irr, imode0, 'phonon', drhoc = drhoc)
+  ENDIF
   !
 155 CONTINUE
   !

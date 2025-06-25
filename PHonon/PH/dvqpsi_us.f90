@@ -36,7 +36,7 @@ subroutine dvqpsi_us (ik, uact, addnlcc, becp1, alphap)
   USE qpoint,           ONLY : nksq
   USE becmod,           ONLY : bec_type
   USE gvect,            ONLY : gg
-  USE control_lr,       ONLY : lmultipole
+  USE control_ph,       ONLY : lmultipole
   !
   IMPLICIT NONE
   !

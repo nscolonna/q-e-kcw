@@ -116,7 +116,7 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
    USE efermi_shift,         ONLY : ef_shift, ef_shift_wfc, def
    USE lrus,                 ONLY : int3_paw, int3_nc
    USE control_lr,           ONLY : lgamma, niter_ph, nmix_ph, tr2_ph, alpha_mix, convt, &
-                                    lgamma_gamma, flmixdpot, where_rec, lmultipole
+                                    lgamma_gamma, flmixdpot, where_rec
    USE dv_of_drho_lr,        ONLY : dv_of_drho
    USE lr_nc_mag,            ONLY : int3_nc_save
    USE apply_dpot_mod,       ONLY : apply_dpot_allocate, apply_dpot_deallocate
@@ -402,7 +402,7 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
          ! Compute the response HXC potential
          DO ipert = 1, npert
             CALL zcopy(dfftp%nnr*nspin_mag, drhop(1,1,ipert), 1, dvscftmp(1,1,ipert), 1)
-            IF (PRESENT(drhoc) .AND. .NOT. lmultipole) THEN
+            IF (PRESENT(drhoc)) THEN
                CALL dv_of_drho(dvscftmp(1, 1, ipert), drhoc = drhoc(:, ipert))
             ELSE !FM: as the case of solve_e
                CALL dv_of_drho(dvscftmp(1, 1, ipert))

@@ -307,6 +307,8 @@ MODULE control_ph
   !! if TRUE the dynamical matrix is in xml form
   LOGICAL :: all_done
   !! if TRUE all representations have been done
+  LOGICAL :: lmultipole = .FALSE.
+  !! if TRUE macroscopic density response to q-potential perturbation is written as output
   !
   LOGICAL :: newgrid=.FALSE.
   !! if TRUE use new k-point grid nk1,nk2,nk3
