@@ -31,7 +31,7 @@ SUBROUTINE phq_readin()
   USE cellmd,        ONLY : lmovecell
   USE run_info,      ONLY : title
   USE control_ph,    ONLY : epsil, zue, zeu, xmldyn, newgrid,                      &
-                            trans, ldisp, recover, lnoloc, start_irr, &
+                            trans, ldisp, recover, start_irr, &
                             last_irr, start_q, last_q, current_iq, tmp_dir_ph, &
                             ext_recover, ext_restart, u_from_file, ldiag, &
                             search_sym, lqdir, electron_phonon, tmp_dir_phq, &
@@ -63,7 +63,7 @@ SUBROUTINE phq_readin()
 
   USE qpoint,        ONLY : nksq, xq
   USE control_lr,    ONLY : lgamma, lrpa, alpha_mix, lgamma_gamma, tr2_ph, niter_ph, &
-                            nmix_ph, maxter, reduce_io, rec_code_read, lnolr
+                            nmix_ph, maxter, reduce_io, rec_code_read, lnolr, lnoloc
   ! YAMBO >
   USE YAMBO,         ONLY : elph_yambo,dvscf_yambo
   ! YAMBO <

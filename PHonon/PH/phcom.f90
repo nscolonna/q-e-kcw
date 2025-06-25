@@ -277,8 +277,6 @@ MODULE control_ph
   !! if TRUE there is a restart file
   LOGICAL :: ext_recover
   !! if TRUE there is a recover file
-  LOGICAL :: lnoloc
-  !! if TRUE calculates the dielectric constant neglecting local field effects
   LOGICAL :: search_sym=.TRUE.
   !! if TRUE search the mode symmetry
   LOGICAL :: search_sym_save=.TRUE.

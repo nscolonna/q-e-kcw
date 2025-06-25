@@ -116,7 +116,7 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
    USE efermi_shift,         ONLY : ef_shift, ef_shift_wfc, def
    USE lrus,                 ONLY : int3_paw, int3_nc
    USE control_lr,           ONLY : lgamma, niter_ph, nmix_ph, tr2_ph, alpha_mix, convt, &
-                                    lgamma_gamma, flmixdpot, where_rec
+                                    lgamma_gamma, flmixdpot, where_rec, lnoloc
    USE dv_of_drho_lr,        ONLY : dv_of_drho
    USE lr_nc_mag,            ONLY : int3_nc_save
    USE apply_dpot_mod,       ONLY : apply_dpot_allocate, apply_dpot_deallocate
@@ -127,7 +127,6 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
    ! These are the modules that live in PHonon. Should be moved to LR_Modules.
    USE recover_mod,          ONLY : write_rec
    USE phus,                 ONLY : becsumort
-   USE control_ph,           ONLY : lnoloc
    USE units_ph,  ONLY : iudrhous, lrdrhous
    !
    IMPLICIT NONE
