@@ -55,6 +55,8 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
    !!
    !! Input/Output:
    !!    - drhos : change of the charge density (smooth part only, dffts)
+   !!              (Note that this is different from drhop after fft_interpolate because
+   !!               drhos does not include augmentation charges, while drhop does.)
    !!    - drhop : change of the charge density (smooth and hard parts, dfftp)
    !!    - dvscfs : change of the scf potential (smooth part only, dffts)
    !!    - dvscfp : change of the scf potential (smooth and hard parts, dfftp)
@@ -67,7 +69,7 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
    !!
    !! variable "*s" : real-space quantity defined on the soft grid (dffts)
    !! variable "*h" : real-space quantity defined on the hard grid (dfftp)
-   !! (If doublegrid == false, the two quantities are identical.)
+   !! (If doublegrid == false and using NCPP, the two quantities are identical.)
    !!
    !! A short summary of the workflow:
    !!    dvscfs, dvscfp    -> (sternheimer_kernel)
@@ -386,21 +388,9 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
       !   Here we symmetrize them ...
       !
       IF (.NOT. lgamma_gamma) THEN
-         CALL psymdvscf(drhop)
-         IF (lmultipole) THEN !FM: density computed for the first representation only, needs to be symmetrized
-            IF (doublegrid) then
-               DO is = 1, nspin_mag
-                  DO ipert = 1, npert
-                     CALL fft_interpolate(dfftp, drhop(:, is, ipert), dffts, drhos(:, is, ipert))
-                  ENDDO
-               ENDDO
-            ELSE
-              CALL zcopy(npert * nspin_mag * dfftp%nnr, drhop, 1, drhos, 1)
-            ENDIF
-         ENDIF
-         !
+         CALL psymdvscf(drhos, dffts)
+         CALL psymdvscf(drhop, dfftp)
          IF (okpaw) CALL PAW_dsymmetrize(dbecsum)
-         !
       ENDIF
       !
       !   compute the corresponding change in scf potential : drhop -> dvscftmp
