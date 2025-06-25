@@ -61,6 +61,7 @@ set(sources
     lanczos_nonhermitian_c.f90
     set_kplusq_nc.f90
     lr_sym_mod.f90
+    lr_sym_paw.f90
     sym_def.f90
     psymdvscf.f90
     symdvscf.f90

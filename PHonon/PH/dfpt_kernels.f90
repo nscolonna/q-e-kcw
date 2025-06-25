@@ -51,7 +51,7 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
    !!    - iter0 : Number of iterations already performed (> 0 for restart, 0 otherwise)
    !!    - lrdvpsi : Record length for the buffer storing dV_bare * psi
    !!    - iudvpsi : Unit for the buffer storing dV_bare * psi
-   !!    - option : Option that tells the type of perturbation. phonon / efield / ...
+   !!    - option : Option that tells the type of perturbation. phonon / other (means no Pulay term)
    !!
    !! Input/Output:
    !!    - drhos : change of the charge density (smooth part only, dffts)
@@ -80,11 +80,10 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
    !!    - Custom printing
    !!
    !!
-   !! Currently the code needs branches for phonon / e-field (using variable option)
+   !! Currently the code needs branches for phonon (using variable option)
    !! in the following places
-   !!    1. addusddens / lr_addusddens : USPP contribution to drho
-   !!    2. becsumort : alphasum contribution to dbecsum
-   !!    3. PAW related stuff. symmetrization, factor of 2, ...
+   !!    1. addusddens : USPP Pulay contribution to drho
+   !!    2. becsumort : alphasum Pulay contribution to dbecsum
    !! The plan is to get rid of all these branches by designing a generic subroutine, or
    !! if that is not feasible, by using callback arguments.
    !!
@@ -105,32 +104,28 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
    USE gvecs,                ONLY : doublegrid
    USE lsda_mod,             ONLY : nspin, lsda
    USE scf,                  ONLY : rho
+   USE ldaU,                 ONLY : lda_plus_u
    USE uspp,                 ONLY : okvan
    USE uspp_param,           ONLY : nhm
    USE uspp_init,            ONLY : init_us_2
    USE noncollin_module,     ONLY : noncolin, domag, npol, nspin_mag
    USE paw_variables,        ONLY : okpaw
    USE paw_onecenter,        ONLY : paw_dpotential
-   USE paw_symmetry,         ONLY : paw_dusymmetrize, paw_dumqsymmetrize, paw_desymmetrize
-   USE phus,                 ONLY : becsumort
-   USE modes,                ONLY : npertx, t, tmq
-   USE recover_mod,          ONLY : write_rec
    USE efermi_shift,         ONLY : ef_shift, ef_shift_wfc, def
    USE lrus,                 ONLY : int3_paw, int3_nc
-   USE lr_symm_base,         ONLY : irotmq, minus_q, nsymq, rtau
-   USE qpoint,               ONLY : xq
-   USE control_ph,           ONLY : lnoloc
    USE control_lr,           ONLY : lgamma, niter_ph, nmix_ph, tr2_ph, alpha_mix, convt, &
                                     lgamma_gamma, flmixdpot, where_rec, lmultipole
    USE dv_of_drho_lr,        ONLY : dv_of_drho
-   USE ldaU,                 ONLY : lda_plus_u
    USE lr_nc_mag,            ONLY : int3_nc_save
    USE apply_dpot_mod,       ONLY : apply_dpot_allocate, apply_dpot_deallocate
    USE response_kernels,     ONLY : sternheimer_kernel
    USE two_chem,             ONLY : twochem
    USE lr_two_chem,          ONLY : allocate_twochem, deallocate_twochem
    !
-   ! Defined in PHonon, should be removed
+   ! These are the modules that live in PHonon. Should be moved to LR_Modules.
+   USE recover_mod,          ONLY : write_rec
+   USE phus,                 ONLY : becsumort
+   USE control_ph,           ONLY : lnoloc
    USE units_ph,  ONLY : iudrhous, lrdrhous
    !
    IMPLICIT NONE
@@ -168,7 +163,7 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
    !! Set to 0 if not using phonon perturbation.
    CHARACTER(LEN=*), INTENT(IN) :: option
    !! input: Option that tells the type of perturbation.
-   !! Possible options: 'phonon', 'efield'
+   !! Possible options: 'phonon', 'other'
    !
    ! ... local variables
    !
@@ -209,10 +204,6 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
    !  This routine is task group aware
    !
    CALL start_clock('dfpt_kernel')
-   !
-   IF (option /= 'phonon' .AND. option /= 'efield') THEN
-      CALL errore('dfpt_kernel', 'Unknown option' // TRIM(option), 1)
-   ENDIF
    !
    nsolv = 1
    IF (noncolin .AND. domag) nsolv=2
@@ -352,11 +343,15 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
       IF (okpaw) CALL mp_sum(dbecsum, inter_pool_comm)
       !
       IF (okpaw) THEN
+         !
+         ! The presence of c.c. in the formula gives a factor 2.0
+         !
+         dbecsum = 2.0_DP * dbecsum
+         !
          IF (option == 'phonon') THEN
-            ! For efield, factor 2 is multiplied after mixing
+            ! Add pulay term
             DO ipert = 1, npert
-               dbecsum(:,:,:,ipert) = 2.0_DP * dbecsum(:,:,:,ipert) &
-                  + becsumort(:,:,:,imode0+ipert)
+               dbecsum(:,:,:,ipert) = dbecsum(:,:,:,ipert) + becsumort(:,:,:,imode0+ipert)
             ENDDO
          ENDIF
       ENDIF
@@ -404,13 +399,8 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
             ENDIF
          ENDIF
          !
-         IF (okpaw) THEN
-            IF (option == 'phonon') THEN
-               ! For efield, PAW symmetrization is done after mixing
-               IF (minus_q) CALL PAW_dumqsymmetrize(dbecsum,npert,irr, npertx,irotmq,rtau,xq,tmq)
-               CALL PAW_dusymmetrize(dbecsum,npert,irr,npertx,nsymq,rtau,xq,t)
-            ENDIF
-         ENDIF
+         IF (okpaw) CALL PAW_dsymmetrize(dbecsum)
+         !
       ENDIF
       !
       !   compute the corresponding change in scf potential : drhop -> dvscftmp
@@ -456,21 +446,6 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
                CALL fft_interpolate(dfftp, dvscfp(:, is, ipert), dffts, dvscfs(:, is, ipert))
             ENDDO
          ENDDO
-      ENDIF
-      !
-      IF (option == 'efield') THEN
-         IF (okpaw) THEN
-            IF (noncolin) THEN
-               ! call PAW_dpotential(dbecsum_nc, becsum_nc, int3_paw, npert)
-            ELSE
-               !
-               ! The presence of c.c. in the formula gives a factor 2.0
-               ! For phonons, this factor was multiplied before mixing
-               !
-               dbecsum = 2.0_DP * dbecsum
-               IF (.NOT. lgamma_gamma) CALL PAW_desymmetrize(dbecsum)
-            ENDIF
-         ENDIF
       ENDIF
       !
       !   calculate here the change of the D1-~D1 coefficients due to the phonon
