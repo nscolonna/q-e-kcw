@@ -71,6 +71,7 @@ SUBROUTINE solve_linter (irr, imode0, dfpt_data)
   USE dfpt_type,            ONLY : dfpt_data_type
   USE dfpt_kernels,         ONLY : dfpt_kernel
   USE phus,                 ONLY : becsumort
+  USE recover_mod,          ONLY : write_rec
   !
   IMPLICIT NONE
   !
@@ -250,7 +251,7 @@ SUBROUTINE solve_linter (irr, imode0, dfpt_data)
   !
   !    Solve DFPT fixed-point equation
   !
-  CALL dfpt_kernel('PHONON', npe, iter0, lrbar, iubar, dr2, dfpt_data, irr, imode0)
+  CALL dfpt_kernel('PHONON', npe, iter0, lrbar, iubar, dr2, dfpt_data, irr, imode0, write_rec_callback = write_rec)
   !
 155 CONTINUE
   !

@@ -11,7 +11,7 @@ MODULE dfpt_kernels
 IMPLICIT NONE
 CONTAINS
 SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
-                       irr, imode0)
+                       irr, imode0, write_rec_callback)
    !------------------------------------------------------------------------------
    !! Driver routine for the solution of the linear system that computes the change
    !! of the electron density due to a generic perturbation to the Hamiltonian.
@@ -115,9 +115,7 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
    USE response_kernels,     ONLY : sternheimer_kernel
    USE two_chem,             ONLY : twochem
    USE lr_two_chem,          ONLY : allocate_twochem, deallocate_twochem
-   !
-   ! These are the modules that live in PHonon. Should be moved to LR_Modules.
-   USE recover_mod,          ONLY : write_rec
+   USE lr_restart,           ONLY : write_rec_interface
    !
    IMPLICIT NONE
    !
@@ -135,6 +133,8 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
    ! self-consistency error. Input is used for restart.
    TYPE(dfpt_data_type), INTENT(INOUT) :: dfpt_data
    !! Data that describes linear response quantities
+   PROCEDURE(write_rec_interface), OPTIONAL :: write_rec_callback
+   !! Callback subroutine for restart checkpointing
    !
    INTEGER, INTENT(IN) :: irr
    !! input: the irreducible representation (to be removed after moving from PH to LR_Modules)
@@ -465,7 +465,9 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
       !
       !    Here we save the information for recovering the run from this point
       !
-      CALL write_rec(where_rec, irr, dr2, iter, convt, dfpt_data)
+      IF (PRESENT(write_rec_callback)) THEN
+         CALL write_rec_callback(where_rec, irr, dr2, iter, convt, dfpt_data)
+      ENDIF
       !
       IF (check_stop_now()) CALL stop_smoothly_ph(.FALSE.)
       !

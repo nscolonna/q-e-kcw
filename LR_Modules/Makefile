@@ -77,6 +77,7 @@ lr_dot_magnons.o \
 lr_nc_mag.o \
 lr_two_chem.o\
 lr_sym_paw.o \
+lr_restart.o \
 lanczos_nonhermitian.o \
 lanczos_pseudohermitian.o \
 lanczos_pseudohermitian_c.o \

@@ -56,6 +56,7 @@ set(sources
     lr_dot.f90
     lr_dot_magnons.f90
     lr_nc_mag.f90
+    lr_restart.f90
     lanczos_pseudohermitian.f90
     lanczos_nonhermitian.f90
     lanczos_pseudohermitian_c.f90

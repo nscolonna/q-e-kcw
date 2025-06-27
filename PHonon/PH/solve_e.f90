@@ -51,6 +51,7 @@ subroutine solve_e
   USE uspp_init,             ONLY : init_us_2
   USE dfpt_type,             ONLY : dfpt_data_type, allocate_dfpt_data, deallocate_dfpt_data
   USE dfpt_kernels,          ONLY : dfpt_kernel
+  USE recover_mod,           ONLY : write_rec
   !
   IMPLICIT NONE
   !
@@ -127,7 +128,7 @@ subroutine solve_e
   !
   !   Solve DFPT fixed-point equation
   !
-  CALL dfpt_kernel('PHONON', 3, iter0, lrebar, iuebar, dr2, dfpt_data, 1, 0)
+  CALL dfpt_kernel('PHONON', 3, iter0, lrebar, iuebar, dr2, dfpt_data, 1, 0, write_rec_callback = write_rec)
   !
   IF (lda_plus_u) CALL dnsq_store(3, 0)
   !
