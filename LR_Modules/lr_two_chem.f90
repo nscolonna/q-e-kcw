@@ -122,10 +122,10 @@ subroutine ef_shift_twochem (npert, dos_ef,dos_ef_cond,ldos,ldos_cond,&
   !
   ! symmetrizes the Fermi energy shift
   !
-  CALL sym_def(def_val)
+  CALL sym_def(npert, def_val)
   WRITE( stdout, '(5x,"Pert. #",i3,": Fermi energy shift valence (Ry) =",2es15.4)')&
        (ipert, def_val (ipert) , ipert = 1, npert )
-  CALL sym_def(def_cond)
+  CALL sym_def(npert, def_cond)
   WRITE( stdout, '(5x,"Pert. #",i3,": Fermi energy shift conduction (Ry) =",2es15.4)')&
        (ipert, def_cond (ipert) , ipert = 1, npert )
   !

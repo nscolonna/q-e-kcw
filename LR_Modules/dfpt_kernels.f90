@@ -103,7 +103,7 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
    USE noncollin_module,     ONLY : noncolin, domag, npol, nspin_mag
    USE paw_variables,        ONLY : okpaw
    USE paw_onecenter,        ONLY : paw_dpotential
-   USE efermi_shift,         ONLY : ef_shift, ef_shift_wfc, def
+   USE efermi_shift,         ONLY : ef_shift_new, ef_shift_wfc_new
    USE lrus,                 ONLY : int3_paw, int3_nc
    USE control_lr,           ONLY : lgamma, niter_ph, nmix_ph, tr2_ph, alpha_mix, convt, &
                                     lgamma_gamma, flmixdpot, where_rec, lnoloc
@@ -337,9 +337,9 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
       !
       IF (lmetq0) THEN
          IF (okpaw) THEN
-            CALL ef_shift(npert, dos_ef, ldos, dfpt_data%drhop, dfpt_data%dbecsum, becsum1)
+            CALL ef_shift_new(dos_ef, ldos, ldoss, dfpt_data, becsum1)
          ELSE
-            CALL ef_shift(npert, dos_ef, ldos, dfpt_data%drhop)
+            CALL ef_shift_new(dos_ef, ldos, ldoss, dfpt_data)
          ENDIF
       ENDIF
       !
@@ -481,19 +481,19 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
       ! Update the response potential.
       !
       DO ipert = 1, npert
-         dfpt_data%dvscfp(:, 1, ipert) = dfpt_data%dvscfp(:, 1, ipert) - def(ipert)
-         dfpt_data%dvscfs(:, 1, ipert) = dfpt_data%dvscfs(:, 1, ipert) - def(ipert)
+         dfpt_data%dvscfp(:, 1, ipert) = dfpt_data%dvscfp(:, 1, ipert) - dfpt_data%def(ipert)
+         dfpt_data%dvscfs(:, 1, ipert) = dfpt_data%dvscfs(:, 1, ipert) - dfpt_data%def(ipert)
          !
          IF (lsda) THEN
-            dfpt_data%dvscfp(:, 2, ipert) = dfpt_data%dvscfp(:, 2, ipert) - def(ipert)
-            dfpt_data%dvscfs(:, 2, ipert) = dfpt_data%dvscfs(:, 2, ipert) - def(ipert)
+            dfpt_data%dvscfp(:, 2, ipert) = dfpt_data%dvscfp(:, 2, ipert) - dfpt_data%def(ipert)
+            dfpt_data%dvscfs(:, 2, ipert) = dfpt_data%dvscfs(:, 2, ipert) - dfpt_data%def(ipert)
          ENDIF
       ENDDO
       !
       ! Update the response wavefunction (dpsi, stored in buffer iudwf).
       ! Also update drhos. (drhop is updated by ef_shift.)
       !
-      CALL ef_shift_wfc(npert, ldoss, dfpt_data%drhos)
+      CALL ef_shift_wfc_new(dfpt_data)
       !
    ENDIF ! lmetq0
    !

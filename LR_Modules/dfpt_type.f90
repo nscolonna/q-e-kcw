@@ -31,6 +31,16 @@ MODULE dfpt_type
       COMPLEX(DP), ALLOCATABLE :: dbecsum(:, :, :, :)
       !! Change of becsum. Only used for USPP and PAW.
       !
+      ! Variables for metallic systems at q=0
+      !
+      COMPLEX(DP), ALLOCATABLE :: def(:)
+      !! Change of the Fermi energy for each perturbation.
+      COMPLEX(DP), ALLOCATABLE :: dn0(:)
+      !! Bare charge perturbation for metallic systems at q=0. It is the Delta n_ext(q=0)
+      !! term in Eq.(79) of Baroni et al, Rev. Mod. Phys. 73, 515 (2001).
+      !! In phonon calculations, this term is zero. It is nonzero when calculating the
+      !! screened Coulomb interaction.
+      !
       ! Variables allocated and used only for phonon perturbations
       !
       COMPLEX(DP), ALLOCATABLE :: drhoc(:, :)
@@ -81,12 +91,17 @@ MODULE dfpt_type
       USE noncollin_module,     ONLY : nspin_mag
       USE uspp_param,           ONLY : nhm
       USE ions_base,            ONLY : nat
+      USE klist,                ONLY : ltetra, lgauss
       USE uspp,                 ONLY : okvan
+      USE control_lr,           ONLY : lgamma
       !
       IMPLICIT NONE
       !
       TYPE(dfpt_data_type), INTENT(OUT) :: dfpt_data
       INTEGER, INTENT(IN) :: npert
+      !
+      LOGICAL :: lmetq0
+      !! true if xq=(0,0,0) in a metal
       !
       dfpt_data%npert = npert
       !
@@ -98,6 +113,14 @@ MODULE dfpt_type
       dfpt_data%drhop = (0.d0, 0.d0)
       dfpt_data%dvscfs = (0.d0, 0.d0)
       dfpt_data%dvscfp = (0.d0, 0.d0)
+      !
+      lmetq0 = (lgauss .OR. ltetra) .AND. lgamma
+      IF (lmetq0) THEN
+         ALLOCATE(dfpt_data%def(npert))
+         ALLOCATE(dfpt_data%dn0(npert))
+         dfpt_data%def = (0.d0, 0.d0)
+         dfpt_data%dn0 = (0.d0, 0.d0)
+      ENDIF
       !
       IF (okvan) THEN
          ALLOCATE(dfpt_data%dbecsum((nhm * (nhm + 1))/2, nat, nspin_mag, npert))
@@ -121,6 +144,8 @@ MODULE dfpt_type
       IF (ALLOCATED(dfpt_data%dvscfp)) DEALLOCATE(dfpt_data%dvscfp)
       IF (ALLOCATED(dfpt_data%dvscfs)) DEALLOCATE(dfpt_data%dvscfs)
       IF (ALLOCATED(dfpt_data%dbecsum)) DEALLOCATE(dfpt_data%dbecsum)
+      IF (ALLOCATED(dfpt_data%def)) DEALLOCATE(dfpt_data%def)
+      IF (ALLOCATED(dfpt_data%dn0)) DEALLOCATE(dfpt_data%dn0)
       IF (ALLOCATED(dfpt_data%drhoc)) DEALLOCATE(dfpt_data%drhoc)
       IF (ALLOCATED(dfpt_data%drhop_pulay)) DEALLOCATE(dfpt_data%drhop_pulay)
       IF (ALLOCATED(dfpt_data%dbecsum_pulay)) DEALLOCATE(dfpt_data%dbecsum_pulay)
