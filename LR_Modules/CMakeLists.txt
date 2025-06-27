@@ -17,6 +17,7 @@ set(sources
     Coul_cut_2D_ph.f90
     check_q_points_sym.f90
     dfpt_tetra_mod.f90
+    dfpt_type.f90
     dynmat_sub.f90
     h_prec.f90
     h_prec_freq.f90

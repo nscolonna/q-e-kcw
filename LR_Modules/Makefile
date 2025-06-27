@@ -29,6 +29,7 @@ ch_psi_all_complex.o \
 Coul_cut_2D_ph.o \
 check_q_points_sym.o \
 dfpt_tetra_mod.o \
+dfpt_type.o \
 dynmat_sub.o \
 h_prec.o \
 h_prec_freq.o \
