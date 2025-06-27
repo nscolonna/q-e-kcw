@@ -11,7 +11,7 @@ MODULE dfpt_kernels
 IMPLICIT NONE
 CONTAINS
 SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
-                       irr, imode0, option, drhoc)
+                       irr, imode0)
    !------------------------------------------------------------------------------
    !! Driver routine for the solution of the linear system that computes the change
    !! of the electron density due to a generic perturbation to the Hamiltonian.
@@ -51,7 +51,6 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
    !!    - iter0 : Number of iterations already performed (> 0 for restart, 0 otherwise)
    !!    - lrdvpsi : Record length for the buffer storing dV_bare * psi
    !!    - iudvpsi : Unit for the buffer storing dV_bare * psi
-   !!    - option : Option that tells the type of perturbation. phonon / other (means no Pulay term)
    !!
    !! Input/Output:
    !!    - drhos : change of the charge density (smooth part only, dffts)
@@ -80,14 +79,6 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
    !! NOTE: The following features are not implemented.
    !!    - Custom convergence parameter
    !!    - Custom printing
-   !!
-   !!
-   !! Currently the code needs branches for phonon (using variable option)
-   !! in the following places
-   !!    1. addusddens : USPP Pulay contribution to drho
-   !!    2. becsumort : alphasum Pulay contribution to dbecsum
-   !! The plan is to get rid of all these branches by designing a generic subroutine, or
-   !! if that is not feasible, by using callback arguments.
    !!
    !------------------------------------------------------------------------------
    !
@@ -127,8 +118,6 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
    !
    ! These are the modules that live in PHonon. Should be moved to LR_Modules.
    USE recover_mod,          ONLY : write_rec
-   USE phus,                 ONLY : becsumort
-   USE units_ph,  ONLY : iudrhous, lrdrhous
    !
    IMPLICIT NONE
    !
@@ -146,8 +135,6 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
    ! self-consistency error. Input is used for restart.
    TYPE(dfpt_data_type), INTENT(INOUT) :: dfpt_data
    !! Data that describes linear response quantities
-   COMPLEX(DP), INTENT(IN), OPTIONAL :: drhoc(dfftp%nnr, npert)
-   !! Change in the core charge due to the perturbation.
    !
    INTEGER, INTENT(IN) :: irr
    !! input: the irreducible representation (to be removed after moving from PH to LR_Modules)
@@ -155,9 +142,6 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
    INTEGER, INTENT(IN) :: imode0
    !! input: the position of the modes (to be removed after moving from PH to LR_Modules)
    !! Set to 0 if not using phonon perturbation.
-   CHARACTER(LEN=*), INTENT(IN) :: option
-   !! input: Option that tells the type of perturbation.
-   !! Possible options: 'phonon', 'other'
    !
    ! ... local variables
    !
@@ -175,7 +159,6 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
    ! ldoss: as above, without augmentation charges
    ! dbecsum: the derivative of becsum
    REAL(DP), ALLOCATABLE :: becsum1(:,:,:)
-   COMPLEX(DP), ALLOCATABLE :: drhous(:,:)
    !
    LOGICAL :: all_conv
    !! True if sternheimer_kernel is converged at all k points and perturbations
@@ -320,33 +303,31 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
       ! Add the dbecsum contribution to drhop
       CALL lr_addusddens(npert, dfpt_data%dbecsum, dfpt_data%drhop)
       !
-      IF (option == 'phonon') THEN
-         ! Add Pulay contribution to drhop
-         ALLOCATE(drhous(dfftp%nnr, nspin_mag))
-         do ipert = 1, npert
-            call get_buffer(drhous, lrdrhous, iudrhous, imode0 + ipert)
-            call zaxpy(dfftp%nnr*nspin_mag, (1.d0, 0.d0), drhous, 1, dfpt_data%drhop(1,1,ipert), 1)
-         ENDDO
-         DEALLOCATE(drhous)
+      ! Add Pulay correction to drhop if present
+      !
+      IF (ALLOCATED(dfpt_data%drhop_pulay)) THEN
+         CALL zaxpy(dfftp%nnr*nspin_mag*npert, (1.d0, 0.d0), dfpt_data%drhop_pulay, 1, &
+                    dfpt_data%drhop, 1)
       ENDIF
       !
       !   Reduce the delta rho across pools
       !
       CALL mp_sum(dfpt_data%drhos, inter_pool_comm)
       CALL mp_sum(dfpt_data%drhop, inter_pool_comm)
-      IF (okpaw) CALL mp_sum(dfpt_data%dbecsum, inter_pool_comm)
+      !
+      ! If .NOT. okpaw, dbecsum is not used below. So, postprocess dbecsum only if okpaw.
       !
       IF (okpaw) THEN
+         !
+         CALL mp_sum(dfpt_data%dbecsum, inter_pool_comm)
          !
          ! The presence of c.c. in the formula gives a factor 2.0
          !
          dfpt_data%dbecsum = 2.0_DP * dfpt_data%dbecsum
          !
-         IF (option == 'phonon') THEN
-            ! Add pulay term
-            DO ipert = 1, npert
-               dfpt_data%dbecsum(:,:,:,ipert) = dfpt_data%dbecsum(:,:,:,ipert) + becsumort(:,:,:,imode0+ipert)
-            ENDDO
+         ! Add Pulay correction to dbecsum
+         IF (ALLOCATED(dfpt_data%dbecsum_pulay)) THEN
+            dfpt_data%dbecsum = dfpt_data%dbecsum + dfpt_data%dbecsum_pulay
          ENDIF
       ENDIF
       !
@@ -394,8 +375,8 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
          ! Compute the response HXC potential
          DO ipert = 1, npert
             CALL zcopy(dfftp%nnr*nspin_mag, dfpt_data%drhop(1,1,ipert), 1, dvscftmp(1,1,ipert), 1)
-            IF (PRESENT(drhoc)) THEN
-               CALL dv_of_drho(dvscftmp(1, 1, ipert), drhoc = drhoc(:, ipert))
+            IF (ALLOCATED(dfpt_data%drhoc)) THEN
+               CALL dv_of_drho(dvscftmp(1, 1, ipert), drhoc = dfpt_data%drhoc(:, ipert))
             ELSE !FM: as the case of solve_e
                CALL dv_of_drho(dvscftmp(1, 1, ipert))
             ENDIF

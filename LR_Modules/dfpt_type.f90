@@ -30,6 +30,18 @@ MODULE dfpt_type
       !! Change of the scf potential (smooth and hard parts, dfftp)
       COMPLEX(DP), ALLOCATABLE :: dbecsum(:, :, :, :)
       !! Change of becsum. Only used for USPP and PAW.
+      !
+      ! Variables allocated and used only for phonon perturbations
+      !
+      COMPLEX(DP), ALLOCATABLE :: drhoc(:, :)
+      !! Change of core charge due to nonlinear core correction.
+      !! Size (dfftp%nnr, npert)
+      COMPLEX(DP), ALLOCATABLE :: drhop_pulay(:, :, :)
+      !! Pulay correction to drhop due to augmentation charge. Used for USPP or PAW.
+      !! Size (dfftp%nnr, nspin_mag, npert)
+      COMPLEX(DP), ALLOCATABLE :: dbecsum_pulay(:, :, :, :)
+      !! Pulay correction to dbecsum due to augmentation charge. Used for PAW only.
+      !! Size ((nhm * (nhm + 1))/2, nat, nspin_mag, npert)
    END TYPE dfpt_data_type
    !
    CONTAINS
@@ -109,6 +121,9 @@ MODULE dfpt_type
       IF (ALLOCATED(dfpt_data%dvscfp)) DEALLOCATE(dfpt_data%dvscfp)
       IF (ALLOCATED(dfpt_data%dvscfs)) DEALLOCATE(dfpt_data%dvscfs)
       IF (ALLOCATED(dfpt_data%dbecsum)) DEALLOCATE(dfpt_data%dbecsum)
+      IF (ALLOCATED(dfpt_data%drhoc)) DEALLOCATE(dfpt_data%drhoc)
+      IF (ALLOCATED(dfpt_data%drhop_pulay)) DEALLOCATE(dfpt_data%drhop_pulay)
+      IF (ALLOCATED(dfpt_data%dbecsum_pulay)) DEALLOCATE(dfpt_data%dbecsum_pulay)
       !
    END SUBROUTINE deallocate_dfpt_data
    !---------------------------------------------------------------------------

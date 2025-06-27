@@ -127,7 +127,7 @@ subroutine solve_e
   !
   !   Solve DFPT fixed-point equation
   !
-  CALL dfpt_kernel('PHONON', 3, iter0, lrebar, iuebar, dr2, dfpt_data, 1, 0, 'other')
+  CALL dfpt_kernel('PHONON', 3, iter0, lrebar, iuebar, dr2, dfpt_data, 1, 0)
   !
   IF (lda_plus_u) CALL dnsq_store(3, 0)
   !

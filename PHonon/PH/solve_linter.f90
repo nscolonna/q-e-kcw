@@ -37,11 +37,13 @@ SUBROUTINE solve_linter (irr, imode0, dfpt_data)
   USE io_files,             ONLY : prefix, diropn
   USE wavefunctions,        ONLY : evc
   USE cell_base,            ONLY : at
+  USE ions_base,            ONLY : nat
   USE klist,                ONLY : xk, ngk, igk_k
   USE fft_base,             ONLY : dfftp, dffts
   USE lsda_mod,             ONLY : lsda, current_spin, isk
   USE scf,                  ONLY : rho
   USE uspp,                 ONLY : okvan, vkb, deeq_nc
+  USE uspp_param,           ONLY : nhm
   USE noncollin_module,     ONLY : noncolin, domag, nspin_mag
   USE paw_variables,        ONLY : okpaw
   USE paw_onecenter,        ONLY : paw_dpotential
@@ -50,8 +52,8 @@ SUBROUTINE solve_linter (irr, imode0, dfpt_data)
   USE control_ph,           ONLY : ext_recover, lmultipole
   USE el_phon,              ONLY : elph
   USE uspp,                 ONLY : nlcc_any
-  USE units_ph,             ONLY : iudrho, lrdrho, iubar, lrbar, &
-                                   iudvscf, iuint3paw, lint3paw
+  USE units_ph,             ONLY : iudrho, lrdrho, iubar, lrbar, iudvscf, iuint3paw, &
+                                   lint3paw, iudrhous, lrdrhous
   USE units_lr,             ONLY : iuwfc, lrwfc
   USE output,               ONLY : fildrho, fildvscf
   USE phus,                 ONLY : alphap, int1_nc
@@ -68,6 +70,7 @@ SUBROUTINE solve_linter (irr, imode0, dfpt_data)
   USE lr_nc_mag,            ONLY : int1_nc_save, deeq_nc_save
   USE dfpt_type,            ONLY : dfpt_data_type
   USE dfpt_kernels,         ONLY : dfpt_kernel
+  USE phus,                 ONLY : becsumort
   !
   IMPLICIT NONE
   !
@@ -82,9 +85,6 @@ SUBROUTINE solve_linter (irr, imode0, dfpt_data)
   !
   real(DP) :: dr2
   ! dr2   : self-consistency error
-  !
-  COMPLEX(DP), allocatable :: drhoc(:, :)
-  !! Change in the core charge due to the perturbation.
 
   logical :: exst
   !! used to open the recover file
@@ -115,7 +115,6 @@ SUBROUTINE solve_linter (irr, imode0, dfpt_data)
   IF (noncolin.AND.domag) nsolv=2
   !
   npe = dfpt_data%npert
-  allocate (drhoc(dfftp%nnr, npe))
   !
   nnr = dffts%nnr
   !$acc enter data create(dfpt_data, dfpt_data%dvscfs(1:nnr, 1:nspin_mag, 1:npe))
@@ -216,9 +215,33 @@ SUBROUTINE solve_linter (irr, imode0, dfpt_data)
   ! Compute the change of core charge due to atomic displacement
   ! drhoc is computed only once, stored in drhoc, passed to dfpt_kernel.
   !
-  DO ipert = 1, npe
-    CALL addcore(u(1, imode0+ipert), drhoc(1, ipert))
-  ENDDO
+  ! If lmultipole is .TRUE., one is actually considering a exp(iqr) perturbation, not
+  ! a phonon perturbation. So we do not compute the core charge perturbation.
+  !
+  IF (.NOT. lmultipole) THEN
+     ALLOCATE(dfpt_data%drhoc(dfftp%nnr, npe))
+     DO ipert = 1, npe
+        CALL addcore(u(1, imode0+ipert), dfpt_data%drhoc(1, ipert))
+     ENDDO
+     !
+     ! Set Pulay correction terms
+     !
+     IF (okvan) THEN
+        ! Pulay correction to density due to augmentation charge
+        ALLOCATE(dfpt_data%drhop_pulay(dfftp%nnr, nspin_mag, npe))
+        DO ipert = 1, npe
+           CALL get_buffer(dfpt_data%drhop_pulay(1, 1, ipert), lrdrhous, iudrhous, imode0 + ipert)
+        ENDDO
+     ENDIF
+     !
+     IF (okpaw) THEN
+        ! Pulay correction to dbecsum due to augmentation charge
+        ALLOCATE(dfpt_data%dbecsum_pulay((nhm * (nhm + 1))/2, nat, nspin_mag, npe))
+        DO ipert = 1, npe
+           dfpt_data%dbecsum_pulay(:,:,:,ipert) = becsumort(:,:,:,imode0+ipert)
+        ENDDO
+     ENDIF
+  ENDIF
   !
   ! Set records for restart
   !
@@ -227,15 +250,7 @@ SUBROUTINE solve_linter (irr, imode0, dfpt_data)
   !
   !    Solve DFPT fixed-point equation
   !
-  IF (lmultipole) THEN
-     ! Multipole perturbation, no core charge
-     CALL dfpt_kernel('PHONON', npe, iter0, lrbar, iubar, dr2, dfpt_data, &
-                      irr, imode0, 'phonon')
-  ELSE
-     ! Phonon perturbation, core charge perturbation is included
-     CALL dfpt_kernel('PHONON', npe, iter0, lrbar, iubar, dr2, dfpt_data, &
-                      irr, imode0, 'phonon', drhoc = drhoc)
-  ENDIF
+  CALL dfpt_kernel('PHONON', npe, iter0, lrbar, iubar, dr2, dfpt_data, irr, imode0)
   !
 155 CONTINUE
   !
@@ -282,7 +297,6 @@ SUBROUTINE solve_linter (irr, imode0, dfpt_data)
   ENDIF ! convt
   !
   !$acc exit data delete(dfpt_data, dfpt_data%dvscfs)
-  deallocate (drhoc)
 
   call stop_clock ('solve_linter')
 
