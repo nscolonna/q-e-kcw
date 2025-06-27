@@ -273,4 +273,7 @@ MODULE ldaU_lr
   COMPLEX(DP), ALLOCATABLE :: lr_dnsorth(:, :, :, :, :)
   !! Fixed term to be added to dnsscf. Size (ldim, ldim, nspin, nat, 3*nat)
   !
+  COMPLEX (DP), ALLOCATABLE :: proj1(:,:), proj2(:,:)
+  !! Arrays to store scalar products between vectors
+  !
 END MODULE ldaU_lr

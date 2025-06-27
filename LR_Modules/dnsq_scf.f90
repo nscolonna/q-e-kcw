@@ -29,8 +29,8 @@ SUBROUTINE dnsq_scf (npe, lmetq0)
   USE units_lr,      ONLY : iuwfc, lrwfc, iudwf, lrdwf
   USE ions_base,     ONLY : nat, ityp
   USE ldaU,          ONLY : Hubbard_lmax, Hubbard_l, is_hubbard, offsetU, nwfcU
-  USE ldaU_ph,       ONLY : proj1, proj2
-  USE ldaU_lr,       ONLY : swfcatomk, swfcatomkpq, dnsscf, lr_has_dnsorth, lr_dnsorth
+  USE ldaU_lr,       ONLY : swfcatomk, swfcatomkpq, dnsscf, lr_has_dnsorth, lr_dnsorth, &
+                            proj1, proj2
   USE klist,         ONLY : wk, degauss, ngauss, ngk, degauss_cond
   USE wvfct,         ONLY : npwx, nbnd, et, nbnd_cond
   USE qpoint,        ONLY : nksq, ikks, ikqs
@@ -263,43 +263,4 @@ SUBROUTINE dnsq_scf (npe, lmetq0)
   RETURN
   ! 
 END SUBROUTINE dnsq_scf
-!----------------------------------------------------------------------------
-!
-!----------------------------------------------------------------------------
-SUBROUTINE dnsq_store(npe, imode0)
-!----------------------------------------------------------------------------
-  !! Store the computed dnsscf in the full matrix dnsscf_all_modes
-  !! (i.e for all modes and not only for the npe irreducible representations)
-  !
-  USE ions_base,     ONLY : nat, ityp
-  USE lsda_mod,      ONLY : nspin
-  USE ldaU,          ONLY : is_hubbard, Hubbard_l
-  USE ldaU_ph,       ONLY : dnsscf_all_modes
-  USE ldaU_lr,       ONLY : dnsscf
-  !
-  IMPLICIT NONE
-  !
-  INTEGER,  INTENT(IN) :: npe
-  !! the number of perturbations
-  INTEGER , INTENT(IN) :: imode0
-  !! the position of the modes
-  !
-  INTEGER :: ipert, nah, nt, is, m1, m2
-  !
-  DO ipert = 1, npe
-   DO nah = 1, nat
-      nt = ityp(nah)
-      IF (is_hubbard(nt)) THEN
-         DO is = 1, nspin
-            DO m1 = 1, 2*Hubbard_l(nt)+1
-               DO m2 = 1, 2*Hubbard_l(nt)+1
-                  dnsscf_all_modes(m1,m2,is,nah,imode0+ipert) = &
-                                   dnsscf(m1,m2,is,nah,ipert)
-               ENDDO
-            ENDDO
-         ENDDO
-      ENDIF
-   ENDDO
-ENDDO
-END SUBROUTINE dnsq_store
 !----------------------------------------------------------------------------

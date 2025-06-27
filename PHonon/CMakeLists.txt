@@ -40,11 +40,10 @@ set(src_ph
     PH/dnsq_bare.f90
     PH/dnsq_orth.f90
     PH/dnsq_orth_set_irr.f90
-    PH/dnsq_scf.f90
+    PH/dnsq_store.f90
     PH/davcio_drho.f90
     PH/dfile_autoname.f90
     PH/dfile_star.f90
-    PH/dfpt_kernels.f90
     PH/dielec.f90
     PH/do_phonon.f90
     PH/do_q2r.f90
@@ -145,7 +144,6 @@ set(src_ph
     PH/transform_alphasum_so.f90
     PH/tra_write_matrix.f90
     PH/trntnsc.f90
-    PH/twochem_postproc_dfpt.f90
     PH/write_epsilon_and_zeu.f90
     PH/write_qplot_data.f90
     PH/write_matrix.f90

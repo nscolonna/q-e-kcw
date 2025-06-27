@@ -515,9 +515,7 @@ MODULE ldaU_ph
   COMPLEX(DP), ALLOCATABLE :: dnsorth_cart(:,:,:,:,:,:)
   !! same as above, but in cart. coordinates
   !
-  COMPLEX (DP), ALLOCATABLE :: proj1(:,:),    &
-                               proj2(:,:),    &
-                               projpb(:,:),   &
+  COMPLEX (DP), ALLOCATABLE :: projpb(:,:),   &
                                projpdb(:,:,:)
   ! Arrays to store scalar products between vectors
   ! projpb  = <psi|beta>

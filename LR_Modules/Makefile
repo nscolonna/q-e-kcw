@@ -28,6 +28,7 @@ ch_psi_all.o \
 ch_psi_all_complex.o \
 Coul_cut_2D_ph.o \
 check_q_points_sym.o \
+dnsq_scf.o \
 dfpt_tetra_mod.o \
 dfpt_type.o \
 dynmat_sub.o \
@@ -75,7 +76,8 @@ lrcom.o \
 lr_dot.o \
 lr_dot_magnons.o \
 lr_nc_mag.o \
-lr_two_chem.o\
+lr_two_chem.o \
+twochem_postproc_dfpt.o \
 lr_sym_paw.o \
 lr_restart.o \
 lanczos_nonhermitian.o \
@@ -84,7 +86,8 @@ lanczos_pseudohermitian_c.o \
 lanczos_nonhermitian_c.o \
 response_kernels.o \
 non_scf_ph.o \
-efermi_shift.o
+efermi_shift.o \
+dfpt_kernels.o
 
 TLDEPS=mods pwlibs
 

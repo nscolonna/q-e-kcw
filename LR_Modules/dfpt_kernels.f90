@@ -86,8 +86,8 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
    USE mp_pools,             ONLY : inter_pool_comm
    USE mp_bands,             ONLY : intra_bgrp_comm
    USE mp,                   ONLY : mp_sum
-   USE fft_interfaces,       ONLY : fft_interpolate
    USE fft_base,             ONLY : dfftp, dffts
+   USE fft_interfaces,       ONLY : fft_interpolate
    USE buffers,              ONLY : get_buffer
    USE ions_base,            ONLY : nat
    USE io_global,            ONLY : stdout
@@ -100,7 +100,6 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
    USE ldaU,                 ONLY : lda_plus_u
    USE uspp,                 ONLY : okvan
    USE uspp_param,           ONLY : nhm
-   USE uspp_init,            ONLY : init_us_2
    USE noncollin_module,     ONLY : noncolin, domag, npol, nspin_mag
    USE paw_variables,        ONLY : okpaw
    USE paw_onecenter,        ONLY : paw_dpotential
@@ -349,10 +348,10 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
       IF (twochem) THEN
          IF (okpaw) THEN
             CALL twochem_postproc_dfpt(npert, nsolv, imode0, lmetq0, &
-                  convt, dos_ef, ldos, ldoss, dfpt_data%drhop, dfpt_data%dbecsum, becsum1)
+                  convt, dos_ef, ldos, ldoss, dfpt_data, becsum1)
          ELSE
             CALL twochem_postproc_dfpt(npert, nsolv, imode0, lmetq0, &
-                  convt, dos_ef, ldos, ldoss, dfpt_data%drhop, dfpt_data%dbecsum)
+                  convt, dos_ef, ldos, ldoss, dfpt_data)
          ENDIF
       ENDIF
       !

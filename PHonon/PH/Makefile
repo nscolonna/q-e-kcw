@@ -53,7 +53,7 @@ d2nsq_bare.o \
 dnsq_bare.o \
 dnsq_orth.o \
 dnsq_orth_set_irr.o \
-dnsq_scf.o \
+dnsq_store.o \
 davcio_drho.o \
 dfile_autoname.o \
 dfile_star.o \
@@ -156,7 +156,6 @@ transform_alphasum_nc.o \
 transform_alphasum_so.o \
 tra_write_matrix.o \
 trntnsc.o \
-twochem_postproc_dfpt.o \
 write_epsilon_and_zeu.o \
 write_qplot_data.o \
 write_matrix.o \
@@ -165,7 +164,6 @@ write_rec.o \
 write_hub.o \
 zstar_eu.o \
 zstar_eu_us.o \
-dfpt_kernels.o \
 dump_drho.o
 
 RAMANOBJS =    \

@@ -7,7 +7,7 @@
 !
 !-----------------------------------------------------------------------
 SUBROUTINE twochem_postproc_dfpt(npe, nsolv, imode0, lmetq0, convt, dos_ef, ldos, ldoss, &
-                                 drhop, dbecsum, becsum1)
+                                 dfpt_data, becsum1)
    USE kinds,                ONLY : DP
    USE mp,                   ONLY : mp_sum
    USE mp_pools,             ONLY : inter_pool_comm
@@ -20,6 +20,7 @@ SUBROUTINE twochem_postproc_dfpt(npe, nsolv, imode0, lmetq0, convt, dos_ef, ldos
    USE uspp,                 ONLY : okvan
    USE uspp_param,           ONLY : nhm
    USE paw_variables,        ONLY : okpaw
+   USE dfpt_type,            ONLY : dfpt_data_type
    !
    USE two_chem,             ONLY : twochem
    USE lr_two_chem
@@ -34,8 +35,7 @@ SUBROUTINE twochem_postproc_dfpt(npe, nsolv, imode0, lmetq0, convt, dos_ef, ldos
    REAL(DP), INTENT(in) :: dos_ef
    COMPLEX(DP), INTENT(in) :: ldos(dfftp%nnr, nspin_mag)
    COMPLEX(DP), INTENT(in) :: ldoss(dffts%nnr, nspin_mag)
-   COMPLEX(DP), INTENT(inout) :: drhop(dfftp%nnr, nspin_mag, npe)
-   COMPLEX(DP), INTENT(inout) :: dbecsum((nhm * (nhm + 1))/2, nat, nspin_mag , npe)
+   TYPE(dfpt_data_type), INTENT(inout) :: dfpt_data
    REAL(DP), INTENT(in), OPTIONAL :: becsum1((nhm * (nhm + 1))/2 , nat , nspin_mag)
    !
    INTEGER :: is, ipert
@@ -82,7 +82,14 @@ SUBROUTINE twochem_postproc_dfpt(npe, nsolv, imode0, lmetq0, convt, dos_ef, ldos
       ENDIF
    ENDIF
    !
-   call addusddens_cond(drhop_cond, dbecsum_cond, imode0, npe, 0)
+   IF (okvan) CALL lr_addusddens(npe, dbecsum_cond, drhop_cond)
+   !
+   ! Add Pulay correction to drhop
+   !
+   IF (ALLOCATED(dfpt_data%drhop_pulay)) THEN
+      CALL zaxpy(dfftp%nnr*nspin_mag*npe, (1.d0, 0.d0), dfpt_data%drhop_pulay, 1, &
+                  drhop_cond, 1)
+   ENDIF
    !
    CALL mp_sum ( drhos_cond, inter_pool_comm )
    CALL mp_sum ( drhop_cond, inter_pool_comm )
@@ -92,14 +99,14 @@ SUBROUTINE twochem_postproc_dfpt(npe, nsolv, imode0, lmetq0, convt, dos_ef, ldos
    !
    IF (lmetq0) THEN
       IF (okpaw) THEN
-         CALL ef_shift_twochem(npe, dos_ef, dos_ef_cond, ldos, ldos_cond, drhop,&
-                           drhop_cond,dbecsum,dbecsum_cond, becsum1,becsum1_cond)
+         CALL ef_shift_twochem(npe, dos_ef, dos_ef_cond, ldos, ldos_cond, dfpt_data%drhop,&
+                           drhop_cond,dfpt_data%dbecsum,dbecsum_cond, becsum1,becsum1_cond)
       ELSE
-         CALL ef_shift_twochem(npe, dos_ef,dos_ef_cond, ldos,ldos_cond, drhop,&
+         CALL ef_shift_twochem(npe, dos_ef,dos_ef_cond, ldos,ldos_cond, dfpt_data%drhop,&
                                          drhop_cond)
       ENDIF
    ENDIF
    !
-   IF (lmetq0 .AND. convt) CALL ef_shift_wfc_twochem(npe, ldoss, ldoss_cond, drhop)
+   IF (lmetq0 .AND. convt) CALL ef_shift_wfc_twochem(npe, ldoss, ldoss_cond, dfpt_data%drhop)
    !
 END SUBROUTINE twochem_postproc_dfpt
