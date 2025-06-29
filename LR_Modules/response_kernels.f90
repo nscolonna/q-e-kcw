@@ -638,5 +638,101 @@ SUBROUTINE sternheimer_kernel_freq(first_iter, time_reversed, npert, lrdvpsi, iu
 !----------------------------------------------------------------------------
 END SUBROUTINE sternheimer_kernel_freq
 !------------------------------------------------------------------------------
+!
+SUBROUTINE sternheimer_postprocess(nsolv, npert, drhos, drhop, dbecsum, dbecsum_nc)
+   !----------------------------------------------------------------------------
+   !!
+   !----------------------------------------------------------------------------
+   USE kinds,                 ONLY : DP
+   USE mp,                    ONLY : mp_sum
+   USE mp_pools,              ONLY : inter_pool_comm
+   USE mp_bands,              ONLY : intra_bgrp_comm
+   USE fft_base,              ONLY : dffts, dfftp
+   USE fft_interfaces,        ONLY : fft_interpolate
+   USE gvecs,                 ONLY : doublegrid
+   USE ions_base,             ONLY : nat
+   USE lsda_mod,              ONLY : nspin
+   USE noncollin_module,      ONLY : noncolin, nspin_mag
+   USE uspp,                  ONLY : okvan
+   USE uspp_param,            ONLY : nhm
+   USE paw_variables,         ONLY : okpaw
+   USE control_lr,            ONLY : lgamma_gamma
+   USE lr_sym_mod,            ONLY : psymeq
+   !
+   IMPLICIT NONE
+   !
+   INTEGER, INTENT(IN) :: nsolv
+   !! Number of Sternheimer equations solved (1 for nonmagnetic/LSDA zero frequency,
+   !! 2 for noncollinear magnetism or finite frequency)
+   INTEGER, INTENT(IN) :: npert
+   !! Number of perturbations
+   COMPLEX(DP), INTENT(INOUT) :: drhos(dffts%nnr, nspin_mag, npert)
+   !! Induced charge density (dffts, without augmentation term)
+   COMPLEX(DP), INTENT(INOUT) :: drhop(dfftp%nnr, nspin_mag, npert)
+   !! Induced charge density (dffts, with augmentation term)
+   COMPLEX(DP), INTENT(INOUT) :: dbecsum(nhm*(nhm+1)/2, nat, nspin_mag, npert)
+   !! becsum with dpsi
+   COMPLEX(DP), INTENT(INOUT), OPTIONAL :: dbecsum_nc(nhm, nhm, nat, nspin, npert)
+   !! becsum with dpsi. Used if noncolin is true.
+   !
+   INTEGER :: ipert
+   !! counter for perturbations
+   INTEGER :: is
+   !! counter for spins
+   !
+   CALL start_clock("sth_postproc")
+   !
+   IF (nsolv == 2) THEN
+      drhos = drhos / 2.0_dp
+      IF (noncolin) THEN
+         dbecsum_nc = dbecsum_nc / 2.0_dp
+      ELSE
+         dbecsum = dbecsum / 2.0_dp
+      ENDIF
+   ENDIF
+   !
+   !  The calculation of dbecsum is distributed across processors
+   !  (see addusdbec) - we sum over processors the contributions
+   !  coming from each slice of bands
+   !
+   IF (noncolin) THEN
+      CALL mp_sum(dbecsum_nc, intra_bgrp_comm)
+   ELSE
+      CALL mp_sum(dbecsum, intra_bgrp_comm)
+   ENDIF
+   !
+   IF (doublegrid) THEN
+      DO is = 1, nspin_mag
+         DO ipert = 1, npert
+            CALL fft_interpolate(dffts, drhos(:, is, ipert), dfftp, drhop(:, is, ipert))
+         ENDDO
+      ENDDO
+   ELSE
+      CALL zcopy(dffts%nnr * nspin_mag * npert, drhos, 1, drhop, 1)
+   ENDIF
+   !
+   IF (noncolin .AND. okvan) CALL set_dbecsum_nc(dbecsum_nc, dbecsum, npert)
+   !
+   ! Add augmentation charge contribution to drhop (for USPP/PAW)
+   ! TODO: Use lr_addusddens
+   !
+   IF (okvan) CALL addusddenseq(drhop, dbecsum)
+   !
+   !   drhop contains the (unsymmetrized) linear charge response
+   !   for the three polarizations - symmetrize it
+   !
+   CALL mp_sum(drhos, inter_pool_comm)
+   CALL mp_sum(drhop, inter_pool_comm)
+   IF (okpaw) CALL mp_sum(dbecsum, inter_pool_comm)
+   !
+   IF (.not. lgamma_gamma) THEN
+      ! TODO: Use psymdvscf
+      CALL psymeq(drhop)
+   ENDIF
+   !
+   CALL stop_clock("sth_postproc")
+   !
+END SUBROUTINE sternheimer_postprocess
+!------------------------------------------------------------------------------
 END MODULE response_kernels
 !------------------------------------------------------------------------------

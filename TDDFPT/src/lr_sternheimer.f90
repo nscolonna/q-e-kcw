@@ -43,7 +43,7 @@ SUBROUTINE one_sternheimer_step(iu, flag)
     USE check_stop,             ONLY : check_stop_now
     USE buffers,                ONLY : get_buffer, save_buffer
     USE wavefunctions,          ONLY : evc
-    USE uspp,                   ONLY : okvan, vkb
+    USE uspp,                   ONLY : vkb
     USE uspp_param,             ONLY : nhm
     USE noncollin_module,       ONLY : noncolin, domag, npol, nspin_mag
     USE scf,                    ONLY : rho
@@ -62,7 +62,6 @@ SUBROUTINE one_sternheimer_step(iu, flag)
     USE qpoint,                 ONLY : xq, nksq, ikks, ikqs
     USE linear_solvers,         ONLY : ccg_many_vectors
     USE dv_of_drho_lr,          ONLY : dv_of_drho
-    USE mp_pools,               ONLY : inter_pool_comm
     USE mp_bands,               ONLY : intra_bgrp_comm
     USE mp_images,              ONLY : root_image, my_image_id
     USE mp,                     ONLY : mp_sum
@@ -73,10 +72,10 @@ SUBROUTINE one_sternheimer_step(iu, flag)
                                        current_w, itermax
     USE paw_add_symmetry,       ONLY : paw_deqsymmetrize
     USE wavefunctions,          ONLY : psic
-    USE lr_sym_mod,             ONLY : psymeq
     USE apply_dpot_mod,         ONLY : apply_dpot_allocate, apply_dpot_deallocate, &
                                        apply_dpot_bands
-    USE response_kernels,      ONLY : sternheimer_kernel, sternheimer_kernel_freq
+    USE response_kernels,      ONLY : sternheimer_kernel, sternheimer_kernel_freq, &
+                                      sternheimer_postprocess
     USE uspp_init,             ONLY : init_us_2
     !
     IMPLICIT NONE
@@ -331,49 +330,9 @@ SUBROUTINE one_sternheimer_step(iu, flag)
           !
        ENDIF
        !
-       IF (nsolv == 2) THEN
-          drhos = drhos / 2.0_dp
-          IF (noncolin) THEN
-             dbecsum_nc = dbecsum_nc / 2.0_dp
-          ELSE
-             dbecsum = dbecsum / 2.0_dp
-          ENDIF
-       ENDIF
+       ! Postprocess the results of the Sternheimer kernel
        !
-       !  The calculation of dbecsum is distributed across processors
-       !  (see addusdbec) - we sum over processors the contributions
-       !  coming from each slice of bands
-       !
-       IF (noncolin) THEN
-          CALL mp_sum(dbecsum_nc, intra_bgrp_comm)
-       ELSE
-          CALL mp_sum(dbecsum, intra_bgrp_comm)
-       ENDIF
-       !
-       IF (doublegrid) THEN
-          DO is = 1, nspin_mag
-             DO ipert = 1, npert
-                CALL fft_interpolate(dffts, drhos(:, is, ipert), dfftp, drhop(:, is, ipert))
-             ENDDO
-          ENDDO
-       ELSE
-          CALL zcopy(dffts%nnr * nspin_mag * npert, drhos, 1, drhop, 1)
-       ENDIF
-       !
-       IF (noncolin .AND. okvan) CALL set_dbecsum_nc(dbecsum_nc, dbecsum, npert)
-       !
-       CALL addusddenseq (drhop, dbecsum)
-       !
-       !   drhop contains the (unsymmetrized) linear charge response
-       !   for the three polarizations - symmetrize it
-       !
-       CALL mp_sum(drhos, inter_pool_comm)
-       CALL mp_sum(drhop, inter_pool_comm)
-       IF (okpaw) CALL mp_sum(dbecsum, inter_pool_comm)
-       !
-       IF (.not. lgamma_gamma) THEN
-          CALL psymeq(drhop)
-       ENDIF
+       CALL sternheimer_postprocess(nsolv, npert, drhos, drhop, dbecsum, dbecsum_nc)
        !
        !   compute the corresponding change in scf potential : drhop -> dvscftmp
        !
