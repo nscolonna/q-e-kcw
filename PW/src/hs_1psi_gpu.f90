@@ -38,7 +38,7 @@ SUBROUTINE hs_1psi_gpu( lda, n, psi, hpsi, spsi )
            ALLOCATE(psi_h(lda*npol,1), spsi_h(n,1))
            !$acc update self(psi)
            psi_h(1:lda*npol,1) = psi(1:lda*npol,1)
-           CALL h_psi_gpu( lda, n, 1, psi, hpsi )
+           CALL h_psi( lda, n, 1, psi, hpsi )
            if (gamma_only) then
              call invfft_orbital_gamma(psi_h,1,1) !transform the orbital to real space
              call s_psir_gamma(1,1)
@@ -52,7 +52,7 @@ SUBROUTINE hs_1psi_gpu( lda, n, psi, hpsi, spsi )
            !$acc update device(psi)
            DEALLOCATE(psi_h, spsi_h)
         else   
-  CALL h_psi_gpu( lda, n, 1, psi, hpsi ) ! apply H to a single wfc (no bgrp parallelization here)
+  CALL h_psi( lda, n, 1, psi, hpsi ) ! apply H to a single wfc (no bgrp parallelization here)
   CALL s_psi_acc( lda, n, 1, psi, spsi ) ! apply S to a single wfc (no bgrp parallelization here)
        endif
   !

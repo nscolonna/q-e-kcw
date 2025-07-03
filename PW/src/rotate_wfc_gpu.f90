@@ -88,13 +88,13 @@ SUBROUTINE rotate_wfc_gpu &
      IF ( gamma_only ) THEN
   !write (*,*) 'inside serial gamma'; FLUSH(6)
         !
-        CALL rotate_wfc_gamma ( h_psi_gpu, s_psi_acc, overlap, &
+        CALL rotate_wfc_gamma ( h_psi, s_psi_acc, overlap, &
                                     npwx, npw, nstart, nbnd, psi, evc, e )
         !
      ELSE
   !write (*,*) 'inside serial k'; FLUSH(6)
         !
-        CALL rotate_wfc_k ( h_psi_gpu, s_psi_acc, overlap, &
+        CALL rotate_wfc_k ( h_psi, s_psi_acc, overlap, &
                                 npwx, npw, nstart, nbnd, npol, psi, evc, e )
         !
      END IF
