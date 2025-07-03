@@ -251,7 +251,7 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
   !
   ! Davidson and RMM-DIIS diagonalization uses these external routines on groups of nvec bands
   EXTERNAL h_psi, s_psi, g_psi
-  EXTERNAL h_psi_gpu, s_psi_acc
+  EXTERNAL s_psi_acc
   ! subroutine h_psi(npwx,npw,nvec,psi,hpsi)  computes H*psi
   ! subroutine s_psi(npwx,npw,nvec,psi,spsi)  computes S*psi (if needed)
   ! subroutine g_psi(npwx,npw,nvec,psi,eig)   computes G*psi -> psi

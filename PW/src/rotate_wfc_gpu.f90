@@ -40,7 +40,7 @@ SUBROUTINE rotate_wfc_gpu &
     ! eigenvalues
   COMPLEX(DP), ALLOCATABLE :: psi_h(:,:), evc_h(:,:)
   REAL(DP), ALLOCATABLE    :: e_h(:)
-  EXTERNAL h_psi, s_psi, h_psi_gpu, s_psi_acc
+  EXTERNAL h_psi, s_psi, s_psi_acc
   !
     ! h_psi(npwx,npw,nvec,psi,hpsi)
     !     calculates H|psi>

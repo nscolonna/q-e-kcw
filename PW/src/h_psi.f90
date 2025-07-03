@@ -5,6 +5,9 @@
 ! in the root directory of the present distribution,
 ! or http://www.gnu.org/copyleft/gpl.txt .
 !
+!civn: h_psi_gpu merged in h_psi on July, 3rd 2025.
+!      Last commit with h_psi_gpu: c83b4ac816a69f140a4bd67a4299b640aac3a569
+!
 !----------------------------------------------------------------------------
 SUBROUTINE h_psi( lda, n, m, psi, hpsi )
   !----------------------------------------------------------------------------

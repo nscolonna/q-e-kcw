@@ -576,11 +576,7 @@ CONTAINS
     !
     ! Compute sevc1_new = H*evc1
     !
-#if defined(__CUDA)
-    CALL h_psi_gpu (npwx,ngk(1),nbnd,evc1(1,1,1),sevc1_new(1,1,1))
-#else
     CALL h_psi(npwx,ngk(1),nbnd,evc1(1,1,1),sevc1_new(1,1,1))
-#endif
     !
     ! Compute spsi1 = S*evc1 
     !

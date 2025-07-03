@@ -96,11 +96,10 @@ SUBROUTINE ch_psi_all_complex (n, h, ah, e, ik, m)
   hpsi (:,:) = (0.d0, 0.d0)
   spsi (:,:) = (0.d0, 0.d0)
   !$acc end kernels
+  CALL h_psi (npwx, n, m, h, hpsi)
 #if defined(__CUDA)
-  CALL h_psi_gpu (npwx, n, m, h, hpsi)
   CALL s_psi_acc (npwx, n, m, h, spsi)
 #else
-  CALL h_psi (npwx, n, m, h, hpsi)
   CALL s_psi (npwx, n, m, h, spsi)
 #endif
   !

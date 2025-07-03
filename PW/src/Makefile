@@ -279,7 +279,6 @@ d3hess_mod.o
 
 # CUDA Fortran versions of routines
 PWLIBS += \
-  h_psi_gpu.o \
   vhpsi_gpu.o \
   rotate_wfc_gpu.o \
   hs_1psi_gpu.o \
