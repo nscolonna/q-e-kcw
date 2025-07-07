@@ -617,12 +617,6 @@ CONTAINS
   rho_down  = ( rho_valence(:,1) - rho_valence(:,2) + rho_core(:) )*0.5D0
   total_rho = rho_up + rho_down
 
-#if defined (__SPIN_BALANCED)
-  rho_up   = total_rho*0.5D0
-  rho_down = rho_up
-  WRITE(stdout,'(/,/,"     Performing spin-balanced Ecnl calculation!")')
-#endif
-
 
   ! --------------------------------------------------------------------
   ! Here we calculate the gradient in reciprocal space using FFT.
@@ -1868,17 +1862,10 @@ CONTAINS
  
   IF ( inlc > 5 ) CALL errore( 'xc_vdW_DF', 'inlc not implemented', 1 )
 
-#if defined (__SPIN_BALANCED)
-  IF ( nspin==2 ) THEN
-     WRITE(stdout,'(/,/ "     Performing spin-balanced Ecnl stress calculation!")')
-  ELSE IF ( nspin > 2 ) THEN
-     CALL errore ('vdW_DF_stress', 'noncollinear vdW stress not implemented', 1)
-  END IF
-#else
   IF ( nspin>2 ) THEN
      CALL errore ('vdW_DF_stress', 'vdW stress not implemented for nspin > 2', 1)
   END IF
-#endif
+
 
   sigma(:,:)      = 0.0_DP
   sigma_grad(:,:) = 0.0_DP
@@ -1890,63 +1877,51 @@ CONTAINS
 
   ALLOCATE( total_rho(dfftp%nnr), grad_rho(3,dfftp%nnr), thetas(dfftp%nnr, Nqs), q0(dfftp%nnr) )
   ALLOCATE ( dq0_drho(dfftp%nnr), dq0_dgradrho(dfftp%nnr) )
-#if defined (__SPIN_BALANCED)
-#else
+
   IF (nspin==2) THEN
      allocate( rho_up(dfftp%nnr), rho_down(dfftp%nnr) )
      allocate( grad_rho_up(3,dfftp%nnr), grad_rho_down(3,dfftp%nnr) )
      allocate( dq0_drho_up (dfftp%nnr), dq0_dgradrho_up  (dfftp%nnr) )
      allocate( dq0_drho_down(dfftp%nnr), dq0_dgradrho_down(dfftp%nnr) )
   ENDIF
-#endif
+
 
   ! --------------------------------------------------------------------
   ! Charge
 
   total_rho = rho_valence(:,1) + rho_core(:)
-#if defined (__SPIN_BALANCED)
-#else
+
   IF (nspin==2) THEN
     rho_up    = ( rho_valence(:,1) + rho_valence(:,2) + rho_core(:) )*0.5D0
     rho_down  = ( rho_valence(:,1) - rho_valence(:,2) + rho_core(:) )*0.5D0
   ENDIF
-#endif
-
 
 
   ! --------------------------------------------------------------------
   ! Here we calculate the gradient in reciprocal space using FFT.
 
   CALL fft_gradient_r2r (dfftp, total_rho,  g, grad_rho)
-#if defined (__SPIN_BALANCED)
-#else
+
   IF (nspin==2) THEN
      call fft_gradient_r2r (dfftp, rho_up,    g, grad_rho_up)
      call fft_gradient_r2r (dfftp, rho_down,  g, grad_rho_down)
   ENDIF
-#endif
+
 
   ! --------------------------------------------------------------------
   ! Get q0.
 
-#if defined (__SPIN_BALANCED)
-  CALL get_q0_on_grid (total_rho, grad_rho, q0, dq0_drho, dq0_dgradrho, thetas)
-#else
   IF (nspin == 1) THEN
      CALL get_q0_on_grid (total_rho, grad_rho, q0, dq0_drho, dq0_dgradrho, thetas)
   ELSEIF (nspin==2) THEN
      CALL get_q0_on_grid_spin ( total_rho, rho_up, rho_down, grad_rho, grad_rho_up, grad_rho_down, &
           q0, dq0_drho_up, dq0_drho_down, dq0_dgradrho_up, dq0_dgradrho_down, thetas)
   ENDIF
-#endif
+
 
   ! --------------------------------------------------------------------
   ! Stress
 
-#if defined (__SPIN_BALANCED)
-     CALL vdW_DF_stress_gradient (total_rho, grad_rho, q0, dq0_drho, dq0_dgradrho, &
-                                  thetas, sigma_grad)
-#else
   IF (nspin == 1) THEN
      CALL vdW_DF_stress_gradient (total_rho, grad_rho, q0, dq0_drho, dq0_dgradrho, &
                                   thetas, sigma_grad)
@@ -1955,7 +1930,6 @@ CONTAINS
                                        dq0_dgradrho_up, dq0_dgradrho_down, &
                                        thetas, sigma_grad)
   ENDIF
-#endif
 
 
   CALL vdW_DF_stress_kernel   (total_rho, q0, thetas, sigma_ker)
@@ -1970,14 +1944,12 @@ CONTAINS
 
   DEALLOCATE( total_rho, grad_rho, thetas, q0 )
   DEALLOCATE( dq0_drho, dq0_dgradrho )
-#if defined (__SPIN_BALANCED)
-#else
+
   IF (nspin == 2) THEN
      deallocate( rho_up, rho_down )
      deallocate( grad_rho_up, grad_rho_down )
      deallocate( dq0_drho_up, dq0_drho_down, dq0_dgradrho_up, dq0_dgradrho_down )
   ENDIF
-#endif
 
   END SUBROUTINE vdW_DF_stress ! PH adjusted for wrapper spin/nospin
 
@@ -3227,5 +3199,8 @@ CONTAINS
   END IF
 
   END SUBROUTINE
+
+
+
 
 END MODULE vdW_DF

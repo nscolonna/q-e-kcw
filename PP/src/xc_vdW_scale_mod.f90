@@ -305,11 +305,6 @@ CONTAINS
   rho_down  = ( rho%of_r(:,1) - rho%of_r(:,2) + rho_core(:) ) * 0.5_dp
   total_rho = rho_up + rho_down
 
-#if defined (__SPIN_BALANCED)
-     rho_up   = total_rho*0.5D0
-     rho_down = rho_up
-     write(stdout,'(/,/,"     Performing spin-balanced Ecnl calculation!")')
-#endif
 
   ! --------------------------------------------------------------------
   ! Here we calculate the gradient in reciprocal space using FFT.
