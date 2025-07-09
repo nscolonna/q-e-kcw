@@ -82,7 +82,7 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
    !!
    !! Currently the code needs branches for phonon / e-field (using variable option)
    !! in the following places
-   !!    1. addusddens / addusddense : USPP contribution to drho
+   !!    1. addusddens / lr_addusddens : USPP contribution to drho
    !!    2. becsumort : alphasum contribution to dbecsum
    !!    3. PAW related stuff. symmetrization, factor of 2, ...
    !! The plan is to get rid of all these branches by designing a generic subroutine, or
@@ -96,6 +96,7 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
    USE mp,                   ONLY : mp_sum
    USE fft_interfaces,       ONLY : fft_interpolate
    USE fft_base,             ONLY : dfftp, dffts
+   USE buffers,              ONLY : get_buffer
    USE ions_base,            ONLY : nat
    USE io_global,            ONLY : stdout
    USE io_files,             ONLY : diropn
@@ -128,6 +129,9 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
    USE response_kernels,     ONLY : sternheimer_kernel
    USE two_chem,             ONLY : twochem
    USE lr_two_chem,          ONLY : allocate_twochem, deallocate_twochem
+   !
+   ! Defined in PHonon, should be removed
+   USE units_ph,  ONLY : iudrhous, lrdrhous
    !
    IMPLICIT NONE
    !
@@ -182,6 +186,7 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
    ! ldoss: as above, without augmentation charges
    ! dbecsum: the derivative of becsum
    REAL(DP), ALLOCATABLE :: becsum1(:,:,:)
+   COMPLEX(DP), ALLOCATABLE :: drhous (:,:)
 
    LOGICAL :: all_conv
    !! True if sternheimer_kernel is converged at all k points and perturbations
@@ -327,12 +332,17 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
       !
       !    Now we compute for all perturbations the total charge and potential
       !
+      ! Add the dbecsum contribution to drhop
+      CALL lr_addusddens(npert, dbecsum, drhop)
+      !
       IF (option == 'phonon') THEN
-         CALL addusddens(drhop, dbecsum, imode0, npert, 0)
-      ELSEIF (option == 'efield') THEN
-         call addusddense(drhop, dbecsum)
-      ELSE
-         CALL errore('dfpt_kernel', 'Unknown option' // TRIM(option), 1)
+         ! Add Pulay contribution to drhop
+         ALLOCATE(drhous(dfftp%nnr, nspin_mag))
+         do ipert = 1, npert
+            call get_buffer(drhous, lrdrhous, iudrhous, imode0 + ipert)
+            call zaxpy(dfftp%nnr*nspin_mag, (1.d0, 0.d0), drhous, 1, drhop(1,1,ipert), 1)
+         ENDDO
+         DEALLOCATE(drhous)
       ENDIF
       !
       !   Reduce the delta rho across pools

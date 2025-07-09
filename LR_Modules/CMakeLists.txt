@@ -68,7 +68,6 @@ set(sources
     ccg_psi.f90
     ccgsolve_all.f90
     ch_psi_all_complex.f90
-    addusddenseq.f90
     response_kernels.f90
     efermi_shift.f90)
 qe_enable_cuda_fortran("${sources}")

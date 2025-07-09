@@ -9,7 +9,6 @@ set(src_ph
     PH/addnlcc_zstar_eu_us.f90
     PH/addusddens.f90
     PH/addusddens_cond.f90
-    PH/addusddense.f90
     PH/addusdynmat.f90
     PH/allocate_part.f90
     PH/allocate_pert.f90

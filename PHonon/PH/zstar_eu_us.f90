@@ -131,7 +131,7 @@ subroutine zstar_eu_us
 
   IF (noncolin.and.okvan) CALL set_dbecsum_nc(dbecsum_nc, dbecsum, 3)
 
-  call addusddense (dvscf, dbecsum)
+  call lr_addusddens (3, dbecsum, dvscf)
 
   call mp_sum ( dvscf, inter_pool_comm )
 

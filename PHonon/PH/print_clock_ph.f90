@@ -145,6 +145,7 @@ subroutine print_clock_ph
   call print_clock ('drhodvus')
 
   call print_clock ('addusddort')
+  call print_clock ('lr_addusddens')
   WRITE( stdout, * )
   
   IF (lda_plus_u) THEN

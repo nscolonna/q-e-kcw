@@ -716,7 +716,7 @@ SUBROUTINE sternheimer_postprocess(nsolv, npert, drhos, drhop, dbecsum, dbecsum_
    ! Add augmentation charge contribution to drhop (for USPP/PAW)
    ! TODO: Use lr_addusddens
    !
-   IF (okvan) CALL addusddenseq(drhop, dbecsum)
+   IF (okvan) CALL lr_addusddens(1, dbecsum, drhop)
    !
    !   drhop contains the (unsymmetrized) linear charge response
    !   for the three polarizations - symmetrize it

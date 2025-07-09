@@ -17,7 +17,6 @@ apply_dpot_mod.o \
 apply_trev.o \
 addusldos.o \
 adddvepsi_us.o \
-addusddenseq.o \
 c_bands_ph.o \
 cft_wave.o \
 cgsolve_all.o \
