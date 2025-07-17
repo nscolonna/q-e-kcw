@@ -61,6 +61,19 @@ MODULE vdW_DF
 !! this module set up the parallel run (if any) and carry out the calls
 !! necessary to calculate the non-local correlation contributions to the
 !! energy and potential.
+!
+!
+!  Other files relevant for vdW-DF are:
+!
+!  * Modules/funct.f90: Definition of functional names
+!
+!  * XClib/qe_drivers_gga.f90: Driver routines for XC functionals
+!
+!  * XClib/qe_funct_exch_gga.f90: Code for the exchange
+!
+!  * XClib/qe_dft_refs.f90: References for all functionals
+!
+!  * XClib/qe_dft_list.f90: List of all functionals
 
 
 USE kinds,             ONLY : dp
@@ -216,7 +229,7 @@ CONTAINS
 
      IF ( inlc == 1 .OR. inlc == 3 ) THEN
         Z_ab = -0.8491D0
-     ELSE IF ( inlc == 2 .OR. inlc == 4 .OR. inlc == 5 ) THEN
+     ELSE IF ( inlc == 2 .OR. inlc == 4 .OR. inlc == 5 .OR. inlc == 6 ) THEN
         Z_ab = -1.887D0
      END IF
 
@@ -235,7 +248,7 @@ CONTAINS
 
      IF ( inlc == 1 .OR. inlc == 3 ) THEN
         Z_ab = -0.8491D0
-     ELSE IF ( inlc == 2 .OR. inlc == 4 .OR. inlc == 5 ) THEN
+     ELSE IF ( inlc == 2 .OR. inlc == 4 .OR. inlc == 5 .OR. inlc == 6 ) THEN
         Z_ab = -1.887D0
      END IF
 
@@ -317,6 +330,7 @@ CONTAINS
      REAL(DP), PARAMETER  :: a4 = 0.28248D0, g4 = 1.29D0, g42 = g4*g4           ! vdW-DF3-opt2
      REAL(DP), PARAMETER  :: a5 = 2.01059D0, b5 = 8.17471D0, g5 = 1.84981D0, &  ! vdW-DF-C6
                              AA = ( b5 + a5*(a5/2.0D0-g5) ) / ( 1.0D0+g5-a5 )   !
+     REAL(DP), PARAMETER  :: a6 = 0.0532D0,  g6 = 1.42D0, g62 = g6*g6           ! vdW-DF3-mc
 
 
      y2 = y*y
@@ -339,6 +353,11 @@ CONTAINS
 
         y4 = y2*y2
         h_function = 1.0D0 - ( 1.0D0 + ( (a5-g5)*y2 + AA*y4 ) / ( 1.0D0+AA*y2 ) ) * EXP( -a5*y2 )
+
+     ELSE IF ( inlc == 6 ) THEN
+
+        y4 = y2*y2
+        h_function = 1.0D0 - 1.0D0 / ( 1.0D0 + g6*y2 + g62*y4 + a6*y4*y4 )
 
      END IF
 
@@ -425,7 +444,7 @@ CONTAINS
   ! Write out the vdW-DF information and initialize the calculation.
 
   IF ( first_iteration ) THEN
-     IF ( inlc > 5 ) CALL errore( 'xc_vdW_DF', 'inlc not implemented', 1 )
+     IF ( inlc > 6 ) CALL errore( 'xc_vdW_DF', 'inlc not implemented', 1 )
      CALL generate_kernel
      IF ( ionode ) CALL vdW_info
      first_iteration = .FALSE.
@@ -606,7 +625,7 @@ CONTAINS
   ! Write out the vdW-DF information and initialize the calculation.
 
   IF ( first_iteration ) THEN
-     IF ( inlc > 5 ) CALL errore( 'xc_vdW_DF_spin', 'inlc not implemented', 1 )
+     IF ( inlc > 6 ) CALL errore( 'xc_vdW_DF_spin', 'inlc not implemented', 1 )
      CALL generate_kernel
      IF ( ionode ) CALL vdW_info
      first_iteration = .FALSE.
@@ -1747,9 +1766,9 @@ CONTAINS
   ! --------------------------------------------------------------------
   ! Tests
 
-  IF ( inlc > 5 ) CALL errore( 'xc_vdW_DF', 'inlc not implemented', 1 )
+  IF ( inlc > 6 ) CALL errore( 'xc_vdW_DF', 'inlc not implemented', 1 )
 
-  IF ( nspin>2 ) THEN
+  IF ( nspin > 2 ) THEN
      CALL errore ('vdW_DF_stress', 'vdW stress not implemented for nspin > 2', 1)
   END IF
 
@@ -3012,7 +3031,7 @@ CONTAINS
   WRITE(stdout,'(5x,"% possible and the two reviews that describe the various versions:     %")')
   WRITE(stdout,'(5x,"%                                                                      %")')
   WRITE(stdout,'(5x,"%   T. Thonhauser et al., PRL 115, 136402 (2015).                      %")')
-  WRITE(stdout,'(5x,"%   T. Thonhauser et al., PRB 76, 125112 (2007).                       %")')
+  WRITE(stdout,'(5x,"%   T. Thonhauser et al., PRB 76,  125112 (2007).                      %")')
   WRITE(stdout,'(5x,"%   K. Berland et al., Rep. Prog. Phys. 78, 066501 (2015).             %")')
   WRITE(stdout,'(5x,"%   D.C. Langreth et al., J. Phys.: Condens. Matter 21, 084203 (2009). %")')
   WRITE(stdout,'(5x,"%                                                                      %")')
@@ -3029,12 +3048,14 @@ CONTAINS
   WRITE(stdout,'(5x,"%                                                                      %")')
   WRITE(stdout,'(5x,"%  vdW-DF NEWS:                                                        %")')
   WRITE(stdout,'(5x,"%                                                                      %")')
+  WRITE(stdout,'(5x,"%  * vdW-DF3-mc is now available. DOI: TBD                             %")')
+  WRITE(stdout,'(5x,"%    use with input_dft = ''vdW-DF3-mc''                                 %")')
   WRITE(stdout,'(5x,"%  * vdW-DF3 is now available. DOI: 10.1021/acs.jctc.0c00471           %")')
   WRITE(stdout,'(5x,"%    use with input_dft = ''vdW-DF3-opt1'' or ''vdW-DF3-opt2''             %")')
   WRITE(stdout,'(5x,"%                                                                      %")')
   WRITE(stdout,'(5x,"%  * Unscreened and range-separated hybrid vdW-DF-cx functionals       %")')
   WRITE(stdout,'(5x,"%    DOI: 10.1063/1.4986522 and 10.1088/1361-648X/ac2ad2               %")')
-  WRITE(stdout,'(5x,"%    use with input_dft = ''vdW-DF-cx0''    and ''vdW-DF-ahcx''            %")')
+  WRITE(stdout,'(5x,"%    use with input_dft = ''vdW-DF-cx0'' and ''vdW-DF-ahcx''               %")')
   WRITE(stdout,'(5x,"%  * Unscreened and range-separated hybrid vdW-DF2-b86r functionals    %")')
   WRITE(stdout,'(5x,"%    DOI: 10.1063/1.4986522 and DOI: 10.1103/PhysRevX.12.041003        %")')
   WRITE(stdout,'(5x,"%    use with input_dft = ''vdW-DF2-br0'' and ''vdW-DF2-ahbr''             %")')
