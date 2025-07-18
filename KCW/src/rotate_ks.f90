@@ -92,7 +92,8 @@ SUBROUTINE rotate_ks ()
         !  ... If ki@ks simply store evc in evc0 ...
         evc0 = evc 
         n_orb = nbnd
-        DO i = 1, num_wann; occ_mat_aux(i,i) = wg(i,ik_eff)/wk(ik_eff); ENDDO
+        occ_mat_aux(:,:) = (0.0_dp, 0.0_dp)
+        DO i = 1, num_wann; occ_mat_aux(i,i) = CMPLX(wg(i,ik_eff)/wk(ik_eff), KIND=dp) ; ENDDO
         !
      ELSE
         ! 
@@ -104,7 +105,7 @@ SUBROUTINE rotate_ks ()
         !! ... In PW the spin down are treatead as k points. In W90 I have only up or dw
         !! ... and ik run always from 1 to nkstot_eff (see read_wannier.f90). 
         !
-        occ_mat_aux = 0.D0
+        occ_mat_aux = (0.0_dp, 0.0_dp)
         CALL apply_u_matrix(evc, evc0, occ_mat_aux, ik_eff,n_orb)
         !
      ENDIF
