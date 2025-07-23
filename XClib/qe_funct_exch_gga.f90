@@ -1485,6 +1485,8 @@ SUBROUTINE W3MX( rho, grho, sx, v1x, v2x )
   !
   IMPLICIT NONE
   !
+  !$acc routine seq
+  !
   REAL(DP), INTENT(IN) :: rho, grho
   ! input: charge and squared gradient
   REAL(DP), INTENT(OUT) :: sx, v1x, v2x
