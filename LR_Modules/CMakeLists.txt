@@ -68,6 +68,7 @@ set(sources
     lr_sym_mod.f90
     lr_sym_paw.f90
     sym_def.f90
+    sym_dns.f90
     psymdvscf.f90
     symdvscf.f90
     sym_dmag.f90

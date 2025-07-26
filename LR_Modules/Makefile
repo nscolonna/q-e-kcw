@@ -47,6 +47,7 @@ set_intq_nc.o \
 lr_sym_mod.o \
 sym_def.o \
 psymdvscf.o \
+sym_dns.o \
 symdvscf.o \
 sym_dmag.o \
 orthogonalize.o \

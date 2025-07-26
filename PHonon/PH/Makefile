@@ -148,7 +148,6 @@ symdynph_gq.o \
 symm.o \
 symmorphic_or_nzb.o \
 swfc.o \
-sym_dns.o \
 sym_dns_wrapper.o \
 transform_int_so.o \
 transform_int_nc.o \
