@@ -9,49 +9,6 @@
 !
 ! ... Common variables for LR_Modules routines
 !
-MODULE qpoint
-  !
-  USE kinds,      ONLY : DP
-  !
-  ! ... The variables needed to specify various indices,
-  ! ... number of plane waves and k points and their coordiantes.
-  !
-  SAVE
-  !
-  INTEGER, POINTER :: igkq(:)     ! npwx)
-  ! correspondence k+q+G <-> G
-  INTEGER :: nksq, npwq, nksqtot
-  ! the real number of k points
-  ! the number of plane waves for q
-  ! the total number of q points
-  INTEGER, ALLOCATABLE :: ikks(:), ikqs(:)
-  ! the index of k point in the list of k
-  ! the index of k+q point in the list of k
-  REAL (DP) :: xq(3)
-  ! the coordinates of the q point
-  COMPLEX (DP), ALLOCATABLE :: eigqts(:) ! nat)
-  ! the phases associated to the q
-  REAL (DP), ALLOCATABLE :: xk_col(:,:)
-  !
-END MODULE qpoint
-!
-!
-!
-MODULE qpoint_aux
-  USE kinds,      ONLY : DP
-  USE becmod,     ONLY : bec_type
- 
-  SAVE
-  
-  INTEGER, ALLOCATABLE :: ikmks(:)    ! index of -k for magnetic calculations
-
-  INTEGER, ALLOCATABLE :: ikmkmqs(:)  ! index of -k-q for magnetic calculations
-
-  TYPE(bec_type), ALLOCATABLE :: becpt(:), alphapt(:,:)
-
-END MODULE qpoint_aux
-!
-!
 MODULE control_lr
   !
   USE kinds,      ONLY : DP
@@ -226,6 +183,10 @@ MODULE lrus
   ! bbg = < beta^N_i | beta^P_j > 
   ! bbg/bbk/bbnc are the scalar products of beta functions 
   ! localized on atoms N and P.
+  !
+  ! Variables needed for magnetic calculations
+  TYPE(bec_type), ALLOCATABLE :: becpt(:)
+  TYPE(bec_type), ALLOCATABLE :: alphapt(:,:)
   !
 END MODULE lrus
 !

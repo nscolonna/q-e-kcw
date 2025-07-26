@@ -55,6 +55,7 @@ set(sources
     mode_group.f90
     mix_pot.f90
     lrcom.f90
+    qpoint.f90
     lr_dot.f90
     lr_dot_magnons.f90
     lr_nc_mag.f90

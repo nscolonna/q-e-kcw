@@ -530,19 +530,6 @@ MODULE ldaU_ph
   !
 END MODULE ldaU_ph
 
-!MODULE qpoint_aux
-!  USE kinds,      ONLY : DP
-!  USE becmod,     ONLY : bec_type
-!  SAVE
-  
-!  INTEGER, ALLOCATABLE :: ikmks(:)    ! index of -k for magnetic calculations
-
-!  INTEGER, ALLOCATABLE :: ikmkmqs(:)  ! index of -k-q for magnetic calculations
-
-!  TYPE(bec_type), ALLOCATABLE :: becpt(:), alphapt(:,:)
-
-!END MODULE qpoint_aux
-
 MODULE phcom
   USE dynmat
   USE eqv
@@ -558,5 +545,4 @@ MODULE phcom
   USE disp
   USE grid_irr_iq
   USE ldaU_ph
-!  USE qpoint_aux
 END MODULE phcom

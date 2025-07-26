@@ -73,6 +73,7 @@ qdipol_cryst.o \
 mode_group.o \
 mix_pot.o \
 lrcom.o \
+qpoint.o \
 lr_dot.o \
 lr_dot_magnons.o \
 lr_nc_mag.o \
