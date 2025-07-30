@@ -76,6 +76,8 @@ SUBROUTINE one_sternheimer_step(iu, flag)
                                        apply_dpot_bands
     USE response_kernels,      ONLY : sternheimer_kernel, sternheimer_kernel_freq, &
                                       sternheimer_postprocess
+    USE dfpt_type,             ONLY : dfpt_data_type, allocate_dfpt_data, &
+                                      deallocate_dfpt_data, dfpt_dvscfp_to_dvscfs
     USE uspp_init,             ONLY : init_us_2
     !
     IMPLICIT NONE
@@ -96,7 +98,6 @@ SUBROUTINE one_sternheimer_step(iu, flag)
     COMPLEX(DP) , ALLOCATABLE ::   &
                    dpsi1(:,:),   &
                    drhoscfout (:,:), & ! change of the scf charge (output)
-                   dbecsum(:,:,:,:), & ! the becsum with dpsi
                    dbecsum_nc(:,:,:,:,:), & ! the becsum with dpsi
                    mixin(:), mixout(:), &  ! auxiliary for paw mixing
                    aux2(:,:), dvpsi1(:,:)
@@ -118,19 +119,11 @@ SUBROUTINE one_sternheimer_step(iu, flag)
     !
     COMPLEX(DP) :: w  !frequency
     LOGICAL :: ldpsi1
+    TYPE(dfpt_data_type) :: dfpt_data
+    !! Data that describes linear response quantities
     !
     EXTERNAL ch_psi_all, cg_psi
     EXTERNAL ch_psi_all_complex, ccg_psi
-    !
-    ! Input variables in dfpt_kernels
-    COMPLEX(DP), ALLOCATABLE :: drhos(:, :, :)
-    !! change of the charge density (smooth part only, but allocated with dfftp)
-    COMPLEX(DP), ALLOCATABLE :: drhop(:, :, :)
-    !! change of the charge density (smooth and hard parts, dfftp)
-    COMPLEX(DP), POINTER :: dvscfs(:, :, :)
-    !! change of the scf potential (smooth part only, dffts)
-    COMPLEX(DP), ALLOCATABLE, TARGET :: dvscfp(:, :, :)
-    !! change of the scf potential (smooth and hard parts, dfftp)
     !
     ! Local variables in dfpt_kernels
     INTEGER :: ndim_pot, ndim_paw
@@ -178,7 +171,7 @@ SUBROUTINE one_sternheimer_step(iu, flag)
        ALLOCATE(mixout(1))
     ENDIF
     !
-    ALLOCATE (dbecsum( nhm*(nhm+1)/2, nat, nspin_mag, 1))
+    CALL allocate_dfpt_data(dfpt_data, 1)
     IF (noncolin) ALLOCATE (dbecsum_nc (nhm, nhm, nat, nspin, 1))
     IF (ldpsi1) THEN
        ALLOCATE (dpsi1(npwx*npol,nbnd))
@@ -188,29 +181,20 @@ SUBROUTINE one_sternheimer_step(iu, flag)
     ENDIF
     ALLOCATE (aux2(npwx*npol, nbnd))
     ALLOCATE(dvscftmp(dfftp%nnr, nspin_mag, npert))
-    ALLOCATE(drhos(dffts%nnr, nspin_mag, npert))
-    ALLOCATE(drhop(dfftp%nnr, nspin_mag, npert))
-    ALLOCATE(dvscfp(dfftp%nnr, nspin_mag, npert))
-    dvscfp(:,:,:)=(0.d0,0.d0)
-    IF (doublegrid) THEN
-       ALLOCATE(dvscfs(dffts%nnr, nspin_mag, npert))
-    ELSE
-       dvscfs => dvscfp
-    ENDIF
     ALLOCATE(drhoout(dffts%nnr, nspin_mag, npert))
     CALL apply_dpot_allocate()
     !
-    !$acc enter data create(aux2, dvscfs)
+    !$acc enter data create(aux2, dfpt_data%dvscfs)
     dvpsi =(0.0d0, 0.0d0)
 
 !    IF (rec_code_read == -20.AND.ext_recover) then
 !       ! restarting in Electric field calculation
 !       IF (okpaw) THEN
-!          CALL read_rec(dr2, iter0, 1, dvscfp, dvscfs, drhop, dbecsum)
+!          CALL read_rec(dr2, iter0, 1, dfpt_data%dvscfp, dfpt_data%dvscfs, dfpt_data%drhop, dfpt_data%dbecsum)
 !          CALL setmixout(3*dfftp%nnr*nspin_mag,(nhm*(nhm+1)*nat*nspin_mag*3)/2, &
-!                      mixin, dvscfp, dbecsum, ndim, -1 )
+!                      mixin, dfpt_data%dvscfp, dfpt_data%dbecsum, ndim, -1 )
 !       ELSE
-!          CALL read_rec(dr2, iter0, 1, dvscfp, dvscfs)
+!          CALL read_rec(dr2, iter0, 1, dfpt_data%dvscfp, dfpt_data%dvscfs)
 !       ENDIF
 !    ELSEIF (rec_code_read > -20 .AND. rec_code_read <= -10) then
 !       ! restarting in Raman: proceed
@@ -299,8 +283,8 @@ SUBROUTINE one_sternheimer_step(iu, flag)
        tot_num_iter = 0
        tot_cg_calls = 0
        !
-       drhos(:,:,:) = (0.0d0, 0.0d0)
-       dbecsum(:,:,:,:) = (0.0d0, 0.0d0)
+       dfpt_data%drhos(:,:,:) = (0.0d0, 0.0d0)
+       dfpt_data%dbecsum(:,:,:,:) = (0.0d0, 0.0d0)
        IF (noncolin) dbecsum_nc = (0.0d0, 0.0d0)
        !
        ! Set threshold for iterative solution of the linear system (ccgsolve_all)
@@ -320,19 +304,19 @@ SUBROUTINE one_sternheimer_step(iu, flag)
           !
           ! Finite-frequency Sternheimer equation
           CALL sternheimer_kernel_freq(first_iter, time_reversed, npert, nwordwfc, iundvpsi, &
-             thresh, w, dvscfs, all_conv, avg_iter, drhos, dbecsum, dbecsum_nc)
+             thresh, w, dfpt_data%dvscfs, all_conv, avg_iter, dfpt_data%drhos, dfpt_data%dbecsum, dbecsum_nc)
           !
        ELSE
           !
           ! Zero-frequency Sternheimer equation
           CALL sternheimer_kernel(first_iter, time_reversed, npert, nwordwfc, iundvpsi, &
-             thresh, dvscfs, all_conv, avg_iter, drhos, dbecsum, dbecsum_nc)
+             thresh, dfpt_data%dvscfs, all_conv, avg_iter, dfpt_data%drhos, dfpt_data%dbecsum, dbecsum_nc)
           !
        ENDIF
        !
        ! Postprocess the results of the Sternheimer kernel
        !
-       CALL sternheimer_postprocess(nsolv, npert, drhos, drhop, dbecsum, dbecsum_nc)
+       CALL sternheimer_postprocess(nsolv, npert, dfpt_data%drhos, dfpt_data%drhop, dfpt_data%dbecsum, dbecsum_nc)
        !
        !   compute the corresponding change in scf potential : drhop -> dvscftmp
        !
@@ -341,7 +325,7 @@ SUBROUTINE one_sternheimer_step(iu, flag)
          dvscftmp(:, :, ipert) = (0.d0, 0.d0)
       ELSE
          ! Compute the response HXC potential
-         CALL zcopy(dfftp%nnr*nspin_mag, drhop(1,1,1), 1, dvscftmp(1,1,1), 1)
+         CALL zcopy(dfftp%nnr*nspin_mag, dfpt_data%drhop(1,1,1), 1, dvscftmp(1,1,1), 1)
          CALL dv_of_drho(dvscftmp(1, 1, 1))
        ENDIF
        !
@@ -351,21 +335,19 @@ SUBROUTINE one_sternheimer_step(iu, flag)
           !
           !  In this case we mix also dbecsum
           !
-          CALL setmixout(ndim_pot, ndim_paw, mixout, dvscftmp, dbecsum, ndim, -1)
+          CALL setmixout(ndim_pot, ndim_paw, mixout, dvscftmp, dfpt_data%dbecsum, ndim, -1)
           CALL mix_potential_eels(2*(ndim_pot + ndim), mixout, mixin, alpha_mix(kter), dr2, &
                                   tr2_ph / npol, iter, flmixdpot, convt)
-          CALL setmixout(ndim_pot, ndim_paw, mixin, dvscfp, dbecsum, ndim, 1)
+          CALL setmixout(ndim_pot, ndim_paw, mixin, dfpt_data%dvscfp, dfpt_data%dbecsum, ndim, 1)
        ELSE
           ! nmix_ph ??
-          CALL mix_potential_eels(2*ndim_pot, dvscftmp, dvscfp, alpha_mix(kter), dr2, &
+          CALL mix_potential_eels(2*ndim_pot, dvscftmp, dfpt_data%dvscfp, alpha_mix(kter), dr2, &
                                   tr2_ph / npol, iter, flmixdpot, convt)
        ENDIF
        !
-       IF (doublegrid) then
-          DO is = 1, nspin_mag
-             CALL fft_interpolate(dfftp, dvscfp(:, is, 1), dffts, dvscfs(:, is, 1))
-          ENDDO
-       ENDIF
+       !   fft_interpolate or copy potential from hard to smooth grid: dvscfp -> dvscfs
+       !
+       CALL dfpt_dvscfp_to_dvscfs(dfpt_data)
        !
        IF (okpaw) THEN
           IF (noncolin.AND.domag) THEN
@@ -374,13 +356,13 @@ SUBROUTINE one_sternheimer_step(iu, flag)
              !
              ! The presence of c.c. in the formula gives a factor 2.0
              !
-             dbecsum=2.0_DP * dbecsum
-             IF (.NOT. lgamma_gamma) CALL paw_deqsymmetrize(dbecsum)
-             CALL PAW_dpotential(dbecsum,rho%bec,int3_paw,1)
+             dfpt_data%dbecsum=2.0_DP * dfpt_data%dbecsum
+             IF (.NOT. lgamma_gamma) CALL paw_deqsymmetrize(dfpt_data%dbecsum)
+             CALL PAW_dpotential(dfpt_data%dbecsum,rho%bec,int3_paw,1)
           ENDIF
        ENDIF
        !
-       CALL newdq(dvscfp, 1)
+       CALL newdq(dfpt_data%dvscfp, 1)
        !
 !       tcpu = get_clock ('PHONON')
        tcpu = get_clock ('ccgsolve')
@@ -396,10 +378,10 @@ SUBROUTINE one_sternheimer_step(iu, flag)
        !
        rec_code=-20
 !       IF (okpaw) THEN
-!          CALL write_rec('solve_e...', 0, dr2, iter, convt, 1, dvscfp, &
-!                                                      drhop, dbecsum)
+!          CALL write_rec('solve_e...', 0, dr2, iter, convt, 1, dfpt_data%dvscfp, &
+!                                                      dfpt_data%drhop, dfpt_data%dbecsum)
 !       ELSE
-!          CALL write_rec('solve_e...', 0, dr2, iter, convt, 1, dvscfp)
+!          CALL write_rec('solve_e...', 0, dr2, iter, convt, 1, dfpt_data%dvscfp)
 !       ENDIF
        !
 !       IF (check_stop_now()) CALL stop_smoothly_ph (.false.)
@@ -410,7 +392,7 @@ SUBROUTINE one_sternheimer_step(iu, flag)
     !
 155 CONTINUE
     !
-    drhoscfout(:,:) = drhop(:,:,1)
+    drhoscfout(:,:) = dfpt_data%drhop(:,:,1)
     !
     !  compute here the susceptibility and the inverse of the dielectric
     !  constant
@@ -483,20 +465,16 @@ SUBROUTINE one_sternheimer_step(iu, flag)
        deallocate (h_diag)
        deallocate (h_diag1)
     ENDIF
-    deallocate (dbecsum)
     IF (okpaw) THEN
        DEALLOCATE(mixin)
        DEALLOCATE(mixout)
     ENDIF
     deallocate (drhoscfout)
-    !$acc exit data delete(aux2, dvscfs)
+    !$acc exit data delete(aux2, dfpt_data%dvscfs)
     if (noncolin) deallocate(dbecsum_nc)
     deallocate(aux2)
-    IF (doublegrid) DEALLOCATE (dvscfs)
-    DEALLOCATE(drhos)
-    DEALLOCATE(drhop)
-    DEALLOCATE(dvscfp)
     DEALLOCATE(drhoout)
+    CALL deallocate_dfpt_data(dfpt_data)
     !
     alpha_pv=alpha_pv0
     !
