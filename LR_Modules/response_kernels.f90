@@ -631,9 +631,10 @@ SUBROUTINE sternheimer_kernel_freq(first_iter, time_reversed, npert, lrdvpsi, iu
 END SUBROUTINE sternheimer_kernel_freq
 !------------------------------------------------------------------------------
 !
-SUBROUTINE sternheimer_postprocess(nsolv, npert, drhos, drhop, dbecsum, dbecsum_nc)
+SUBROUTINE sternheimer_postprocess(nsolv, dfpt_data, dbecsum_nc, dbecsum_nc_trev)
    !----------------------------------------------------------------------------
-   !!
+   !! Postprocess the results after a Sternheimer calculation.
+   !! Modifies the drhos, drhop, and dbecsum fields of dfpt_data.
    !----------------------------------------------------------------------------
    USE kinds,                 ONLY : DP
    USE mp,                    ONLY : mp_sum
@@ -644,42 +645,49 @@ SUBROUTINE sternheimer_postprocess(nsolv, npert, drhos, drhop, dbecsum, dbecsum_
    USE gvecs,                 ONLY : doublegrid
    USE ions_base,             ONLY : nat
    USE lsda_mod,              ONLY : nspin
-   USE noncollin_module,      ONLY : noncolin, nspin_mag
+   USE noncollin_module,      ONLY : noncolin, nspin_mag, domag
    USE uspp,                  ONLY : okvan
    USE uspp_param,            ONLY : nhm
    USE paw_variables,         ONLY : okpaw
    USE control_lr,            ONLY : lgamma_gamma
-   USE lr_sym_mod,            ONLY : psymeq
+   USE dfpt_type,             ONLY : dfpt_data_type
    !
    IMPLICIT NONE
    !
    INTEGER, INTENT(IN) :: nsolv
    !! Number of Sternheimer equations solved (1 for nonmagnetic/LSDA zero frequency,
    !! 2 for noncollinear magnetism or finite frequency)
-   INTEGER, INTENT(IN) :: npert
-   !! Number of perturbations
-   COMPLEX(DP), INTENT(INOUT) :: drhos(dffts%nnr, nspin_mag, npert)
-   !! Induced charge density (dffts, without augmentation term)
-   COMPLEX(DP), INTENT(INOUT) :: drhop(dfftp%nnr, nspin_mag, npert)
-   !! Induced charge density (dffts, with augmentation term)
-   COMPLEX(DP), INTENT(INOUT) :: dbecsum(nhm*(nhm+1)/2, nat, nspin_mag, npert)
-   !! becsum with dpsi
-   COMPLEX(DP), INTENT(INOUT), OPTIONAL :: dbecsum_nc(nhm, nhm, nat, nspin, npert)
+   TYPE(dfpt_data_type), INTENT(INOUT) :: dfpt_data
+   !! Data that describes linear response quantities
+   COMPLEX(DP), INTENT(INOUT), OPTIONAL :: dbecsum_nc(nhm, nhm, nat, nspin, dfpt_data%npert)
    !! becsum with dpsi. Used if noncolin is true.
+   COMPLEX(DP), INTENT(INOUT), OPTIONAL :: dbecsum_nc_trev(nhm, nhm, nat, nspin, dfpt_data%npert)
+   !! becsum with dpsi with time-reversed Sternheimer. Used if noncolin .AND. domag is true.
    !
    INTEGER :: ipert
    !! counter for perturbations
    INTEGER :: is
    !! counter for spins
+   INTEGER :: npert
+   !! number of perturbations, shorthand for dfpt_data%npert
+   COMPLEX(DP), ALLOCATABLE :: dbecsum_aux(:, :, :, :)
    !
    CALL start_clock("sth_postproc")
    !
+   IF (noncolin .AND. domag) THEN
+      IF (.NOT. PRESENT(dbecsum_nc_trev)) CALL errore("sternheimer_postprocess", &
+         "dbecsum_nc_trev must be present if noncolin and domag are true", 1)
+   ENDIF
+   !
+   npert = dfpt_data%npert
+   !
    IF (nsolv == 2) THEN
-      drhos = drhos / 2.0_dp
+      dfpt_data%drhos = dfpt_data%drhos / 2.0_dp
       IF (noncolin) THEN
          dbecsum_nc = dbecsum_nc / 2.0_dp
+         IF (domag) dbecsum_nc_trev = dbecsum_nc_trev / 2.0_dp
       ELSE
-         dbecsum = dbecsum / 2.0_dp
+         dfpt_data%dbecsum = dfpt_data%dbecsum / 2.0_dp
       ENDIF
    ENDIF
    !
@@ -689,38 +697,55 @@ SUBROUTINE sternheimer_postprocess(nsolv, npert, drhos, drhop, dbecsum, dbecsum_
    !
    IF (noncolin) THEN
       CALL mp_sum(dbecsum_nc, intra_bgrp_comm)
+      IF (domag) CALL mp_sum(dbecsum_nc_trev, intra_bgrp_comm)
    ELSE
-      CALL mp_sum(dbecsum, intra_bgrp_comm)
+      CALL mp_sum(dfpt_data%dbecsum, intra_bgrp_comm)
    ENDIF
    !
    IF (doublegrid) THEN
       DO is = 1, nspin_mag
          DO ipert = 1, npert
-            CALL fft_interpolate(dffts, drhos(:, is, ipert), dfftp, drhop(:, is, ipert))
+            CALL fft_interpolate(dffts, dfpt_data%drhos(:, is, ipert), &
+                                 dfftp, dfpt_data%drhop(:, is, ipert))
          ENDDO
       ENDDO
    ELSE
-      CALL zcopy(dffts%nnr * nspin_mag * npert, drhos, 1, drhop, 1)
+      CALL zcopy(dffts%nnr * nspin_mag * npert, dfpt_data%drhos, 1, dfpt_data%drhop, 1)
    ENDIF
    !
-   IF (noncolin .AND. okvan) CALL set_dbecsum_nc(dbecsum_nc, dbecsum, npert)
+   !  In the noncolinear, spin-orbit case rotate dbecsum
+   !
+   IF (noncolin .AND. okvan) THEN
+      ! dbecsum_nc has 2 if domag, 1 if nonmagnetic
+      CALL set_dbecsum_nc(dbecsum_nc, dfpt_data%dbecsum, npert)
+      !
+      IF (domag) THEN
+         ALLOCATE(dbecsum_aux((nhm * (nhm + 1))/2, nat, nspin_mag, npert))
+         dbecsum_aux = (0.0_DP, 0.0_DP)
+         CALL set_dbecsum_nc(dbecsum_nc_trev, dbecsum_aux, npert)
+         dfpt_data%dbecsum(:,:,1,:) = dfpt_data%dbecsum(:,:,1,:) + dbecsum_aux(:,:,1,:)
+         dfpt_data%dbecsum(:,:,2:4,:) = dfpt_data%dbecsum(:,:,2:4,:) - dbecsum_aux(:,:,2:4,:)
+         DEALLOCATE(dbecsum_aux)
+      ENDIF
+   ENDIF
    !
    ! Add augmentation charge contribution to drhop (for USPP/PAW)
-   ! TODO: Use lr_addusddens
    !
-   IF (okvan) CALL lr_addusddens(1, dbecsum, drhop)
+   IF (okvan) CALL lr_addusddens(npert, dfpt_data%dbecsum, dfpt_data%drhop)
    !
-   !   drhop contains the (unsymmetrized) linear charge response
-   !   for the three polarizations - symmetrize it
+   ! Add Pulay correction to drhop if present
    !
-   CALL mp_sum(drhos, inter_pool_comm)
-   CALL mp_sum(drhop, inter_pool_comm)
-   IF (okpaw) CALL mp_sum(dbecsum, inter_pool_comm)
-   !
-   IF (.not. lgamma_gamma) THEN
-      ! TODO: Use psymdvscf
-      CALL psymeq(drhop)
+   IF (ALLOCATED(dfpt_data%drhop_pulay)) THEN
+      CALL zaxpy(dfftp%nnr * nspin_mag * npert, (1.d0, 0.d0), dfpt_data%drhop_pulay, 1, &
+                 dfpt_data%drhop, 1)
    ENDIF
+   !
+   !   Reduce the delta rho across pools
+   !   Postprocess dbecsum only if okpaw, since it is not used anymore otherwise.
+   !
+   CALL mp_sum(dfpt_data%drhos, inter_pool_comm)
+   CALL mp_sum(dfpt_data%drhop, inter_pool_comm)
+   IF (okpaw) CALL mp_sum(dfpt_data%dbecsum, inter_pool_comm)
    !
    CALL stop_clock("sth_postproc")
    !

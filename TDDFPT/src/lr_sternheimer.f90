@@ -79,6 +79,7 @@ SUBROUTINE one_sternheimer_step(iu, flag)
     USE dfpt_type,             ONLY : dfpt_data_type, allocate_dfpt_data, &
                                       deallocate_dfpt_data, dfpt_dvscfp_to_dvscfs
     USE uspp_init,             ONLY : init_us_2
+    USE lr_sym_mod,            ONLY : psymeq
     !
     IMPLICIT NONE
     !
@@ -316,7 +317,15 @@ SUBROUTINE one_sternheimer_step(iu, flag)
        !
        ! Postprocess the results of the Sternheimer kernel
        !
-       CALL sternheimer_postprocess(nsolv, npert, dfpt_data%drhos, dfpt_data%drhop, dfpt_data%dbecsum, dbecsum_nc)
+       CALL sternheimer_postprocess(nsolv, dfpt_data, dbecsum_nc)
+       !
+       !   dfpt_data%drhop contains the (unsymmetrized) linear charge response
+       !   for the three polarizations - symmetrize it
+       !
+       IF (.not. lgamma_gamma) THEN
+          ! TODO: Use psymdvscf
+          CALL psymeq(dfpt_data%drhop)
+       ENDIF
        !
        !   compute the corresponding change in scf potential : drhop -> dvscftmp
        !

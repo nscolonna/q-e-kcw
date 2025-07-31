@@ -111,7 +111,7 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
    USE lr_nc_mag,            ONLY : int3_nc_save
    USE apply_dpot_mod,       ONLY : apply_dpot_allocate, apply_dpot_deallocate
    USE dfpt_type,            ONLY : dfpt_data_type, dfpt_dvscfp_to_dvscfs
-   USE response_kernels,     ONLY : sternheimer_kernel
+   USE response_kernels,     ONLY : sternheimer_kernel, sternheimer_postprocess
    USE two_chem,             ONLY : twochem
    USE lr_restart,           ONLY : write_rec_interface
    USE lr_two_chem,          ONLY : allocate_twochem, deallocate_twochem, &
@@ -154,11 +154,11 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
    !! dos_ef: density of states at Ef
    COMPLEX(DP), ALLOCATABLE :: dvscftmp(:, :, :)
    !! change of scf potential (output before mixing)
-   COMPLEX(DP), ALLOCATABLE :: ldos (:,:), ldoss (:,:), mixin(:), mixout(:), &
-      dbecsum_nc(:,:,:,:,:,:), dbecsum_aux (:,:,:,:)
+   COMPLEX(DP), ALLOCATABLE :: ldos (:,:), ldoss (:,:), mixin(:), mixout(:)
    ! Misc work space
    ! ldos : local density of states af Ef
    ! ldoss: as above, without augmentation charges
+   COMPLEX(DP), ALLOCATABLE :: dbecsum_nc(:,:,:,:,:), dbecsum_nc_trev(:,:,:,:,:)
    ! dbecsum: the derivative of becsum
    REAL(DP), ALLOCATABLE :: becsum1(:,:,:)
    !
@@ -190,10 +190,10 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
    CALL apply_dpot_allocate()
    !
    ALLOCATE(dvscftmp(dfftp%nnr, nspin_mag, npert))
-   IF (noncolin) ALLOCATE(dbecsum_nc(nhm, nhm, nat, nspin, npert, nsolv))
+   IF (noncolin) ALLOCATE(dbecsum_nc(nhm, nhm, nat, nspin, npert))
+   IF (noncolin .AND. domag) ALLOCATE(dbecsum_nc_trev(nhm, nhm, nat, nspin, npert))
    IF (noncolin .AND. domag .AND. okvan) THEN
       ALLOCATE(int3_nc_save(nhm, nhm, nat, nspin_mag, npert, 2))
-      ALLOCATE(dbecsum_aux((nhm * (nhm + 1))/2, nat, nspin_mag, npert))
    ENDIF
    !
    ! Allocate temporary variables for mixing
@@ -237,6 +237,7 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
       dfpt_data%drhos = (0.d0, 0.d0)
       dfpt_data%dbecsum = (0.d0, 0.d0)
       IF (noncolin) dbecsum_nc = (0.d0, 0.d0)
+      IF (noncolin .AND. domag) dbecsum_nc_trev = (0.d0, 0.d0)
       !
       IF (lmetq0 .AND. twochem) THEN
          drhos_cond = (0.d0, 0.d0)
@@ -267,9 +268,15 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
             !
             ! Sternheimer kernel for the normal case
             !
-            CALL sternheimer_kernel(first_iter, isolv==2, npert, lrdvpsi, iudvpsi, &
-               thresh, dfpt_data%dvscfs, all_conv, averlt, dfpt_data%drhos, dfpt_data%dbecsum, &
-               dbecsum_nc(:,:,:,:,:,isolv))
+            IF (isolv == 1) THEN
+               CALL sternheimer_kernel(first_iter, isolv==2, npert, lrdvpsi, iudvpsi, &
+                  thresh, dfpt_data%dvscfs, all_conv, averlt, dfpt_data%drhos, dfpt_data%dbecsum, &
+                  dbecsum_nc)
+            ELSE
+               CALL sternheimer_kernel(first_iter, isolv==2, npert, lrdvpsi, iudvpsi, &
+                  thresh, dfpt_data%dvscfs, all_conv, averlt, dfpt_data%drhos, dfpt_data%dbecsum, &
+                  dbecsum_nc_trev)
+            ENDIF
          ELSE
             !
             ! Sternheimer kernel for the twochem case
@@ -281,65 +288,17 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
          !
       ENDDO ! isolv
       !
-      IF (nsolv == 2) THEN
-         dfpt_data%drhos = dfpt_data%drhos / 2.0_DP
-         dfpt_data%dbecsum = dfpt_data%dbecsum / 2.0_DP
-         dbecsum_nc = dbecsum_nc / 2.0_DP
-      ENDIF
-      !
-      !  The calculation of dbecsum is distributed across processors (see addusdbec)
-      !  Sum over processors the contributions coming from each slice of bands
-      !
-      IF (noncolin) THEN
-         CALL mp_sum(dbecsum_nc, intra_bgrp_comm)
+      IF (noncolin .AND. domag) THEN
+         CALL sternheimer_postprocess(nsolv, dfpt_data, dbecsum_nc, dbecsum_nc_trev)
       ELSE
-         CALL mp_sum(dfpt_data%dbecsum, intra_bgrp_comm)
-      ENDIF
-      !
-      IF (doublegrid) THEN
-         DO is = 1, nspin_mag
-            DO ipert = 1, npert
-               CALL fft_interpolate(dffts, dfpt_data%drhos(:, is, ipert), dfftp, dfpt_data%drhop(:, is, ipert))
-            ENDDO
-         ENDDO
-      ELSE
-         CALL zcopy(npert * nspin_mag * dfftp%nnr, dfpt_data%drhos, 1, dfpt_data%drhop, 1)
-      ENDIF
-      !
-      !  In the noncolinear, spin-orbit case rotate dbecsum
-      !
-      IF (noncolin .AND. okvan) THEN
-         CALL set_dbecsum_nc(dbecsum_nc, dfpt_data%dbecsum, npert)
-         IF (nsolv == 2) THEN
-            dbecsum_aux = (0.0_DP, 0.0_DP)
-            CALL set_dbecsum_nc(dbecsum_nc(1,1,1,1,1,2), dbecsum_aux, npert)
-            dfpt_data%dbecsum(:,:,1,:) = dfpt_data%dbecsum(:,:,1,:) + dbecsum_aux(:,:,1,:)
-            dfpt_data%dbecsum(:,:,2:4,:) = dfpt_data%dbecsum(:,:,2:4,:) - dbecsum_aux(:,:,2:4,:)
-         ENDIF
+         CALL sternheimer_postprocess(nsolv, dfpt_data, dbecsum_nc)
       ENDIF
       !
       !    Now we compute for all perturbations the total charge and potential
       !
-      ! Add the dbecsum contribution to drhop
-      CALL lr_addusddens(npert, dfpt_data%dbecsum, dfpt_data%drhop)
-      !
-      ! Add Pulay correction to drhop if present
-      !
-      IF (ALLOCATED(dfpt_data%drhop_pulay)) THEN
-         CALL zaxpy(dfftp%nnr*nspin_mag*npert, (1.d0, 0.d0), dfpt_data%drhop_pulay, 1, &
-                    dfpt_data%drhop, 1)
-      ENDIF
-      !
-      !   Reduce the delta rho across pools
-      !
-      CALL mp_sum(dfpt_data%drhos, inter_pool_comm)
-      CALL mp_sum(dfpt_data%drhop, inter_pool_comm)
-      !
       ! If .NOT. okpaw, dbecsum is not used below. So, postprocess dbecsum only if okpaw.
       !
       IF (okpaw) THEN
-         !
-         CALL mp_sum(dfpt_data%dbecsum, inter_pool_comm)
          !
          ! The presence of c.c. in the formula gives a factor 2.0
          !
@@ -526,9 +485,9 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
    !
    DEALLOCATE(dvscftmp)
    IF (noncolin) DEALLOCATE(dbecsum_nc)
+   IF (noncolin .AND. domag) DEALLOCATE(dbecsum_nc_trev)
    IF (noncolin .AND. domag .AND. okvan) THEN
       DEALLOCATE(int3_nc_save)
-      DEALLOCATE(dbecsum_aux)
    ENDIF
    DEALLOCATE(mixin)
    DEALLOCATE(mixout)
