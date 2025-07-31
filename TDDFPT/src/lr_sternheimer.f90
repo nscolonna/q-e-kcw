@@ -29,57 +29,37 @@ SUBROUTINE one_sternheimer_step(iu, flag)
     USE kinds,                  ONLY : DP
     USE constants,              ONLY : e2, fpi, rytoev
     USE ions_base,              ONLY : nat
-    USE io_global,              ONLY : stdout, ionode
+    USE io_global,              ONLY : stdout
     USE io_files,               ONLY : diropn, nwordwfc
     USE cell_base,              ONLY : tpiba2
     USE fft_interfaces,         ONLY : fwfft
-    USE fft_interfaces,         ONLY : fft_interpolate
-    USE klist,                  ONLY : lgauss, xk, wk
-    USE gvecs,                  ONLY : doublegrid
-    USE fft_base,               ONLY : dfftp, dffts
-    USE lsda_mod,               ONLY : lsda, nspin, current_spin, isk
-    USE wvfct,                  ONLY : nbnd, npwx, et
+    USE klist,                  ONLY : lgauss, xk
+    USE fft_base,               ONLY : dfftp
+    USE lsda_mod,               ONLY : lsda, current_spin, isk
     USE klist,                  ONLY : ngk, igk_k
-    USE check_stop,             ONLY : check_stop_now
     USE buffers,                ONLY : get_buffer, save_buffer
     USE wavefunctions,          ONLY : evc
     USE uspp,                   ONLY : vkb
     USE uspp_param,             ONLY : nhm
-    USE noncollin_module,       ONLY : noncolin, domag, npol, nspin_mag
-    USE scf,                    ONLY : rho
+    USE noncollin_module,       ONLY : nspin_mag
     USE gvect,                  ONLY : gg
     USE paw_variables,          ONLY : okpaw
-    USE paw_onecenter,          ONLY : paw_dpotential
-    USE eqv,                    ONLY : dpsi, dvpsi, evq
-    USE units_lr,               ONLY : lrwfc, iuwfc, iudwf, lrdwf
-    USE control_lr,             ONLY : lgamma, alpha_pv, nbnd_occ, &
-                                       ext_recover, rec_code, &
-                                       lnoloc, convt, tr2_ph, &
-                                       alpha_mix, lgamma_gamma, niter_ph, &
-                                       flmixdpot, rec_code_read
-
-    USE lrus,                   ONLY : int3_paw
+    USE eqv,                    ONLY : dvpsi
+    USE units_lr,               ONLY : lrwfc, iuwfc
+    USE control_lr,             ONLY : alpha_pv, convt, nmix_ph, rec_code_read, niter_ph
     USE qpoint,                 ONLY : xq, nksq, ikks, ikqs
-    USE linear_solvers,         ONLY : ccg_many_vectors
-    USE dv_of_drho_lr,          ONLY : dv_of_drho
     USE mp_bands,               ONLY : intra_bgrp_comm
-    USE mp_images,              ONLY : root_image, my_image_id
     USE mp,                     ONLY : mp_sum
-    USE fft_helper_subroutines, ONLY : fftx_ntgrp
-    USE lr_variables,           ONLY : fru, fiu, iundvpsi, &
-                                       iudrho, n_ipol, lr_verbosity, &
+    USE lr_variables,           ONLY : fru, fiu, iundvpsi, n_ipol, lr_verbosity, &
                                        chirr, chirz, chizr, chizz, epsm1, &
                                        current_w, itermax
-    USE paw_add_symmetry,       ONLY : paw_deqsymmetrize
     USE wavefunctions,          ONLY : psic
-    USE apply_dpot_mod,         ONLY : apply_dpot_allocate, apply_dpot_deallocate, &
-                                       apply_dpot_bands
-    USE response_kernels,      ONLY : sternheimer_kernel, sternheimer_kernel_freq, &
-                                      sternheimer_postprocess
-    USE dfpt_type,             ONLY : dfpt_data_type, allocate_dfpt_data, &
-                                      deallocate_dfpt_data, dfpt_dvscfp_to_dvscfs
-    USE uspp_init,             ONLY : init_us_2
-    USE lr_sym_mod,            ONLY : psymeq
+    USE dfpt_type,              ONLY : dfpt_data_type, allocate_dfpt_data, &
+                                       deallocate_dfpt_data
+    USE uspp_init,              ONLY : init_us_2
+    USE lr_sym_mod,             ONLY : psymeq
+    USE dfpt_kernels,           ONLY : dfpt_kernel
+    USE lr_symm_base,           ONLY : nsymq, minus_q, lr_npert, upert
     !
     IMPLICIT NONE
     !
@@ -88,71 +68,46 @@ SUBROUTINE one_sternheimer_step(iu, flag)
                                   ! charge magnetization responses
                                   ! if 2 and lsda computes the magnetization
                                   ! magnetization response
-    REAL(DP) ::  thresh, anorm, avg_iter, dr2
-    ! thresh: convergence threshold
-    ! anorm : the norm of the error
-    ! avg_iter: average number of iterations
+    REAL(DP) ::  dr2
     ! dr2   : self-consistency error
-    COMPLEX(DP), ALLOCATABLE :: h_diag (:,:)
-    COMPLEX(DP), ALLOCATABLE :: h_diag1 (:,:)
     !
     COMPLEX(DP) , ALLOCATABLE ::   &
-                   dpsi1(:,:),   &
                    drhoscfout (:,:), & ! change of the scf charge (output)
-                   dbecsum_nc(:,:,:,:,:), & ! the becsum with dpsi
-                   mixin(:), mixout(:), &  ! auxiliary for paw mixing
-                   aux2(:,:), dvpsi1(:,:)
+                   mixin(:), mixout(:)  ! auxiliary for paw mixing
     !
-    LOGICAL :: conv_root
-    ! conv_root: true if linear system is converged
-    INTEGER :: kter, iter0, ibnd, iter, lter, ik, ikk, ikq, &
-               is, nrec, ndim, npw, npwq
+    INTEGER :: iter0, ik, ikk, ikq, is, nrec, ndim, npw, npwq
     ! counters
-    INTEGER :: nsolv
-    !! Number of linear systems to solve. (1 for zero frequency, 2 for finite frequency)
-    INTEGER :: isolv
-    !! Index of the linear system to solve.
-    INTEGER :: tot_num_iter, tot_cg_calls
+    INTEGER :: npert
+    !! number of perturbations
+    INTEGER :: ipert
+    !! Counter on perturbations
+    INTEGER :: ndim_pot, ndim_paw
+    !!
     REAL(DP) :: xqmod2, alpha_pv0
-    !
-    REAL(DP) :: tcpu, get_clock
-    ! timing variables
     !
     COMPLEX(DP) :: w  !frequency
     LOGICAL :: ldpsi1
     TYPE(dfpt_data_type) :: dfpt_data
     !! Data that describes linear response quantities
     !
-    EXTERNAL ch_psi_all, cg_psi
-    EXTERNAL ch_psi_all_complex, ccg_psi
-    !
-    ! Local variables in dfpt_kernels
-    INTEGER :: ndim_pot, ndim_paw
-    COMPLEX(DP), ALLOCATABLE :: dvscftmp(:, :, :)
-    !! change of scf potential (output before mixing)
-    !
-    ! Input variables in sternheimer_kernel
-    LOGICAL :: time_reversed
-    !! True if solving a time-reversed Sternheimer equation
-    LOGICAL :: all_conv
-    !! True if sternheimer_kernel is converged at all k points and perturbations
-    LOGICAL :: first_iter
-    !! true if the first iteration.
-    INTEGER :: npert
-    !! number of perturbations
-    COMPLEX(DP), ALLOCATABLE :: drhoout(:, :, :)
-    !! induced charge density
-    !
-    ! Local variables in sternheimer_kernel
-    INTEGER :: ipert
-    REAL(DP) :: rsign
-   !! sign of the term in the magnetization
     !
     CALL start_clock ('stern_step')
     !
     ! NOTE: In EELS, n_ipol = 1. In this code, n_ipol = 1 is assumed in a few places.
     !
     npert = n_ipol
+    !
+    nmix_ph = 20  ! TODO: Add this to input parameter, rename to nmix_dfpt ?
+    niter_ph = itermax
+    !
+    ! Setup symmetry representation. We assume exp(i*q*r) is the perturbation, so that the
+    ! symmetry representation is a trivial identity.
+    ! upert_mq is not used since for finite-frequency DFPT, the time-reversal
+    ! symmetry cannot be used.
+    !
+    lr_npert = npert
+    ALLOCATE(upert(lr_npert, lr_npert, nsymq))
+    upert(1, 1, :) = (1.d0, 0.d0)
     !
     w=CMPLX(fru(iu),fiu(iu))
     ldpsi1=ABS(w)>1.D-7
@@ -173,19 +128,8 @@ SUBROUTINE one_sternheimer_step(iu, flag)
     ENDIF
     !
     CALL allocate_dfpt_data(dfpt_data, 1)
-    IF (noncolin) ALLOCATE (dbecsum_nc (nhm, nhm, nat, nspin, 1))
-    IF (ldpsi1) THEN
-       ALLOCATE (dpsi1(npwx*npol,nbnd))
-       ALLOCATE (dvpsi1(npwx*npol,nbnd))
-       ALLOCATE (h_diag(npwx*npol, nbnd))
-       ALLOCATE (h_diag1(npwx*npol, nbnd))
-    ENDIF
-    ALLOCATE (aux2(npwx*npol, nbnd))
-    ALLOCATE(dvscftmp(dfftp%nnr, nspin_mag, npert))
-    ALLOCATE(drhoout(dffts%nnr, nspin_mag, npert))
-    CALL apply_dpot_allocate()
     !
-    !$acc enter data create(aux2, dfpt_data%dvscfs)
+    !$acc enter data create(dfpt_data%dvscfs)
     dvpsi =(0.0d0, 0.0d0)
 
 !    IF (rec_code_read == -20.AND.ext_recover) then
@@ -222,14 +166,6 @@ SUBROUTINE one_sternheimer_step(iu, flag)
     ENDIF
     !
     IF (.NOT. ALLOCATED(psic)) ALLOCATE(psic(dfftp%nnr))
-    !
-    IF (ldpsi1) THEN
-       nsolv = 2  ! Finite frequency, solve original and time-reversed Sternheimer equation
-    ELSE
-       nsolv = 1  ! Zero frequency, solve only one Sternheimer equation
-       ! For noncollinear magnetism, one needs to solve two Sternheimer equations even for
-       ! zero frequency. This is not implemented here.
-    ENDIF
     !
     ! Calculate bare perturbation multiplied to the wavefunctions, save on buffer iundvpsi
     !
@@ -273,131 +209,9 @@ SUBROUTINE one_sternheimer_step(iu, flag)
        ENDDO ! ipert
     ENDDO ! ik
     !
-    ! Loop over the iterations
+    !    Solve DFPT self-consistent equation
     !
-    DO kter = 1, itermax
-       !
-       FLUSH( stdout)
-       iter = kter + iter0
-       first_iter = (iter == 1)
-       !
-       tot_num_iter = 0
-       tot_cg_calls = 0
-       !
-       dfpt_data%drhos(:,:,:) = (0.0d0, 0.0d0)
-       dfpt_data%dbecsum(:,:,:,:) = (0.0d0, 0.0d0)
-       IF (noncolin) dbecsum_nc = (0.0d0, 0.0d0)
-       !
-       ! Set threshold for iterative solution of the linear system (ccgsolve_all)
-       !
-       IF (first_iter) THEN
-          thresh = 1.d-2
-          IF (lnoloc) thresh = 1.d-5
-       ELSE
-          thresh = min(1.d-1 * sqrt(dr2), thresh)
-       ENDIF
-       !
-       ! Compute drhos, the charge density response to the total potential
-       !
-       time_reversed = .FALSE.  ! magnetic case not implemented
-       !
-       IF (ldpsi1) THEN
-          !
-          ! Finite-frequency Sternheimer equation
-          CALL sternheimer_kernel_freq(first_iter, time_reversed, npert, nwordwfc, iundvpsi, &
-             thresh, w, dfpt_data%dvscfs, all_conv, avg_iter, dfpt_data%drhos, dfpt_data%dbecsum, dbecsum_nc)
-          !
-       ELSE
-          !
-          ! Zero-frequency Sternheimer equation
-          CALL sternheimer_kernel(first_iter, time_reversed, npert, nwordwfc, iundvpsi, &
-             thresh, dfpt_data%dvscfs, all_conv, avg_iter, dfpt_data%drhos, dfpt_data%dbecsum, dbecsum_nc)
-          !
-       ENDIF
-       !
-       ! Postprocess the results of the Sternheimer kernel
-       !
-       CALL sternheimer_postprocess(nsolv, dfpt_data, dbecsum_nc)
-       !
-       !   dfpt_data%drhop contains the (unsymmetrized) linear charge response
-       !   for the three polarizations - symmetrize it
-       !
-       IF (.not. lgamma_gamma) THEN
-          ! TODO: Use psymdvscf
-          CALL psymeq(dfpt_data%drhop)
-       ENDIF
-       !
-       !   compute the corresponding change in scf potential : drhop -> dvscftmp
-       !
-       IF (lnoloc) THEN
-         ! No local field effect: set dvscf to 0
-         dvscftmp(:, :, ipert) = (0.d0, 0.d0)
-      ELSE
-         ! Compute the response HXC potential
-         CALL zcopy(dfftp%nnr*nspin_mag, dfpt_data%drhop(1,1,1), 1, dvscftmp(1,1,1), 1)
-         CALL dv_of_drho(dvscftmp(1, 1, 1))
-       ENDIF
-       !
-       !  mix with the old potential: dvscftmp -> dvscfp
-       !
-       IF (okpaw) THEN
-          !
-          !  In this case we mix also dbecsum
-          !
-          CALL setmixout(ndim_pot, ndim_paw, mixout, dvscftmp, dfpt_data%dbecsum, ndim, -1)
-          CALL mix_potential_eels(2*(ndim_pot + ndim), mixout, mixin, alpha_mix(kter), dr2, &
-                                  tr2_ph / npol, iter, flmixdpot, convt)
-          CALL setmixout(ndim_pot, ndim_paw, mixin, dfpt_data%dvscfp, dfpt_data%dbecsum, ndim, 1)
-       ELSE
-          ! nmix_ph ??
-          CALL mix_potential_eels(2*ndim_pot, dvscftmp, dfpt_data%dvscfp, alpha_mix(kter), dr2, &
-                                  tr2_ph / npol, iter, flmixdpot, convt)
-       ENDIF
-       !
-       !   fft_interpolate or copy potential from hard to smooth grid: dvscfp -> dvscfs
-       !
-       CALL dfpt_dvscfp_to_dvscfs(dfpt_data)
-       !
-       IF (okpaw) THEN
-          IF (noncolin.AND.domag) THEN
-!             CALL PAW_dpotential(dbecsum_nc,becsum_nc,int3_paw,3)
-          ELSE
-             !
-             ! The presence of c.c. in the formula gives a factor 2.0
-             !
-             dfpt_data%dbecsum=2.0_DP * dfpt_data%dbecsum
-             IF (.NOT. lgamma_gamma) CALL paw_deqsymmetrize(dfpt_data%dbecsum)
-             CALL PAW_dpotential(dfpt_data%dbecsum,rho%bec,int3_paw,1)
-          ENDIF
-       ENDIF
-       !
-       CALL newdq(dfpt_data%dvscfp, 1)
-       !
-!       tcpu = get_clock ('PHONON')
-       tcpu = get_clock ('ccgsolve')
-       WRITE( stdout, '(/,5x," iter # ",i3," total cpu time :",f8.1, &
-            &      " secs   av.it.: ",f5.1)') iter, tcpu, avg_iter
-       WRITE( stdout, "(5x,' thresh=',es10.3, ' alpha_mix = ',f6.3, &
-            &      ' |ddv_scf|^2 = ',es10.3 )") thresh, alpha_mix (kter), dr2
-       !
-       FLUSH( stdout )
-       !
-       ! rec_code: state of the calculation
-       ! rec_code=-20 Electric Field
-       !
-       rec_code=-20
-!       IF (okpaw) THEN
-!          CALL write_rec('solve_e...', 0, dr2, iter, convt, 1, dfpt_data%dvscfp, &
-!                                                      dfpt_data%drhop, dfpt_data%dbecsum)
-!       ELSE
-!          CALL write_rec('solve_e...', 0, dr2, iter, convt, 1, dfpt_data%dvscfp)
-!       ENDIF
-       !
-!       IF (check_stop_now()) CALL stop_smoothly_ph (.false.)
-       !
-       IF (convt) goto 155
-       !
-    ENDDO  ! do over iter_ph
+    CALL dfpt_kernel('turboEELS', npert, iter0, nwordwfc, iundvpsi, dr2, dfpt_data, 0, 0, w_freq = w)
     !
 155 CONTINUE
     !
@@ -467,22 +281,13 @@ SUBROUTINE one_sternheimer_step(iu, flag)
        WRITE(stdout,'(/,6x,"chirz(q,w) =",2f15.6)') chirz(iu)
     ENDIF
     !
-    CALL apply_dpot_deallocate()
-    IF (ldpsi1) THEN
-       deallocate (dpsi1)
-       deallocate (dvpsi1)
-       deallocate (h_diag)
-       deallocate (h_diag1)
-    ENDIF
     IF (okpaw) THEN
        DEALLOCATE(mixin)
        DEALLOCATE(mixout)
     ENDIF
+    DEALLOCATE(upert)
     deallocate (drhoscfout)
-    !$acc exit data delete(aux2, dfpt_data%dvscfs)
-    if (noncolin) deallocate(dbecsum_nc)
-    deallocate(aux2)
-    DEALLOCATE(drhoout)
+    !$acc exit data delete(dfpt_data%dvscfs)
     CALL deallocate_dfpt_data(dfpt_data)
     !
     alpha_pv=alpha_pv0

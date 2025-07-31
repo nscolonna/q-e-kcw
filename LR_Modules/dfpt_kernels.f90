@@ -11,7 +11,7 @@ MODULE dfpt_kernels
 IMPLICIT NONE
 CONTAINS
 SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
-                       irr, imode0, write_rec_callback)
+                       irr, imode0, write_rec_callback, w_freq)
    !------------------------------------------------------------------------------
    !! Driver routine for the solution of the linear system that computes the change
    !! of the electron density due to a generic perturbation to the Hamiltonian.
@@ -111,7 +111,8 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
    USE lr_nc_mag,            ONLY : int3_nc_save
    USE apply_dpot_mod,       ONLY : apply_dpot_allocate, apply_dpot_deallocate
    USE dfpt_type,            ONLY : dfpt_data_type, dfpt_dvscfp_to_dvscfs
-   USE response_kernels,     ONLY : sternheimer_kernel, sternheimer_postprocess
+   USE response_kernels,     ONLY : sternheimer_kernel, sternheimer_kernel_freq, &
+                                    sternheimer_postprocess
    USE two_chem,             ONLY : twochem
    USE lr_restart,           ONLY : write_rec_interface
    USE lr_two_chem,          ONLY : allocate_twochem, deallocate_twochem, &
@@ -132,11 +133,13 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
    INTEGER, INTENT(IN) :: iudvpsi
    !! unit for the buffer storing dV_bare * psi
    REAL(DP), INTENT(INOUT) :: dr2
-   ! self-consistency error. Input is used for restart.
+   !! self-consistency error. Input is used for restart.
    TYPE(dfpt_data_type), INTENT(INOUT) :: dfpt_data
    !! Data that describes linear response quantities
    PROCEDURE(write_rec_interface), OPTIONAL :: write_rec_callback
    !! Callback subroutine for restart checkpointing
+   COMPLEX(DP), INTENT(IN), OPTIONAL :: w_freq
+   !! Frequency for finite-frequency DFPT.
    !
    INTEGER, INTENT(IN) :: irr
    !! input: the irreducible representation (to be removed after moving from PH to LR_Modules)
@@ -166,6 +169,8 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
    !! True if sternheimer_kernel is converged at all k points and perturbations
    logical :: lmetq0,     & ! true if xq=(0,0,0) in a metal
       first_iter    ! true if first iteration where induced rho is not yet calculated
+   LOGICAL :: finite_freq
+   !! True if solving a finite-frequency DFPT
 
    integer :: kter,       & ! counter on iterations
       ipert,      & ! counter on perturbations
@@ -184,8 +189,10 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
    !
    CALL start_clock('dfpt_kernel')
    !
+   finite_freq = PRESENT(w_freq)
+   !
    nsolv = 1
-   IF (noncolin .AND. domag) nsolv=2
+   IF ((noncolin .AND. domag) .OR. finite_freq) nsolv = 2
    !
    CALL apply_dpot_allocate()
    !
@@ -245,6 +252,15 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
          IF (noncolin) dbecsum_cond_nc = (0.d0, 0.d0)
       ENDIF
       !
+      ! Set threshold for iterative solution of the linear system
+      !
+      IF (first_iter .OR. kter == 1) THEN
+         ! If first iteration or first iteration after restart
+         thresh = 1.0d-2
+      ELSE
+         thresh = min(1.d-1 * sqrt(dr2), thresh)
+      ENDIF
+      !
       ! DFPT+U: at each ph iteration calculate dnsscf,
       ! i.e. the scf variation of the occupation matrix ns.
       !
@@ -252,41 +268,49 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
       !
       ! Start the loop on the two linear systems, one at B and one at -B
       !
-      DO isolv = 1, nsolv
+      IF (finite_freq) THEN
          !
-         ! Set threshold for iterative solution of the linear system
+         ! Finite-frequency Sternheimer equation
+         ! The isolv loop is taken inside sternheimer_kernel_freq
          !
-         IF (first_iter) THEN
-            thresh = 1.0d-2
-         ELSE
-            thresh = min(1.d-1 * sqrt(dr2), 1.d-2)
-         ENDIF
+         ! time_reversed (noncollinear magnetic) case with finite-frequency Sternheimer
+         ! is not implemented. So the second argument is .FALSE.
          !
-         ! Compute drhos, the charge density response to the total potential
+         CALL sternheimer_kernel_freq(first_iter, .FALSE., npert, lrdvpsi, iudvpsi, &
+             thresh, w_freq, dfpt_data%dvscfs, all_conv, averlt, dfpt_data%drhos, &
+             dfpt_data%dbecsum, dbecsum_nc)
+      ELSE
          !
-         IF (.NOT. (twochem .AND. lmetq0)) then
+         ! Zero-frequency Sternheimer equation
+         !
+         DO isolv = 1, nsolv
             !
-            ! Sternheimer kernel for the normal case
+            ! Compute drhos, the charge density response to the total potential
             !
-            IF (isolv == 1) THEN
-               CALL sternheimer_kernel(first_iter, isolv==2, npert, lrdvpsi, iudvpsi, &
-                  thresh, dfpt_data%dvscfs, all_conv, averlt, dfpt_data%drhos, dfpt_data%dbecsum, &
-                  dbecsum_nc)
+            IF (.NOT. (twochem .AND. lmetq0)) then
+               !
+               ! Sternheimer kernel for the normal case
+               !
+               IF (isolv == 1) THEN
+                  CALL sternheimer_kernel(first_iter, isolv==2, npert, lrdvpsi, iudvpsi, &
+                     thresh, dfpt_data%dvscfs, all_conv, averlt, dfpt_data%drhos, dfpt_data%dbecsum, &
+                     dbecsum_nc)
+               ELSE
+                  CALL sternheimer_kernel(first_iter, isolv==2, npert, lrdvpsi, iudvpsi, &
+                     thresh, dfpt_data%dvscfs, all_conv, averlt, dfpt_data%drhos, dfpt_data%dbecsum, &
+                     dbecsum_nc_trev)
+               ENDIF
             ELSE
-               CALL sternheimer_kernel(first_iter, isolv==2, npert, lrdvpsi, iudvpsi, &
+               !
+               ! Sternheimer kernel for the twochem case
+               !
+               CALL sternheimer_kernel_twochem(first_iter, isolv==2, npert, lrdvpsi, iudvpsi, &
                   thresh, dfpt_data%dvscfs, all_conv, averlt, dfpt_data%drhos, dfpt_data%dbecsum, &
-                  dbecsum_nc_trev)
+                  dbecsum_nc(:,:,:,:,:,isolv), drhos_cond, dbecsum_cond, dbecsum_cond_nc)
             ENDIF
-         ELSE
             !
-            ! Sternheimer kernel for the twochem case
-            !
-            CALL sternheimer_kernel_twochem(first_iter, isolv==2, npert, lrdvpsi, iudvpsi, &
-               thresh, dfpt_data%dvscfs, all_conv, averlt, dfpt_data%drhos, dfpt_data%dbecsum, &
-               dbecsum_nc(:,:,:,:,:,isolv), drhos_cond, dbecsum_cond, dbecsum_cond_nc)
-         ENDIF
-         !
-      ENDDO ! isolv
+         ENDDO ! isolv
+      ENDIF
       !
       IF (noncolin .AND. domag) THEN
          CALL sternheimer_postprocess(nsolv, dfpt_data, dbecsum_nc, dbecsum_nc_trev)
@@ -340,6 +364,8 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
       !   Here we symmetrize them ...
       !
       IF (.NOT. lgamma_gamma) THEN
+         ! FIXME: Improve psymdvscf using idea from psymeq, which saves computation
+         !        by each core computing only its own part.
          CALL psymdvscf(dfpt_data%drhos, dffts)
          CALL psymdvscf(dfpt_data%drhop, dfftp)
          IF (okpaw) CALL PAW_dsymmetrize(dfpt_data%dbecsum)
@@ -355,8 +381,9 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
          DO ipert = 1, npert
             CALL zcopy(dfftp%nnr*nspin_mag, dfpt_data%drhop(1,1,ipert), 1, dvscftmp(1,1,ipert), 1)
             IF (ALLOCATED(dfpt_data%drhoc)) THEN
+               ! Consider core charge perturbation if present
                CALL dv_of_drho(dvscftmp(1, 1, ipert), drhoc = dfpt_data%drhoc(:, ipert))
-            ELSE !FM: as the case of solve_e
+            ELSE
                CALL dv_of_drho(dvscftmp(1, 1, ipert))
             ENDIF
          ENDDO
@@ -448,7 +475,8 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
          CALL write_rec_callback(where_rec, irr, dr2, iter, convt, dfpt_data)
       ENDIF
       !
-      IF (check_stop_now()) CALL stop_smoothly_ph(.FALSE.)
+      ! FIXME: Enable this. (Problem is that stop_smoothly_ph lives in PH/)
+      ! IF (check_stop_now()) CALL stop_smoothly_ph(.FALSE.)
       !
       IF (convt) EXIT
       !
