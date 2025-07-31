@@ -1406,11 +1406,7 @@ SUBROUTINE sternheimer_kernel_twochem(first_iter, time_reversed, npert, lrdvpsi,
             !  selfconsist term which comes from the dependence of D on
             !  V_{eff} on the bare change of the potential
             !
-            IF (time_reversed) THEN
-               CALL adddvscf_ph_mag(ipert, ik)
-            ELSE
-               CALL adddvscf(ipert, ik)
-            ENDIF
+            CALL adddvscf(ipert, ik, time_reversed)
             !
             ! DFPT+U: add to dvpsi the scf part of the response
             ! Hubbard potential dV_hub
