@@ -405,7 +405,7 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
                !
              ELSE
                !$acc host_data use_device(et)
-               CALL paro_gamma_new( h_psi, s_psi_acc, hs_psi_gpu, g_psi, okvan, &
+               CALL paro_gamma_new( h_psi, s_psi, hs_psi_gpu, g_psi, okvan, &
                           npwx, npw, nbnd, evc, et(1,ik), btype(1,ik), ethr, notconv, nhpsi )
                !$acc end host_data
                !
@@ -462,7 +462,7 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
                 !
               ELSE
                 !$acc host_data use_device(et)
-                CALL paro_gamma_new( h_psi, s_psi_acc, hs_psi_gpu, g_psi, okvan, &
+                CALL paro_gamma_new( h_psi, s_psi, hs_psi_gpu, g_psi, okvan, &
                            npwx, npw, nbnd, evc, et(1,ik), btype(1,ik), ethr, notconv, nhpsi )
                 !$acc end host_data
                 !$acc update self(et)
@@ -479,7 +479,7 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
                                evc, hevc, sevc, et(:,ik), use_para_diag, .TRUE. )
 #if defined(__CUDA)
              ELSE
-                CALL rotate_xpsi_driver( h_psi, s_psi, h_psi, s_psi_acc, npwx, npw, nbnd, nbnd, evc, npol, okvan, &
+                CALL rotate_xpsi_driver( h_psi, s_psi, h_psi, s_psi, npwx, npw, nbnd, nbnd, evc, npol, okvan, &
                                evc, hevc, sevc, et(:,ik), use_para_diag, .TRUE.)
 #endif
              END IF
@@ -494,7 +494,7 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
                          et(1,ik), g2kin(1), btype(1,ik), ethr, rmm_ndim, &
                          okvan, lrot, exx_is_active(), notconv, rmm_iter )
           ELSE
-             CALL rrmmdiagg( h_psi, s_psi_acc, npwx, npw, nbnd, evc, hevc, sevc, &
+             CALL rrmmdiagg( h_psi, s_psi, npwx, npw, nbnd, evc, hevc, sevc, &
                           et(1,ik), g2kin, btype(1,ik), ethr, rmm_ndim, &
                           okvan, lrot, exx_is_active(), notconv, rmm_iter )
           END IF
@@ -562,7 +562,7 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
           ELSE
              IF ( use_para_diag ) THEN
                 !$acc host_data use_device(et)
-                CALL pregterg_gpu( h_psi, s_psi_acc, okvan, g_psi, &
+                CALL pregterg_gpu( h_psi, s_psi, okvan, g_psi, &
                             npw, npwx, nbnd, nbndx, evc, ethr, &
                             et(1, ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
                 !$acc end host_data
@@ -570,7 +570,7 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
              ELSE
                 !
                 !$acc host_data use_device(et)
-                CALL regterg (  h_psi, s_psi_acc, okvan, g_psi, &
+                CALL regterg (  h_psi, s_psi, okvan, g_psi, &
                          npw, npwx, nbnd, nbndx, evc, ethr, &
                          et(1, ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
                 !$acc end host_data
@@ -702,7 +702,7 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
                ! write (6,*) ntry, avg_iter, nhpsi
              ELSE
                !$acc host_data use_device(et)
-               CALL paro_k_new( h_psi, s_psi_acc, hs_psi_gpu, g_psi, okvan, &
+               CALL paro_k_new( h_psi, s_psi, hs_psi_gpu, g_psi, okvan, &
                         npwx, npw, nbnd, npol, evc, et(1,ik), btype(1,ik), ethr, notconv, nhpsi )
                !$acc end host_data
                !
@@ -753,7 +753,7 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
                 ! write (6,*) ntry, avg_iter, nhpsi
               ELSE
                 !$acc host_data use_device(et)
-                CALL paro_k_new( h_psi, s_psi_acc, hs_psi_gpu, g_psi, okvan, &
+                CALL paro_k_new( h_psi, s_psi, hs_psi_gpu, g_psi, okvan, &
                          npwx, npw, nbnd, npol, evc, et(1,ik), btype(1,ik), ethr, notconv, nhpsi )
                 !$acc end host_data
                 !$acc update self(et)
@@ -771,7 +771,7 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
                                   use_para_diag, gamma_only )
 #if defined(__CUDA)
              ELSE
-                CALL rotate_xpsi_driver( h_psi, s_psi, h_psi, s_psi_acc, npwx, npw, nbnd, nbnd, evc, npol, okvan, &
+                CALL rotate_xpsi_driver( h_psi, s_psi, h_psi, s_psi, npwx, npw, nbnd, nbnd, evc, npol, okvan, &
                                   evc, hevc, sevc, et(:,ik), &
                                   use_para_diag, gamma_only )
 #endif
@@ -786,7 +786,7 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
                              et(1,ik), g2kin(1), btype(1,ik), ethr, rmm_ndim, &
                              okvan, lrot, exx_is_active(), notconv, rmm_iter )
           ELSE
-             CALL crmmdiagg( h_psi, s_psi_acc, npwx, npw, nbnd, npol, evc, hevc, sevc, &
+             CALL crmmdiagg( h_psi, s_psi, npwx, npw, nbnd, npol, evc, hevc, sevc, &
                              et(1,ik), g2kin(1), btype(1,ik), ethr, rmm_ndim, &
                              okvan, lrot, exx_is_active(), notconv, rmm_iter )
           END IF
@@ -838,8 +838,10 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
           !
           lrot = ( iter == 1 )
           !
-          IF (.not. use_gpu ) THEN
-             IF ( use_para_diag ) then
+!civn
+          IF ( use_para_diag ) then
+             !
+             IF (.not. use_gpu ) THEN
                 !
                 CALL pcegterg( h_psi, s_psi, okvan, g_psi, &
                                npw, npwx, nbnd, nbndx, npol, evc, ethr, &
@@ -847,29 +849,57 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
                 !
              ELSE
                 !
-                CALL cegterg ( h_psi, s_psi, okvan, g_psi, &
-                               npw, npwx, nbnd, nbndx, npol, evc, ethr, &
-                               et(1,ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
-             END IF
-          ELSE
-             IF ( use_para_diag ) then
-                !
                 !$acc host_data use_device(et)
-                CALL pcegterg_gpu( h_psi, s_psi_acc, okvan, g_psi, &
+                CALL pcegterg_gpu( h_psi, s_psi, okvan, g_psi, &
                                npw, npwx, nbnd, nbndx, npol, evc, ethr, &
                                et(1, ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
                 !$acc end host_data
                 !
-             ELSE
-                !
-                !$acc host_data use_device(et)
-                CALL cegterg ( h_psi, s_psi_acc, okvan, g_psi, &
-                               npw, npwx, nbnd, nbndx, npol, evc, ethr, &
-                               et(1, ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
-                !$acc end host_data 
              END IF
-             !$acc update self(et)
+             !
+          ELSE
+             !
+             !$acc host_data use_device(et)
+             CALL cegterg ( h_psi, s_psi, okvan, g_psi, &
+                            npw, npwx, nbnd, nbndx, npol, evc, ethr, &
+                            et(1, ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
+             !$acc end host_data 
+             !
           END IF
+          !$acc update self(et)
+!
+!          IF (.not. use_gpu ) THEN
+!             IF ( use_para_diag ) then
+!                !
+!                CALL pcegterg( h_psi, s_psi, okvan, g_psi, &
+!                               npw, npwx, nbnd, nbndx, npol, evc, ethr, &
+!                               et(1,ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
+!                !
+!             ELSE
+!                !
+!                CALL cegterg ( h_psi, s_psi, okvan, g_psi, &
+!                               npw, npwx, nbnd, nbndx, npol, evc, ethr, &
+!                               et(1,ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
+!             END IF
+!          ELSE
+!             IF ( use_para_diag ) then
+!                !
+!                !$acc host_data use_device(et)
+!                CALL pcegterg_gpu( h_psi, s_psi, okvan, g_psi, &
+!                               npw, npwx, nbnd, nbndx, npol, evc, ethr, &
+!                               et(1, ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
+!                !$acc end host_data
+!                !
+!             ELSE
+!                !
+!                !$acc host_data use_device(et)
+!                CALL cegterg ( h_psi, s_psi, okvan, g_psi, &
+!                               npw, npwx, nbnd, nbndx, npol, evc, ethr, &
+!                               et(1, ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
+!                !$acc end host_data 
+!             END IF
+!             !$acc update self(et)
+!          END IF
           !
           avg_iter = avg_iter + dav_iter
           !
