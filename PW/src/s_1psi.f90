@@ -42,6 +42,7 @@ SUBROUTINE s_1psi( npwx, n, psi, spsi )
   !
   IF ( real_space) THEN
      !
+     !$acc update self(psi, spsi)
      IF ( gamma_only ) THEN
         !
         DO ibnd = 1, nbnd, 2
@@ -68,6 +69,7 @@ SUBROUTINE s_1psi( npwx, n, psi, spsi )
         !
      ENDIF
      !
+     !$acc update device(spsi)
   ELSE
      !
      CALL calbec( n, vkb, psi, becp )

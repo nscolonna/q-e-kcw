@@ -257,8 +257,6 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
   !------------------------------------------------------------------------
   ! CG diagonalization uses these external routines on a single band
   EXTERNAL hs_1psi, s_1psi, hs_psi
-  EXTERNAL hs_psi_gpu
-  EXTERNAL hs_1psi_gpu, s_1psi_gpu
   LOGICAL, EXTERNAL   :: rmm_use_davidson, rmm_use_paro
   ! subroutine hs_1psi(npwx,npw,psi,hpsi,spsi)  computes H*psi and S*psi
   ! subroutine s_1psi(npwx,npw,psi,spsi)        computes S*psi (if needed)
@@ -380,38 +378,22 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
           ENDIF
           !
           IF ( isolve == 1 ) THEN
-             IF (.not. use_gpu) THEN
-                CALL rcgdiagg( hs_1psi, s_1psi, h_diag, &
-                         npwx, npw, nbnd, evc, et(1,ik), btype(1,ik), &
-                         ethr, max_cg_iter, .NOT. lscf, notconv, cg_iter )
-             ELSE
-                CALL rcgdiagg( hs_1psi_gpu, s_1psi_gpu, h_diag, &
-                         npwx, npw, nbnd, evc, et(1,ik), btype(1,ik), &
-                         ethr, max_cg_iter, .NOT. lscf, notconv, cg_iter )
-                !
-             END IF
+             CALL rcgdiagg( hs_1psi, s_1psi, h_diag, &
+                      npwx, npw, nbnd, evc, et(1,ik), btype(1,ik), &
+                      ethr, max_cg_iter, .NOT. lscf, notconv, cg_iter )
              !
              avg_iter = avg_iter + cg_iter
              !
           ELSE
              !
-             IF (.not. use_gpu ) THEN
-               CALL paro_gamma_new( h_psi, s_psi, hs_psi, g_psi, okvan, &
-                          npwx, npw, nbnd, evc, et(1,ik), btype(1,ik), ethr, notconv, nhpsi )
-               !
-               avg_iter = avg_iter + nhpsi/float(nbnd) 
-               ! write (6,*) ntry, avg_iter, nhpsi
-               !
-             ELSE
-               !$acc host_data use_device(et)
-               CALL paro_gamma_new( h_psi, s_psi, hs_psi_gpu, g_psi, okvan, &
-                          npwx, npw, nbnd, evc, et(1,ik), btype(1,ik), ethr, notconv, nhpsi )
-               !$acc end host_data
-               !
-               avg_iter = avg_iter + nhpsi/float(nbnd) 
-               ! write (6,*) ntry, avg_iter, nhpsi
-               !
-             ENDIF  
+             !$acc host_data use_device(et)
+             CALL paro_gamma_new( h_psi, s_psi, hs_psi, g_psi, okvan, &
+                        npwx, npw, nbnd, evc, et(1,ik), btype(1,ik), ethr, notconv, nhpsi )
+             !$acc end host_data
+             !
+             avg_iter = avg_iter + nhpsi/float(nbnd) 
+             ! write (6,*) ntry, avg_iter, nhpsi
+             !
           ENDIF
           !
           !
@@ -452,25 +434,15 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
                  h_diag(ig,1) = 1.D0 + g2kin(ig) + SQRT( 1.D0 + ( g2kin(ig) - 1.D0 )**2 )
               END DO
               !
-              IF (.not. use_gpu ) THEN
-                CALL paro_gamma_new( h_psi, s_psi, hs_psi, g_psi, okvan, &
-                           npwx, npw, nbnd, evc, et(1,ik), btype(1,ik), ethr, notconv, nhpsi )
-                !
-                avg_iter = avg_iter + nhpsi/float(nbnd) 
-                ! write (6,*) ntry, avg_iter, nhpsi
-                !
-              ELSE
-                !$acc host_data use_device(et)
-                CALL paro_gamma_new( h_psi, s_psi, hs_psi_gpu, g_psi, okvan, &
-                           npwx, npw, nbnd, evc, et(1,ik), btype(1,ik), ethr, notconv, nhpsi )
-                !$acc end host_data
-                !$acc update self(et)
-                !
-                avg_iter = avg_iter + nhpsi/float(nbnd) 
-                ! write (6,*) ntry, avg_iter, nhpsi
-                !
-              ENDIF  
-               !
+              !$acc host_data use_device(et)
+              CALL paro_gamma_new( h_psi, s_psi, hs_psi, g_psi, okvan, &
+                         npwx, npw, nbnd, evc, et(1,ik), btype(1,ik), ethr, notconv, nhpsi )
+              !$acc end host_data
+              !$acc update self(et)
+              !
+              avg_iter = avg_iter + nhpsi/float(nbnd) 
+              ! write (6,*) ntry, avg_iter, nhpsi
+              !
           ELSE IF ( .NOT. lrot ) THEN
              !
              CALL rotate_xpsi_driver( h_psi, s_psi, h_psi, s_psi, npwx, npw, nbnd, nbnd, evc, npol, okvan, &
@@ -663,36 +635,22 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
           ENDIF
           !
           IF ( isolve == 1) then
-             IF ( .not. use_gpu ) THEN
-                CALL ccgdiagg( hs_1psi, s_1psi, h_diag, &
-                         npwx, npw, nbnd, npol, evc, et(1,ik), btype(1,ik), &
-                         ethr, max_cg_iter, .NOT. lscf, notconv, cg_iter )
-             ELSE
-                CALL ccgdiagg( hs_1psi_gpu, s_1psi_gpu, h_diag, &
-                         npwx, npw, nbnd, npol, evc, et(1,ik), btype(1,ik), &
-                         ethr, max_cg_iter, .NOT. lscf, notconv, cg_iter )
-             END IF
+             CALL ccgdiagg( hs_1psi, s_1psi, h_diag, &
+                      npwx, npw, nbnd, npol, evc, et(1,ik), btype(1,ik), &
+                      ethr, max_cg_iter, .NOT. lscf, notconv, cg_iter )
              !
              avg_iter = avg_iter + cg_iter
              !
           ELSE 
              !
-             IF ( .not. use_gpu ) THEN
-               CALL paro_k_new( h_psi, s_psi, hs_psi, g_psi, okvan, &
-                        npwx, npw, nbnd, npol, evc, et(1,ik), btype(1,ik), ethr, notconv, nhpsi )
-               !
-               avg_iter = avg_iter + nhpsi/float(nbnd) 
-               ! write (6,*) ntry, avg_iter, nhpsi
-             ELSE
-               !$acc host_data use_device(et)
-               CALL paro_k_new( h_psi, s_psi, hs_psi_gpu, g_psi, okvan, &
-                        npwx, npw, nbnd, npol, evc, et(1,ik), btype(1,ik), ethr, notconv, nhpsi )
-               !$acc end host_data
-               !
-               avg_iter = avg_iter + nhpsi/float(nbnd) 
-               ! write (6,*) ntry, avg_iter, nhpsi
-               !
-             END IF
+             !$acc host_data use_device(et)
+             CALL paro_k_new( h_psi, s_psi, hs_psi, g_psi, okvan, &
+                      npwx, npw, nbnd, npol, evc, et(1,ik), btype(1,ik), ethr, notconv, nhpsi )
+             !$acc end host_data
+             !
+             avg_iter = avg_iter + nhpsi/float(nbnd) 
+             ! write (6,*) ntry, avg_iter, nhpsi
+             !
           ENDIF
           ntry = ntry + 1
           !
@@ -728,23 +686,14 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
           IF (lrot .AND. .NOT. lscf ) THEN
               CALL usnldiag(npw, npol, h_diag, s_diag )
               !
-              IF ( .not. use_gpu ) THEN
-                CALL paro_k_new( h_psi, s_psi, hs_psi, g_psi, okvan, &
-                         npwx, npw, nbnd, npol, evc, et(1,ik), btype(1,ik), ethr, notconv, nhpsi )
-                !
-                avg_iter = avg_iter + nhpsi/float(nbnd) 
-                ! write (6,*) ntry, avg_iter, nhpsi
-              ELSE
-                !$acc host_data use_device(et)
-                CALL paro_k_new( h_psi, s_psi, hs_psi_gpu, g_psi, okvan, &
-                         npwx, npw, nbnd, npol, evc, et(1,ik), btype(1,ik), ethr, notconv, nhpsi )
-                !$acc end host_data
-                !$acc update self(et)
-                !
-                avg_iter = avg_iter + nhpsi/float(nbnd) 
-                ! write (6,*) ntry, avg_iter, nhpsi
-                !
-              END IF
+              !$acc host_data use_device(et)
+              CALL paro_k_new( h_psi, s_psi, hs_psi, g_psi, okvan, &
+                       npwx, npw, nbnd, npol, evc, et(1,ik), btype(1,ik), ethr, notconv, nhpsi )
+              !$acc end host_data
+              !$acc update self(et)
+              !
+              avg_iter = avg_iter + nhpsi/float(nbnd) 
+              ! write (6,*) ntry, avg_iter, nhpsi
               !
           ELSE IF ( .NOT. lrot ) THEN
              !
