@@ -251,7 +251,6 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
   !
   ! Davidson and RMM-DIIS diagonalization uses these external routines on groups of nvec bands
   EXTERNAL h_psi, s_psi, g_psi
-  EXTERNAL s_psi_acc
   ! subroutine h_psi(npwx,npw,nvec,psi,hpsi)  computes H*psi
   ! subroutine s_psi(npwx,npw,nvec,psi,spsi)  computes S*psi (if needed)
   ! subroutine g_psi(npwx,npw,nvec,psi,eig)   computes G*psi -> psi
@@ -474,31 +473,16 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
                !
           ELSE IF ( .NOT. lrot ) THEN
              !
-             IF (.not. use_gpu) THEN
-                CALL rotate_xpsi_driver( h_psi, s_psi, h_psi, s_psi, npwx, npw, nbnd, nbnd, evc, npol, okvan, &
-                               evc, hevc, sevc, et(:,ik), use_para_diag, .TRUE. )
-#if defined(__CUDA)
-             ELSE
-                CALL rotate_xpsi_driver( h_psi, s_psi, h_psi, s_psi, npwx, npw, nbnd, nbnd, evc, npol, okvan, &
-                               evc, hevc, sevc, et(:,ik), use_para_diag, .TRUE.)
-#endif
-             END IF
+             CALL rotate_xpsi_driver( h_psi, s_psi, h_psi, s_psi, npwx, npw, nbnd, nbnd, evc, npol, okvan, &
+                            evc, hevc, sevc, et(:,ik), use_para_diag, .TRUE. )
              !
              avg_iter = avg_iter + 1.D0
              !
           END IF
           !
-          !
-          IF (.not. use_gpu) THEN
-            CALL rrmmdiagg( h_psi, s_psi, npwx, npw, nbnd, evc, hevc, sevc, &
-                         et(1,ik), g2kin(1), btype(1,ik), ethr, rmm_ndim, &
-                         okvan, lrot, exx_is_active(), notconv, rmm_iter )
-          ELSE
-             CALL rrmmdiagg( h_psi, s_psi, npwx, npw, nbnd, evc, hevc, sevc, &
-                          et(1,ik), g2kin, btype(1,ik), ethr, rmm_ndim, &
-                          okvan, lrot, exx_is_active(), notconv, rmm_iter )
-          END IF
-          !
+          CALL rrmmdiagg( h_psi, s_psi, npwx, npw, nbnd, evc, hevc, sevc, &
+                       et(1,ik), g2kin(1), btype(1,ik), ethr, rmm_ndim, &
+                       okvan, lrot, exx_is_active(), notconv, rmm_iter )
           !
           IF ( lscf .AND. ( .NOT. rmm_conv ) ) notconv = 0
           !
@@ -547,36 +531,35 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
           !
           lrot = ( iter == 1 )
           !
-          IF (.not. use_gpu) THEN
-             IF ( use_para_diag ) THEN
-!                ! make sure that all processors have the same wfc
+          IF ( use_para_diag ) THEN
+             !
+             IF (.not. use_gpu) THEN
+                !
+                ! make sure that all processors have the same wfc
                 CALL pregterg( h_psi, s_psi, okvan, g_psi, &
                             npw, npwx, nbnd, nbndx, evc, ethr, &
                             et(1,ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
+                !
              ELSE
-                CALL regterg (  h_psi, s_psi, okvan, g_psi, &
-                         npw, npwx, nbnd, nbndx, evc, ethr, &
-                         et(1,ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
-             END IF
-             ! 
-          ELSE
-             IF ( use_para_diag ) THEN
+                !
                 !$acc host_data use_device(et)
                 CALL pregterg_gpu( h_psi, s_psi, okvan, g_psi, &
                             npw, npwx, nbnd, nbndx, evc, ethr, &
                             et(1, ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
                 !$acc end host_data
-                !
-             ELSE
-                !
-                !$acc host_data use_device(et)
-                CALL regterg (  h_psi, s_psi, okvan, g_psi, &
-                         npw, npwx, nbnd, nbndx, evc, ethr, &
-                         et(1, ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
-                !$acc end host_data
+                ! 
              END IF
-             !$acc update self(et)
+             !
+          ELSE
+             !
+             !$acc host_data use_device(et)
+             CALL regterg (  h_psi, s_psi, okvan, g_psi, &
+                      npw, npwx, nbnd, nbndx, evc, ethr, &
+                      et(1, ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
+             !$acc end host_data
+             !
           END IF
+          !$acc update self(et)
           !
           avg_iter = avg_iter + dav_iter
           !
@@ -765,31 +748,17 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
               !
           ELSE IF ( .NOT. lrot ) THEN
              !
-             IF ( .not. use_gpu ) THEN
-                CALL rotate_xpsi_driver( h_psi, s_psi, h_psi, s_psi, npwx, npw, nbnd, nbnd, evc, npol, okvan, &
-                                  evc, hevc, sevc, et(:,ik), & 
-                                  use_para_diag, gamma_only )
-#if defined(__CUDA)
-             ELSE
-                CALL rotate_xpsi_driver( h_psi, s_psi, h_psi, s_psi, npwx, npw, nbnd, nbnd, evc, npol, okvan, &
-                                  evc, hevc, sevc, et(:,ik), &
-                                  use_para_diag, gamma_only )
-#endif
-             END IF
+             CALL rotate_xpsi_driver( h_psi, s_psi, h_psi, s_psi, npwx, npw, nbnd, nbnd, evc, npol, okvan, &
+                               evc, hevc, sevc, et(:,ik), & 
+                               use_para_diag, gamma_only )
              !
              avg_iter = avg_iter + 1.D0
              !
           END IF
           !
-          IF ( .not. use_gpu ) THEN
-             CALL crmmdiagg( h_psi, s_psi, npwx, npw, nbnd, npol, evc, hevc, sevc, &
-                             et(1,ik), g2kin(1), btype(1,ik), ethr, rmm_ndim, &
-                             okvan, lrot, exx_is_active(), notconv, rmm_iter )
-          ELSE
-             CALL crmmdiagg( h_psi, s_psi, npwx, npw, nbnd, npol, evc, hevc, sevc, &
-                             et(1,ik), g2kin(1), btype(1,ik), ethr, rmm_ndim, &
-                             okvan, lrot, exx_is_active(), notconv, rmm_iter )
-          END IF
+          CALL crmmdiagg( h_psi, s_psi, npwx, npw, nbnd, npol, evc, hevc, sevc, &
+                          et(1,ik), g2kin(1), btype(1,ik), ethr, rmm_ndim, &
+                          okvan, lrot, exx_is_active(), notconv, rmm_iter )
           !
           IF ( lscf .AND. ( .NOT. rmm_conv ) ) notconv = 0
           !
@@ -838,7 +807,6 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
           !
           lrot = ( iter == 1 )
           !
-!civn
           IF ( use_para_diag ) then
              !
              IF (.not. use_gpu ) THEN
@@ -867,39 +835,6 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
              !
           END IF
           !$acc update self(et)
-!
-!          IF (.not. use_gpu ) THEN
-!             IF ( use_para_diag ) then
-!                !
-!                CALL pcegterg( h_psi, s_psi, okvan, g_psi, &
-!                               npw, npwx, nbnd, nbndx, npol, evc, ethr, &
-!                               et(1,ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
-!                !
-!             ELSE
-!                !
-!                CALL cegterg ( h_psi, s_psi, okvan, g_psi, &
-!                               npw, npwx, nbnd, nbndx, npol, evc, ethr, &
-!                               et(1,ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
-!             END IF
-!          ELSE
-!             IF ( use_para_diag ) then
-!                !
-!                !$acc host_data use_device(et)
-!                CALL pcegterg_gpu( h_psi, s_psi, okvan, g_psi, &
-!                               npw, npwx, nbnd, nbndx, npol, evc, ethr, &
-!                               et(1, ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
-!                !$acc end host_data
-!                !
-!             ELSE
-!                !
-!                !$acc host_data use_device(et)
-!                CALL cegterg ( h_psi, s_psi, okvan, g_psi, &
-!                               npw, npwx, nbnd, nbndx, npol, evc, ethr, &
-!                               et(1, ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
-!                !$acc end host_data 
-!             END IF
-!             !$acc update self(et)
-!          END IF
           !
           avg_iter = avg_iter + dav_iter
           !
