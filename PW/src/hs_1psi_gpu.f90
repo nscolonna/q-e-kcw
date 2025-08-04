@@ -53,7 +53,7 @@ SUBROUTINE hs_1psi_gpu( lda, n, psi, hpsi, spsi )
            DEALLOCATE(psi_h, spsi_h)
         else   
   CALL h_psi( lda, n, 1, psi, hpsi ) ! apply H to a single wfc (no bgrp parallelization here)
-  CALL s_psi_acc( lda, n, 1, psi, spsi ) ! apply S to a single wfc (no bgrp parallelization here)
+  CALL s_psi( lda, n, 1, psi, spsi ) ! apply S to a single wfc (no bgrp parallelization here)
        endif
   !
   CALL stop_clock_gpu( 'hs_1psi' )

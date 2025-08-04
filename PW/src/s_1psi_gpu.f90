@@ -83,8 +83,7 @@ SUBROUTINE s_1psi_gpu( npwx, n, psi, spsi )
 #if defined(__CUDA)
      CAll calbec(offload_type, n, vkb, psi, becp )
 #endif
-     CALL s_psi_acc( npwx, n, 1, psi, spsi )
-     
+     CALL s_psi( npwx, n, 1, psi, spsi )
      !
   ENDIF
   !

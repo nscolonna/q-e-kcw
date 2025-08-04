@@ -40,7 +40,7 @@ SUBROUTINE rotate_wfc_gpu &
     ! eigenvalues
   COMPLEX(DP), ALLOCATABLE :: psi_h(:,:), evc_h(:,:)
   REAL(DP), ALLOCATABLE    :: e_h(:)
-  EXTERNAL h_psi, s_psi, s_psi_acc
+  EXTERNAL h_psi, s_psi
   !
     ! h_psi(npwx,npw,nvec,psi,hpsi)
     !     calculates H|psi>
@@ -88,13 +88,13 @@ SUBROUTINE rotate_wfc_gpu &
      IF ( gamma_only ) THEN
   !write (*,*) 'inside serial gamma'; FLUSH(6)
         !
-        CALL rotate_wfc_gamma ( h_psi, s_psi_acc, overlap, &
+        CALL rotate_wfc_gamma ( h_psi, s_psi, overlap, &
                                     npwx, npw, nstart, nbnd, psi, evc, e )
         !
      ELSE
   !write (*,*) 'inside serial k'; FLUSH(6)
         !
-        CALL rotate_wfc_k ( h_psi, s_psi_acc, overlap, &
+        CALL rotate_wfc_k ( h_psi, s_psi, overlap, &
                                 npwx, npw, nstart, nbnd, npol, psi, evc, e )
         !
      END IF
