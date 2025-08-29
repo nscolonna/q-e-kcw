@@ -187,7 +187,6 @@ set(src_pw
    src/run_pwscf.f90 
    src/s_1psi.f90 
    src/s_psi.f90 
-   src/s_psi_acc.f90 
    src/save_in_cbands.f90 
    src/save_in_electrons.f90 
    src/scale_h.f90 
@@ -253,11 +252,8 @@ set(src_pw
    src/d3hess_mod.f90
    # CUDA Fortran
    src/rotate_wfc_gpu.f90
-   src/hs_1psi_gpu.f90
-   src/s_1psi_gpu.f90
    src/utils_gpu.f90
    src/vhpsi_gpu.f90
-   src/hs_psi_gpu.f90)
 # OSCDFT
 if (QE_ENABLE_OSCDFT)
     list(APPEND src_pw

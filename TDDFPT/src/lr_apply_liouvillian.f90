@@ -587,11 +587,7 @@ CONTAINS
            CALL fwfft_orbital_gamma(spsi1,ibnd,nbnd)
         ENDDO
     ELSE
-#if defined(__CUDA)
-       CALL s_psi_acc (npwx,ngk(1),nbnd,evc1(1,1,1),spsi1)
-#else            
-       CALL s_psi(npwx,ngk(1),nbnd,evc1(1,1,1),spsi1)
-#endif
+    CALL s_psi(npwx,ngk(1),nbnd,evc1(1,1,1),spsi1)
     ENDIF
     !
     !   Subtract the eigenvalues
