@@ -133,7 +133,7 @@ SUBROUTINE cutoff_lr_Vloc( )
   DO nt = 1, nsp
      fac(nt) = upf(nt)%zp * e2 / tpiba2
   END DO
-  !$acc parallel loop collapse(2) copyin(fac)
+  !$acc parallel loop collapse(2) present(gg,cutoff_2D) copyin(fac)
   DO nt = 1, nsp
      DO ng = ng0, ngm
         lr_Vloc(ng,nt) = - fpi / omega* fac(nt) * cutoff_2D(ng)* &
@@ -196,7 +196,7 @@ SUBROUTINE cutoff_hartree( rhog, aux1, ehart )
   !  
   !$acc data copyin(rhog) copy(aux1)
   !
-  !$acc parallel loop reduction(+:ehart)
+  !$acc parallel loop reduction(+:ehart) present(gg,cutoff_2D)
   DO ig = gstart, ngm
      !
      fac = 1.D0 / gg(ig) * cutoff_2D(ig)
@@ -256,8 +256,12 @@ FUNCTION cutoff_ewald( gamma_only, alpha, omega ) RESULT (ewaldg)
   !
   ewaldg = 0.0d0
   ! now the G.neq.0 terms
+  !
+  !$acc data present_or_copyin(strf)
+  !$acc parallel loop reduction(+:ewaldg) present(gg,cutoff_2D) copyin(zv)
   DO ng = gstart, ngm
      rhon = (0.d0, 0.d0)
+     !$acc loop seq reduction(+:rhon)
      DO nt = 1, nsp
         rhon = rhon + zv(nt) * CONJG(strf(ng,nt) )
      ENDDO
@@ -266,6 +270,7 @@ FUNCTION cutoff_ewald( gamma_only, alpha, omega ) RESULT (ewaldg)
   ENDDO
   ewaldg = fpi / omega * ewaldg
   IF ( gamma_only ) ewaldg = 2.0_dp*ewaldg
+  !$acc end data
   !
   ! ... here add the other constant term (Phi_self)
   !
@@ -302,10 +307,13 @@ SUBROUTINE cutoff_force_ew( aux, alpha )
   !
   INTEGER :: ig
   !
+  !$acc data present_or_copy(aux)
+  !$acc parallel loop present(gg,cutoff_2D) 
   DO ig = gstart, ngm
      aux(ig) = aux(ig) * EXP( - gg(ig) * tpiba2 / alpha / 4.d0) &
                / (gg(ig) * tpiba2) * cutoff_2D(ig)
-  ENDDO  
+  ENDDO
+  !$acc end data
   !
   RETURN
   !
@@ -401,7 +409,7 @@ SUBROUTINE cutoff_stres_evloc( gamma_only, rho_G, strf, evloc )
   ! ... If gstart=2, it means g(1) is G=0, but we have nothing to add for G=0
   !     So we start at gstart.
   !
-  !$acc parallel loop collapse(2) reduction(+:evloc) copyin(lr_Vloc)
+  !$acc parallel loop collapse(2) reduction(+:evloc)
   DO nt = 1, ntyp
     DO ng = gstart, ngm
        evloc = evloc + DBLE( CONJG(rho_G(ng)) * strf(ng,nt) ) &
@@ -459,7 +467,7 @@ SUBROUTINE cutoff_stres_sigmaloc( gamma_only, rho_G, strf, sigmaloc )
   !
   ! ... no G=0 contribution
   !
-  !$acc parallel loop collapse(2) copyin(lr_Vloc) present(cutoff_2D)&
+  !$acc parallel loop collapse(2) present(lr_Vloc,cutoff_2D)&
   !$acc     reduction(+:sigmaloc11,sigmaloc21,sigmaloc22,sigmaloc31,&
   !$acc                 sigmaloc32,sigmaloc33)
   DO nt = 1, ntyp
