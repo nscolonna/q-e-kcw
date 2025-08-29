@@ -650,7 +650,7 @@ SUBROUTINE v_h( rhog, ehart, charge, v )
   USE mp,                ONLY : mp_sum
   USE martyna_tuckerman, ONLY : wg_corr_h, do_comp_mt
   USE esm,               ONLY : do_comp_esm, esm_hartree, esm_bc
-  USE Coul_cut_2D,       ONLY : do_cutoff_2D, cutoff_2D, cutoff_hartree  
+  USE Coul_cut_2D,       ONLY : do_cutoff_2D, cutoff_hartree
   !
   IMPLICIT NONE
   !
