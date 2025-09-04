@@ -27,7 +27,7 @@
 CONTAINS
 
 !---------------------------------------------
-  SUBROUTINE grid_build(nw_, wmax_, wmin_, metalcalc)
+  SUBROUTINE grid_build(nw_, wmax_, wmin_, metalcalc, calculation)
   !-------------------------------------------
   !
   USE kinds,     ONLY : DP
@@ -43,6 +43,7 @@ CONTAINS
   INTEGER,  INTENT(IN) :: nw_
   REAL(DP), INTENT(IN) :: wmax_ ,wmin_
   LOGICAL,  OPTIONAL, INTENT(IN) :: metalcalc
+  CHARACTER(10), INTENT(IN)      :: calculation
   !
   ! local vars
   INTEGER         :: iw,ik,i,ierr
@@ -62,7 +63,7 @@ CONTAINS
   !
   ! USPP are not implemented (dipole matrix elements are not trivial at all)
   !
-  IF ( okvan ) CALL errore('grid_build','USPP are not implemented',1)
+  IF ( okvan .AND. .NOT. TRIM(calculation)=='jdos') CALL errore('grid_build','USPP are not implemented',1)
 
   !
   ! store data in module
@@ -222,9 +223,10 @@ PROGRAM epsilon
   INTEGER                 :: nw,nbndmin,nbndmax
   REAL(DP)                :: intersmear,intrasmear,wmax,wmin,shift
   CHARACTER(10)           :: calculation,smeartype
-  LOGICAL                 :: metalcalc
+  CHARACTER(256)          :: filproj1, filproj2
+  LOGICAL                 :: metalcalc, l_read_proj
   !
-  NAMELIST / inputpp / prefix, outdir, calculation
+  NAMELIST / inputpp / prefix, outdir, calculation, filproj1, filproj2
   NAMELIST / energy_grid / smeartype, intersmear, intrasmear, nw, wmax, wmin, &
                            nbndmin, nbndmax, shift
   !
@@ -260,6 +262,9 @@ PROGRAM epsilon
   smeartype    = 'gauss'
   intrasmear   = 0.0d0
   metalcalc    = .FALSE.
+  !
+  filproj1=''
+  filproj2=''
 
   !
   ! this routine allows the user to redirect the input using -input
@@ -305,6 +310,8 @@ PROGRAM epsilon
   CALL mp_bcast( nw, ionode_id, intra_image_comm )
   CALL mp_bcast( nbndmin, ionode_id, intra_image_comm )
   CALL mp_bcast( nbndmax, ionode_id, intra_image_comm )
+  CALL mp_bcast( filproj1, ionode_id, intra_image_comm )
+  CALL mp_bcast( filproj2, ionode_id, intra_image_comm )
 
   !
   ! read PW simulation parameters from prefix.save/data-file.xml
@@ -331,9 +338,15 @@ PROGRAM epsilon
   ! perform some consistency checks, 
   ! setup w-grid and occupation numbers
   !
-  CALL grid_build(nw, wmax, wmin, metalcalc)
-
-
+  CALL grid_build(nw, wmax, wmin, metalcalc, calculation)
+  !
+  ! NsC >>
+  l_read_proj = .false. 
+  IF (TRIM(filproj1) /= '' .AND. TRIM(filproj2) /= '') l_read_proj = .true. 
+  WRITE(stdout, '(5X, "READ PROJECTIONS FILES =", L5)'), l_read_proj
+  WRITE(stdout, '(5X, "PROJ FILE OCC:", A32)') TRIM(filproj1)
+  WRITE(stdout, '(5X, "PROJ FILE EMP:", A32)') TRIM(filproj2)
+  ! NsC <<
   !
   ! ... run the specific pp calculation
   !
@@ -347,7 +360,7 @@ PROGRAM epsilon
       !
   CASE ( 'jdos' )
       !
-      CALL jdos_calc ( smeartype, intersmear, nbndmin, nbndmax, shift, nspin )
+      CALL jdos_calc ( smeartype, intersmear, nbndmin, nbndmax, shift, nspin, l_read_proj, filproj1, filproj2 )
       !
   CASE ( 'offdiag' )
       !
@@ -598,7 +611,7 @@ END SUBROUTINE eps_calc
 
 
 !----------------------------------------------------------------------------------------
-SUBROUTINE jdos_calc ( smeartype, intersmear, nbndmin, nbndmax, shift, nspin )
+SUBROUTINE jdos_calc ( smeartype, intersmear, nbndmin, nbndmax, shift, nspin, l_read_proj, filproj1, filproj2 )
   !--------------------------------------------------------------------------------------
   !
   USE kinds,                ONLY : DP
@@ -617,15 +630,17 @@ SUBROUTINE jdos_calc ( smeartype, intersmear, nbndmin, nbndmax, shift, nspin )
   INTEGER,      INTENT(IN) :: nbndmin, nbndmax, nspin
   REAL(DP),     INTENT(IN) :: intersmear, shift
   CHARACTER(*), INTENT(IN) :: smeartype
+  LOGICAL, INTENT(IN)      :: l_read_proj
+  CHARACTER(256)           :: filproj1, filproj2
   !
   ! local variables
   !
-  INTEGER  :: ik, is, iband1, iband2
+  INTEGER  :: ik, is, iband1, iband2, ik_nospin
   INTEGER  :: iw, ierr
   REAL(DP) :: etrans, w, renorm, count, srcount(0:1), renormzero,renormuno
   !
   CHARACTER(128)        :: desc
-  REAL(DP), ALLOCATABLE :: jdos(:),srjdos(:,:)
+  REAL(DP), ALLOCATABLE :: jdos(:),srjdos(:,:), proj1(:,:,:), proj2(:,:,:)
 
   !
   !--------------------------
@@ -636,6 +651,19 @@ SUBROUTINE jdos_calc ( smeartype, intersmear, nbndmin, nbndmax, shift, nspin )
   ! they are distributed to each task so
   ! no mpi calls are necessary in this routine
   !
+  ! If provided in input the files with the atomic projection of the KS orbital 
+  ! will be read and used to "weight" the JDOS. The files needs to be nbnd x nks 
+  ! for each spin channel. 
+  ! proj1 is the projection for the initial (occupied) state
+  ! proj2 is the projection for the final (empty) state
+  ! These info can be extracted from a preliminary projwfc calculations with a simpl prost-proc
+  ! FIXME: Would be nice to read the xml output of projwfc and extract these info 
+  !        directly in this run
+  ! 
+  ALLOCATE (proj1 ( nbnd, nks/nspin, nspin), proj2 (nbnd, nks/nspin, nspin) )
+  proj1(:,:,:) = 1.D0
+  proj2(:,:,:) = 1.D0
+  IF (l_read_proj) CALL read_proj (filproj1, filproj2, proj1, proj2, nspin)
 
 !
 ! spin unresolved calculation
@@ -687,7 +715,7 @@ IF (nspin == 1) THEN
                      w = wgrid(iw)
                      !
                      jdos(iw) = jdos(iw) + intersmear * (focc(iband1,ik)-focc(iband2,ik)) &
-                                  / ( PI * ( (etrans -w )**2 + (intersmear)**2 ) )
+                                  / ( PI * ( (etrans -w )**2 + (intersmear)**2 ) )*proj1(iband1,ik,1)*proj2(iband2,ik,1)
 
                  ENDDO
 
@@ -730,7 +758,7 @@ IF (nspin == 1) THEN
                      !
                      jdos(iw) = jdos(iw) + (focc(iband1,ik)-focc(iband2,ik)) * &
                                 exp(-(etrans-w)**2/intersmear**2) &
-                                  / (intersmear * sqrt(PI))
+                                  / (intersmear * sqrt(PI))*proj1(iband1,ik,1)*proj2(iband2,ik,1)
 
                  ENDDO
 
@@ -760,8 +788,13 @@ IF (nspin == 1) THEN
       WRITE(stdout,"(/,5x, 'Integration over JDOS gives: ',f15.9,' instead of 1.0d0' )") renorm
       WRITE(stdout,"(/,5x, 'Writing output on file...' )")
       !
-      desc = "energy grid [eV]     JDOS [1/eV]"
-      CALL eps_writetofile('jdos',desc,nw,wgrid,1,jdos)
+      IF (l_read_proj) THEN 
+         desc = "energy grid [eV]     JDOS [1/eV]"
+         CALL eps_writetofile('pjdos',desc,nw,wgrid,1,jdos, TRIM(filproj1)//'  '//TRIM(filproj2))
+      ELSE
+         desc = "energy grid [eV]     JDOS [1/eV]"
+         CALL eps_writetofile('jdos',desc,nw,wgrid,1,jdos)
+      ENDIF
       !
   ENDIF
   !
@@ -796,6 +829,8 @@ ELSEIF(nspin==2) THEN
     ! if nspin=2 the number of nks must be even (even if the calculation
     ! is performed at gamma point only), so nks must be always a multiple of 2
     DO ik = 1 + is * int(nks/2), int(nks/2) +  is * int(nks/2)
+       ik_nospin = ik - is * int(nks/2)
+       !write(*,*) ik ,ik_nospin
        !
        ! Calculation of joint density of states
        ! 'intersmear' is the brodening parameter
@@ -808,6 +843,7 @@ ELSEIF(nspin==2) THEN
                  !
                  ! transition energy
                  !
+                 !WRITE(*,*) ik, ik_nospin, proj1(iband1,ik_nospin,is+1), proj2(iband2, ik_nospin,is+1)
                  etrans = ( et(iband2,ik) -et(iband1,ik) ) * RYTOEV  + shift
                  !
                  IF( etrans < 1.0d-10 ) CYCLE
@@ -821,7 +857,8 @@ ELSEIF(nspin==2) THEN
                      w = wgrid(iw)
                      !
                      srjdos(is,iw) = srjdos(is,iw) + intersmear * (focc(iband1,ik)-focc(iband2,ik)) &
-                                  / ( PI * ( (etrans -w )**2 + (intersmear)**2 ) )
+                                  / ( PI * ( (etrans -w )**2 + (intersmear)**2 ) ) &
+                                  *proj1(iband1, ik_nospin,is+1)*proj2(iband2, ik_nospin,is+1)
 
                  ENDDO
 
@@ -866,7 +903,7 @@ ELSEIF(nspin==2) THEN
                      !
                      srjdos(is,iw) = srjdos(is,iw) + (focc(iband1,ik)-focc(iband2,ik)) * &
                                 exp(-(etrans-w)**2/intersmear**2) &
-                                  / (intersmear * sqrt(PI))
+                                  / (intersmear * sqrt(PI))*proj1(iband1, ik_nospin,is+1)*proj2(iband2, ik_nospin,is+1)
 
                  ENDDO
 
@@ -903,12 +940,18 @@ ELSEIF(nspin==2) THEN
       WRITE(stdout,"(/,5x, 'Integration over spin DOWN JDOS gives: ',f15.9,' instead of 1.0d0' )") renormuno
       WRITE(stdout,"(/,5x, 'Writing output on file...' )")
       !
-      desc = "energy grid [eV]     UJDOS [1/eV]      DJDOS[1/eV]"
-      CALL eps_writetofile('jdos',desc,nw,wgrid,2,srjdos(0:1,:))
+      IF (l_read_proj) THEN 
+         desc = "energy grid [eV]     UJDOS [1/eV]      DJDOS[1/eV]"
+         CALL eps_writetofile('pjdos',desc,nw,wgrid,2,srjdos(0:1,:),TRIM(filproj1)//'  '//TRIM(filproj2))
+      ELSE 
+         desc = "energy grid [eV]     UJDOS [1/eV]      DJDOS[1/eV]"
+         CALL eps_writetofile('jdos',desc,nw,wgrid,2,srjdos(0:1,:))
+      ENDIF
       !
   ENDIF
 
   DEALLOCATE ( srjdos )
+  DEALLOCATE (proj1, proj2  )
 ENDIF
 
 END SUBROUTINE jdos_calc
@@ -1215,3 +1258,52 @@ SUBROUTINE dipole_calc( ik, dipole_aux, metalcalc, nbndmin, nbndmax )
   CALL stop_clock( 'dipole_calc' )
   !
 END SUBROUTINE dipole_calc
+
+SUBROUTINE read_proj (filproj1, filproj2, proj1, proj2, nspin)
+  !
+  USE kinds,                ONLY : DP
+  USE io_global,            ONLY : stdout
+  USE wvfct,                ONLY : nbnd
+  USE klist,                ONLY : nks
+  !
+  IMPLICIT NONE
+  REAL(DP), INTENT(INOUT)    :: proj1(nbnd, nks/nspin, nspin) 
+  REAL(DP), INTENT(INOUT)    :: proj2(nbnd, nks/nspin, nspin) 
+  CHARACTER(256),INTENT(IN)  :: filproj1, filproj2
+  INTEGER, INTENT (IN)       :: nspin
+  INTEGER                    :: dum_i, is, ibnd, ik
+  CHARACTER(256)             :: filename1, filename2
+  !
+  DO is = 1, nspin 
+    !
+    IF (is == 1) THEN 
+       filename1=trim(filproj1)//'_up.proj'
+       filename2=trim(filproj2)//'_up.proj'
+    ELSEIF (is == 2) THEN
+       filename1=trim(filproj1)//'_down.proj'
+       filename2=trim(filproj2)//'_down.proj'
+    ELSE
+       CALL errore('epsilon', 'wrong spin chennel', is)
+    ENDIF
+    ! 
+    WRITE(stdout,'(5X, "ispin =", i5, "Proj files =", 2(A32, 5X) )') is, TRIM(filename1), TRIM(filename2)
+
+    OPEN (127, file=TRIM(filename1))
+    OPEN (128, file=TRIM(filename2))
+    !
+    DO ik = 1, nks/nspin
+      DO ibnd = 1, nbnd
+         READ(127,*) dum_i, dum_i, proj1(ibnd, ik, is)
+         READ(128,*) dum_i, dum_i, proj2(ibnd, ik, is)
+         !WRITE(*,*) "NICOLA", ik, ibnd, proj1(ibnd, ik, is), proj2(ibnd, ik, is)
+      ENDDO
+    ENDDO
+    !
+    CLOSE (127)
+    CLOSE (128)
+    !
+  ENDDO
+  !
+  RETURN
+  !
+END SUBROUTINE read_proj
