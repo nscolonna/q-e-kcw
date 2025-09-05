@@ -53,6 +53,7 @@ END subroutine read_wannier
   USE io_global,            ONLY : ionode, ionode_id
   USE klist,                ONLY : nkstot, xk
   USE cell_base,            ONLY : bg
+  USE lsda_mod,             ONLY : nspin
   USE wvfct,                ONLY : nbnd
   USE io_global,            ONLY : stdout
   !
