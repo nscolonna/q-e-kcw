@@ -262,11 +262,20 @@ CONTAINS
     !
     IMPLICIT NONE
     CHARACTER(LEN=*), INTENT(IN) :: attrname, attrval_c
+#if defined(__GFORTRAN__) && (__GNUC__ == 15)
+    ! Gfortran 15 bug
+    CHARACTER(LEN=:), ALLOCATABLE :: attrlist_tmp
+#endif
     !
     IF ( .NOT. ALLOCATED(attrlist) ) THEN
        attrlist = ' '//TRIM(attrname)//'="'//TRIM(attrval_c)//'"'
     ELSE
+#if defined(__GFORTRAN__) && (__GNUC__ == 15)
+       attrlist_tmp = attrlist
+       attrlist = attrlist_tmp // ' ' // TRIM(attrname)//'="'//TRIM(attrval_c)//'"'
+#else
        attrlist = attrlist // ' ' // TRIM(attrname)//'="'//TRIM(attrval_c)//'"'
+#endif
     END IF
     !
   END SUBROUTINE add_c_attr
