@@ -1631,8 +1631,9 @@ CONTAINS
         dt_curr = dt_curr*f_dec        
      END IF
      ! report current parameters 
-     WRITE (stdout, '(/,5X, "FIRE Parameters: P = ", F10.8 ", dt = " F5.2", & 
-          alpha = " F5.3, " nsteppos = ", I3, " at step", I3, /)' ) P, dt_curr, alpha, nsteppos, istep
+     WRITE (stdout, '(/,5X, "FIRE Parameters: P = ", F10.8, ", dt = ", F5.2, & 
+          &  ", alpha = ", F5.3, ", nsteppos = ", I3, " at step ", I3, /)' ) &
+          & P, dt_curr, alpha, nsteppos, istep
      !
      ! calculate v(t+dt) = v(t) + a(t)*dt  
      !
@@ -1742,6 +1743,7 @@ CONTAINS
       END IF
       !
       IF ( .NOT.file_exists ) THEN
+         CLOSE( UNIT = 4, STATUS = 'DELETE' )
          !
          ! ... the file is absent :  simulation is starting from scratch
          !

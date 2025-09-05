@@ -13,7 +13,7 @@ cmake_minimum_required(VERSION 3.20 FATAL_ERROR)
 set(CMAKE_POLICY_DEFAULT_CMP0048 NEW)
 
 project(qe
-    VERSION 7.4
+    VERSION 7.5
     DESCRIPTION "ESPRESSO: opEn-Source Package for Research in Electronic Structure, Simulation, and Optimization"
     LANGUAGES Fortran C)
 
@@ -668,6 +668,22 @@ if(QE_ENABLE_PROFILE_NVTX)
 endif(QE_ENABLE_PROFILE_NVTX)
 
 ###########################################################
+# FLAGS at the project level
+###########################################################
+string(TOUPPER "${CMAKE_BUILD_TYPE}" THIS_CONFIG)
+
+foreach(lang IN ITEMS C Fortran)
+  message("Project ${lang}_FLAGS: ${CMAKE_${lang}_FLAGS} ${CMAKE_${lang}_FLAGS_${THIS_CONFIG}}")
+endforeach(lang IN ITEMS C Fortran)
+
+get_directory_property(TMP_PROJECT_INCLUDE_DIRECTORIES INCLUDE_DIRECTORIES)
+message("Project INCLUDE_DIRECTORIES: ${TMP_PROJECT_INCLUDE_DIRECTORIES}")
+
+foreach(target_type IN ITEMS EXE SHARED)
+  message("Project ${target_type}_LINKER_FLAGS: ${CMAKE_${target_type}_LINKER_FLAGS} ${CMAKE_${target_type}_LINKER_FLAGS_${THIS_CONFIG}}")
+endforeach(target_type IN ITEMS EXE SHARED)
+
+###########################################################
 # Components
 ###########################################################
 add_subdirectory(external)
@@ -695,6 +711,7 @@ add_subdirectory(TDDFPT)
 add_subdirectory(XSpectra)
 add_subdirectory(QEHeat)
 add_subdirectory(KCW)
+add_subdirectory(PIOUD)
 add_subdirectory(GUI)
 if(QE_ENABLE_DOC)
     add_subdirectory(Doc)
