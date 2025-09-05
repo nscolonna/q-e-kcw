@@ -198,7 +198,6 @@ ruotaijk.o \
 run_pwscf.o \
 s_1psi.o \
 s_psi.o \
-s_psi_acc.o \
 save_in_cbands.o \
 save_in_electrons.o \
 scale_h.o \
@@ -279,12 +278,8 @@ d3hess_mod.o
 
 # CUDA Fortran versions of routines
 PWLIBS += \
-  h_psi_gpu.o \
   vhpsi_gpu.o \
   rotate_wfc_gpu.o \
-  hs_1psi_gpu.o \
-  hs_psi_gpu.o \
-  s_1psi_gpu.o \
   utils_gpu.o \
   oscdft_functions_gpu.o
 
