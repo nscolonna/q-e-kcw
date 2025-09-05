@@ -253,7 +253,7 @@ set(src_pw
    # CUDA Fortran
    src/rotate_wfc_gpu.f90
    src/utils_gpu.f90
-   src/vhpsi_gpu.f90
+   src/vhpsi_gpu.f90)
 # OSCDFT
 if (QE_ENABLE_OSCDFT)
     list(APPEND src_pw
