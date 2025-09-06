@@ -282,7 +282,6 @@ SUBROUTINE h_psi_( lda, n, m, psi, hpsi )
         CALL vhpsi_nc( lda, n, m, psi, hpsi )
         !$acc update device(psi, hpsi)
      ELSE
-        CALL vhpsi( lda, n, m, psi, hpsi )
         IF ( use_gpu .and. (lda_plus_u_kind.EQ.0 .OR. lda_plus_u_kind.EQ.1) ) THEN
           ! DFT + U
           CALL vhpsi_gpu( lda, n, m, psi, hpsi )  ! DFT+U
