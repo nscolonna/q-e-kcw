@@ -11,6 +11,8 @@ SUBROUTINE vhpsi( ldap, np, mps, psip, hpsi )
   !-----------------------------------------------------------------------
   !! This routine computes the Hubbard potential applied to the electronic
   !! structure of the current k-point. The result is added to hpsi.
+  !! Offset of atomic wavefunctions initialized in setup and stored in offsetU
+  !! FIXME: DFT+U+V not yet ported to GPU
   !
   USE kinds,         ONLY : DP
   USE becmod,        ONLY : bec_type, calbec, allocate_bec_type, &
@@ -46,21 +48,23 @@ SUBROUTINE vhpsi( ldap, np, mps, psip, hpsi )
   !
   CALL start_clock('vhpsi')
   !
-  ! Offset of atomic wavefunctions initialized in setup and stored in offsetU
-  !
-  ! Allocate the array proj
-  CALL allocate_bec_type ( nwfcU,mps, proj )
-  !
-  ! proj = <wfcU|psip>
-  CALL calbec (np, wfcU, psip, proj)
-  ! 
   IF ( lda_plus_u_kind.EQ.0 .OR. lda_plus_u_kind.EQ.1 ) THEN
-     CALL vhpsi_U ()  ! DFT+U
+     ! 
+     CALL vhpsi_gpu ( ldap, np, mps, psip, hpsi )
+     !
   ELSEIF ( lda_plus_u_kind.EQ.2 ) THEN
+     !
+     ! Allocate the array proj = <wfcU|psip>
+     CALL allocate_bec_type ( nwfcU,mps, proj )
+     !
+     !$acc update host(psip, hpsi)
+     CALL calbec (np, wfcU, psip, proj)
      CALL vhpsi_UV () ! DFT+U+V
+     !$acc update device(hpsi)
+     !
+     CALL deallocate_bec_type (proj)
+     !
   ENDIF
-  !
-  CALL deallocate_bec_type (proj)
   !
   CALL stop_clock('vhpsi')
   !
@@ -68,168 +72,6 @@ SUBROUTINE vhpsi( ldap, np, mps, psip, hpsi )
   !
 CONTAINS
   !
-SUBROUTINE vhpsi_U ()
-  !
-  ! This routine applies the Hubbard potential with U_I
-  ! to the KS wave functions. 
-  !
-  USE ldaU,      ONLY : Hubbard_lmax, ldim_back, ldmx_b, Hubbard_l3
-  !
-  IMPLICIT NONE
-  INTEGER :: na, nt, ldim, ldim0
-  !
-  DO nt = 1, ntyp
-     !
-     ! Compute the action of the Hubbard potential on the KS wave functions:
-     ! V_Hub |psip > = \sum v%ns |wfcU> <wfcU|psip>
-     ! where v%ns = U ( delta/2 - rho%ns ) is computed in v_of_rho
-     !
-     IF ( is_hubbard(nt) ) THEN
-        !  
-        ldim = 2*Hubbard_l(nt) + 1
-        !
-        IF (gamma_only) THEN
-           ALLOCATE ( rtemp(ldim,mps) )
-        ELSE
-           ALLOCATE ( ctemp(ldim,mps) )
-           ALLOCATE ( vaux (ldim,ldim) )
-        ENDIF
-        !
-        DO na = 1, nat
-           IF ( nt == ityp(na) ) THEN
-              IF (gamma_only) THEN
-                 CALL DGEMM ('n','n', ldim,mps,ldim, 1.0_dp, &
-                      v%ns(1,1,current_spin,na),2*Hubbard_lmax+1, &
-                      proj%r(offsetU(na)+1,1),nwfcU, 0.0_dp, rtemp, ldim)
-                 CALL DGEMM ('n','n', 2*np, mps, ldim, 1.0_dp, &
-                      wfcU(1,offsetU(na)+1), 2*ldap, rtemp, ldim, &
-                      1.0_dp, hpsi, 2*ldap)
-              ELSE
-                 !
-                 vaux(:,:) = v%ns(1:ldim,1:ldim,current_spin,na)
-                 !
-                 CALL ZGEMM ('n','n', ldim, mps, ldim, (1.0_dp,0.0_dp), &
-                      vaux, ldim, &
-                      proj%k(offsetU(na)+1,1),nwfcU,(0.0_dp,0.0_dp),ctemp,ldim)
-                 !
-                 CALL ZGEMM ('n','n', np, mps, ldim, (1.0_dp,0.0_dp), &
-                      wfcU(1,offsetU(na)+1), ldap, ctemp, ldim, &
-                      (1.0_dp,0.0_dp), hpsi, ldap)
-                 !
-              ENDIF
-           ENDIF
-        ENDDO
-        !
-        IF (gamma_only) THEN
-           DEALLOCATE ( rtemp )
-        ELSE
-           DEALLOCATE(vaux)
-           DEALLOCATE ( ctemp )
-        ENDIF
-        !
-     ENDIF
-     !
-     ! If the background is used then compute extra 
-     ! contribution to the Hubbard potential
-     !
-     IF ( is_hubbard_back(nt) ) THEN
-        !
-        ldim = ldim_back(nt)
-        !
-        IF (gamma_only) THEN
-           ALLOCATE ( rtemp(ldim,mps) )
-        ELSE
-           ALLOCATE ( ctemp(ldim,mps) )
-        ENDIF
-        !
-        DO na = 1, nat
-           IF ( nt == ityp(na) ) THEN
-              !
-              IF (gamma_only) THEN
-                 !
-                 ldim = 2*Hubbard_l2(nt)+1
-                 !
-                 CALL DGEMM ('n','n', ldim,mps,ldim, 1.0_dp, &
-                      v%nsb(1,1,current_spin,na),ldmx_b, &
-                      proj%r(offsetU_back(na)+1,1), &
-                      nwfcU, 0.0_dp, rtemp, ldim_back(nt))
-                 !
-                 CALL DGEMM ('n','n', 2*np, mps, ldim, 1.0_dp,   &
-                      wfcU(1,offsetU_back(na)+1), 2*ldap, rtemp, &
-                      ldim_back(nt), 1.0_dp, hpsi, 2*ldap)
-                 !
-                 IF (backall(nt)) THEN
-                    !
-                    ldim0 = 2*Hubbard_l2(nt)+1
-                    ldim  = 2*Hubbard_l3(nt)+1
-                    !
-                    CALL DGEMM ('n','n', ldim,mps,ldim, 1.0_dp,         &
-                         v%nsb(ldim0+1,ldim0+1,current_spin,na),        &
-                         ldim_back(nt), proj%r(offsetU_back1(na)+1,1),  &
-                         nwfcU, 0.0_dp, rtemp, ldim_back(nt))
-                    !
-                    CALL DGEMM ('n','n', 2*np, mps, ldim, 1.0_dp,       &
-                         wfcU(1,offsetU_back1(na)+1), 2*ldap, rtemp,    &
-                         ldim_back(nt), 1.0_dp, hpsi, 2*ldap)
-                    !
-                 ENDIF
-                 !
-              ELSE
-                 !
-                 ldim = ldim_back(nt)
-                 !
-                 ALLOCATE(vaux(ldim,ldim))
-                 !
-                 vaux = (0.0_dp, 0.0_dp)
-                 vaux(:,:) = v%nsb(:,:,current_spin,na)
-                 !
-                 ldim = 2*Hubbard_l2(nt)+1
-                 !
-                 CALL ZGEMM ('n','n', ldim,mps,ldim, (1.0_dp,0.0_dp),   &
-                      vaux,ldim_back(nt), proj%k(offsetU_back(na)+1,1), &
-                      nwfcU, (0.0_dp,0.0_dp), ctemp, ldim_back(nt))
-                 !
-                 CALL ZGEMM ('n','n', np, mps, ldim, (1.0_dp,0.0_dp),   &
-                      wfcU(1,offsetU_back(na)+1), ldap, ctemp,          &
-                      ldim_back(nt), (1.0_dp,0.0_dp), hpsi, ldap)
-                 !
-                 IF (backall(nt)) THEN
-                    !
-                    ldim0 = 2*Hubbard_l2(nt)+1
-                    ldim  = 2*Hubbard_l3(nt)+1
-                    !
-                    CALL ZGEMM ('n','n', ldim,mps,ldim,(1.0_dp,0.0_dp), &
-                         vaux(ldim0+1,ldim0+1),ldim_back(nt),           &
-                         proj%k(offsetU_back1(na)+1,1), nwfcU,          &
-                         (0.0_dp,0.0_dp), ctemp, ldim_back(nt))
-                    ! 
-                    CALL ZGEMM ('n','n', np, mps, ldim, (1.0_dp,0.0_dp),&
-                         wfcU(1,offsetU_back1(na)+1), ldap, ctemp,      &
-                         ldim_back(nt), (1.0_dp,0.0_dp), hpsi, ldap)
-                    !
-                 ENDIF
-                 !
-                 DEALLOCATE(vaux)
-                 !
-              ENDIF
-           ENDIF
-        ENDDO
-        !
-        IF (gamma_only) THEN
-           DEALLOCATE ( rtemp )
-        ELSE
-           DEALLOCATE ( ctemp )
-        ENDIF
-        !
-     ENDIF
-     !
-  ENDDO
-  !
-  RETURN
-  !
-END SUBROUTINE vhpsi_U
-!--------------------------------------------------------------------------
-
 !--------------------------------------------------------------------------
 SUBROUTINE vhpsi_UV ()
   !
