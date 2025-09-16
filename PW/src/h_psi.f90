@@ -277,20 +277,11 @@ SUBROUTINE h_psi_( lda, n, m, psi, hpsi )
   IF ( lda_plus_u .AND. Hubbard_projectors.NE."pseudo" ) THEN
      !
      IF ( noncolin ) THEN
-        !FIXME: vhpsi_nc must be ported to GPU
         !$acc update host(psi, hpsi)
         CALL vhpsi_nc( lda, n, m, psi, hpsi )
-        !$acc update device(psi, hpsi)
+        !$acc update device(hpsi)
      ELSE
-        IF ( use_gpu .and. (lda_plus_u_kind.EQ.0 .OR. lda_plus_u_kind.EQ.1) ) THEN
-          ! DFT + U
-          CALL vhpsi_gpu( lda, n, m, psi, hpsi )  ! DFT+U
-        ELSE
-          ! DFT+U+V  FIXME: must be ported to GPU
-          !$acc update host(psi, hpsi)
-          CALL vhpsi( lda, n, m, psi, hpsi )
-          !$acc update device(psi, hpsi)
-        ENDIF
+        CALL vhpsi( lda, n, m, psi, hpsi )
      ENDIF
      !
   ENDIF

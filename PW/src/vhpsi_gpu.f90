@@ -10,6 +10,7 @@ SUBROUTINE vhpsi_gpu( ldap, np, mps, psip, hpsi )
   !-----------------------------------------------------------------------
   !! This routine computes the Hubbard potential applied to the electronic
   !! structure of the current k-point. The result is added to hpsi.
+  !! GPU version with OpenACC
   !
   USE kinds,         ONLY : DP
   USE ldaU,          ONLY : Hubbard_lmax, Hubbard_l, is_hubbard,   &
@@ -36,18 +37,12 @@ SUBROUTINE vhpsi_gpu( ldap, np, mps, psip, hpsi )
   COMPLEX(DP), INTENT(INOUT) :: hpsi(ldap,mps)
   !! Hamiltonian dot psi
   !
-  IF ( lda_plus_u_kind  == 2 ) &
-       CALL errore('vhpsi', 'DFT+U+V case not implemented for GPU', 1 )
-  IF ( lda_plus_u_kind /= 0 .AND. lda_plus_u_kind /= 1 ) RETURN
   IF ( .NOT. ANY(is_hubbard(:)) .AND. .NOT.ANY(is_hubbard_back(:)) ) RETURN
   !
   CALL start_clock( 'vhpsi' )
   !
-  ! Offset of atomic wavefunctions initialized in setup and stored in offsetU
-  !
   !$acc data present(wfcU)
   !
-  ! proj = <wfcU|psip>
   IF (gamma_only) THEN
      CALL vhpsi_gamma_acc ()
   ELSE
