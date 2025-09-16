@@ -120,7 +120,8 @@ echo setting DFLAGS... $try_dflags
 # xlf compilers (AIX and powerpc) want comma-separated -D directives
 X_AC_QE_AIX_DFLAGS()
 
-if test "$iflags" = "" ; then iflags="$try_iflags" ; fi
+# prepend input $IFLAGS to what configure has found
+iflags="$iflags $try_iflags" 
 echo setting IFLAGS... $iflags
 
 # export additional settings to generated files

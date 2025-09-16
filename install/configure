@@ -2102,8 +2102,9 @@ ac_compiler_gnu=$ac_cv_c_compiler_gnu
 # Non-standard precious variables
 
 
-# store variables from the environment, if set (may be or not be set)
+# store variables from the environment, if set (may or may not be set)
 # If set, they take precedence over configure internal choice.
+# Exception: IFLAGS is prepended to internally found value
 # Flags and libraries are accepted without further testing;
 # compilers are tested. Specify compiler name only, not the full path
 # (i.e. F90=/usr/local/bin/f90 may not work, use F90=f90)
@@ -2115,7 +2116,7 @@ cpp=$CPP           # C preprocessor (as above)
 cflags=$CFLAGS     # Flags for C compiler
 cppflags=$CPPFLAGS # Flags for C preprocessor
 dflags=$DFLAGS     # Fortran file preprocessing options, e.g. -D__DEFINE_THIS
-iflags=$IFLAGS     # Location of include files - shouldn't be needed
+iflags=$IFLAGS     # Location of include files, may be needed by some libraries
 f90=$F90           # Fortran 90 serial compiler (must be in execution path)
 mpif90=$MPIF90     # Fortran 90 parallel compiler (must be in execution path)
 fflags=$FFLAGS     # Flags for Fortran 77 and 90 compilers
@@ -6317,7 +6318,7 @@ if test "$have_mkl" -eq 1
       unset ac_cv_search_pdgemr2d # clear cached value
       LIBS="$mpi_libs $blas_libs"
 # Choose Intel scalapack for Intel MPI
-      if test $with_scalapack -eq 2 || test "$mpif90" == "mpiifx"  || test "$mpif90" == "mpiifort" 
+      if test $with_scalapack -eq 2 || test "$mpif90" == "mpiifx" || test "$mpif90" == "mpiifort"
       then
          scalapack_libs=-lmkl_blacs_intelmpi_lp64
       else
@@ -7513,7 +7514,8 @@ fi
 
 
 
-if test "$iflags" = "" ; then iflags="$try_iflags" ; fi
+# prepend input $IFLAGS to what configure has found
+iflags="$iflags $try_iflags"
 echo setting IFLAGS... $iflags
 
 # export additional settings to generated files
