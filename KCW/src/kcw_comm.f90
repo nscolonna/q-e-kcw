@@ -109,6 +109,10 @@ MODULE control_kcw
   !
   COMPLEX(DP), ALLOCATABLE :: Vcoulomb(:,:,:,:), Wcoulomb(:,:,:,:)
   !
+  INTEGER, ALLOCATABLE :: rir(:,:) !rotate grid using a symmetry operation. to 
+  !build it, use kcw_set_symm
+  !first dim -> number of r points
+  !second dim-> number of symmetries
   REAL(DP),    ALLOCATABLE :: r(:,:)! position in the real grid
                                     ! defined by q-e
   INTEGER                  :: ir_end !last index of r array

@@ -64,7 +64,9 @@ write_qlist_ibz.o\
 read_qlist_ibz.o\
 kcw_read_sym.o\
 kcw_write_sym.o\
-kcw_deallocate_symmetry_arrays.o
+kcw_deallocate_symmetry_arrays.o\
+kcw_set_symm.o\
+rotate_rhowann_r.o
 
 LRMODS = ../../LR_Modules/liblrmod.a
 PWOBJS = ../../PW/src/libpw.a 

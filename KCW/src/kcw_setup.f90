@@ -356,9 +356,11 @@ subroutine kcw_setup
 #ifdef DEBUG
       sh_q  = sum (0.5D0*CONJG(rhog (:,1)) * vh_rhog(:) )*omega
       CALL mp_sum (sh_q,    intra_bgrp_comm)
-      WRITE(1005,*) "iwann=", i, "q=", iq, "weight=", weight(iq), &
-                    "nq eq=", INT(weight(iq)/weight(iq)), &
-                    "SH="   , REAL(sh_q), AIMAG(sh_q)
+!      WRITE(1005,*) "iwann=", i, "q=", iq, "weight=", weight(iq), &
+!                    "nq eq=", INT(weight(iq)/weight(iq)), &
+!                    "SH="   , REAL(sh_q), AIMAG(sh_q)
+      WRITE(1005,'(" iwann=", i5, " q=", F12.8, " weight=", F12.8, " nq eq=", i5, " SH=", 2F20.16)') &
+                i, iq, weight(iq), INT(weight(iq)/weight(iq)), REAL(sh_q), AIMAG(sh_q)
 #endif
       !
     ENDDO
@@ -515,9 +517,11 @@ subroutine kcw_setup
 #ifdef DEBUG
         sh_q  =sum (0.5D0*CONJG(rhog (:,1)) * vh_rhog(:) )*omega
         CALL mp_sum (sh_q,    intra_bgrp_comm)
-        WRITE(2005,*) "iwann=", i, "q=", iq, "weight=", wq_ibz(iq_ibz, i), &
-                      "nq eq=", INT(wq_ibz(iq_ibz, i)/weight(iq)), &
-                      "SH="   , REAL(sh_q), AIMAG(sh_q)
+!        WRITE(2005,*) "iwann=", i, "q=", iq, "weight=", wq_ibz(iq_ibz, i), &
+!                      "nq eq=", INT(wq_ibz(iq_ibz, i)/weight(iq)), &
+!                      "SH="   , REAL(sh_q), AIMAG(sh_q)
+        WRITE(2005,'(" iwann=", i5, " q=", F12.8, " weight=", F12.8, " nq eq=", i5, " SH=", 2F20.16)') &
+                i, iq, wq_ibz(iq_ibz, i), INT(wq_ibz(iq_ibz, i)/weight(iq)),  REAL(sh_q), AIMAG(sh_q)
 #endif
       END DO!iwann
     END DO!iq

@@ -21,7 +21,7 @@ SUBROUTINE find_IBZ_q()
     USE fft_base,              ONLY : dffts
     USE control_flags,         ONLY : gamma_only
     USE klist,                 ONLY : xk     
-    USE symm_base,             ONLY : ft, nsym, s, sr
+    USE symm_base,             ONLY : ft, nsym, s, sr, t_rev
     USE cell_base,             ONLY : omega
     USE io_kcw,                ONLY : read_rhowann, read_rhowann_g
     USE fft_interfaces,        ONLY : invfft, fwfft
@@ -43,6 +43,7 @@ SUBROUTINE find_IBZ_q()
     COMPLEX(DP), ALLOCATABLE :: rhowann(:,:,:,:)
     COMPLEX(DP), ALLOCATABLE :: rhowann_aux(:)
     COMPLEX(DP), ALLOCATABLE :: rho_rotated(:,:)
+    COMPLEX(DP), ALLOCATABLE :: rho_rotated_(:,:)
     COMPLEX(DP), ALLOCATABLE :: rhog(:)
     COMPLEX(DP), ALLOCATABLE :: rhog_all(:,:)
     CHARACTER (LEN=256)      :: file_base
@@ -59,16 +60,23 @@ SUBROUTINE find_IBZ_q()
     COMPLEX (DP) :: int_rho_Rq, eiRqR
     INTEGER :: is_sym( nsym )
     LOGICAL :: respected 
+    INTEGER :: nkstot_eff
     !
     !
     CALL start_clock ( 'check_symm' )
     !
+    IF (nspin == 4) THEN
+      nkstot_eff = nkstot
+    ELSE
+      nkstot_eff = nkstot/nspin
+    ENDIF 
     IMAG = CMPLX(0.D0, 1.D0, kind=DP)
     ALLOCATE ( rhog (ngms) )
-    ALLOCATE ( rhowann ( dffts%nnr, nkstot/nspin, num_wann, nrho) )
+    ALLOCATE ( rhowann ( dffts%nnr, nkstot_eff, num_wann, nrho) )
     ALLOCATE ( rhowann_aux(dffts%nnr) )
     ALLOCATE ( rhog_all(ngms,nrho) )
     ALLOCATE ( rho_rotated( dffts%nnr, nrho) )
+    ALLOCATE ( rho_rotated_( dffts%nnr, nrho) )
     ALLOCATE ( phase (dffts%nnr) )
     ALLOCATE ( nsym_w_k(num_wann) )
     ALLOCATE ( nsym_w_q(num_wann) )
@@ -80,6 +88,8 @@ SUBROUTINE find_IBZ_q()
     WRITE( stdout, '(7X, "SYM : nkstot=", I5, 3X, "nsym tot=", I5, 3X, "num_wann=", I5)') nkstot, nsym,num_wann
     !
     !
+    CALL kcw_set_symm( dffts%nr1,  dffts%nr2,  dffts%nr3, &
+    dffts%nr1x, dffts%nr2x, dffts%nr3x )  
     nsym_w_k = 0
     nsym_w_q = 0
     !
@@ -95,6 +105,7 @@ SUBROUTINE find_IBZ_q()
           & // TRIM(int_to_char(iq))//'/'
       !
       DO iwann=1, num_wann
+        !
         DO ip = 1, nrho
           !
           !read density rhowann from file, store it in rho_iwann
@@ -121,6 +132,7 @@ SUBROUTINE find_IBZ_q()
           !end of storing rhowann
           !
         END DO ! ip
+        !
       END DO!iwann
     END DO !iq
     !
@@ -141,35 +153,57 @@ SUBROUTINE find_IBZ_q()
         sym_only_for_q(nsym_w_q(iwann) + 1, iwann) = .FALSE.
         !
         DO iq = 1, nqstot
+          !
+          x_q_cryst(:)=x_q(:,iq)
+          CALL cryst_to_cart(1,x_q_cryst,at,-1)
+          CALL rotate_xk(iq, isym, iRq, Gvector, Gvector_cryst)
+          IF ( ANY( Gvector_cryst .EQ. 0.5 ) ) THEN 
+            EXIT
+          END IF
+          !
           ir = 1
           rhowann_aux = 0.D0
           !
           ! calculate rho_rotated = rho_q(R^{-1}.r-f)*EXP(-i k.f)
           !
-  
-          DO ip = 1, nrho 
-            rhowann_aux(:) = rhowann(:,iq, iwann,ip)
-            CALL fwfft ('Rho', rhowann_aux(:), dffts)
-            rhog_all(:,ip)  = rhowann_aux(dffts%nl(:))    
-          END DO
-          CALL sym_rho(nrho, rhog_all, is_sym)
-          DO ip = 1, nrho
-            rhowann_aux(dffts%nl(:)) = rhog_all(:,ip)  
-            CALL invfft ('Rho', rhowann_aux(:), dffts)
-            rho_rotated(:, ip) = rhowann_aux(:)
-          END DO
-  
-          x_q_cryst(:)=xk(:,iq)
-          CALL cryst_to_cart(1,x_q_cryst,at,-1)
-          rho_rotated(:,:) = rho_rotated(:,:)*EXP(-IMAG*tpi*dot_product(x_q_cryst(:),ft(:,isym)))
+          !DO ip = 1, nrho 
+          !  rhowann_aux(:) = rhowann(:,iq, iwann,ip)
+          !  CALL fwfft ('Rho', rhowann_aux(:), dffts)
+          !  rhog_all(:,ip)  = rhowann_aux(dffts%nl(:))    
+          !END DO
+          !  CALL sym_rho(nrho, rhog_all, is_sym)
+          !DO ip = 1, nrho
+          !  rhowann_aux(:) = 0.
+          !  rhowann_aux(dffts%nl(:)) = rhog_all(:,ip)  
+          !  CALL invfft ('Rho', rhowann_aux(:), dffts)
+          !  rho_rotated_(:, ip) = rhowann_aux(:)
+          !END DO
+
+          DO ip = 1,nrho
+            CALL rotate_rhowann_r(isym, rhowann(:,iq,iwann,ip), rho_rotated_(:,ip))
+          END DO 
+          !WRITE(*,*) "iq=", iq, "isym=", isym, "iwann=", iwann, "max rho_r="&
+          !  "rho_q(r)-rho_q(R^-1r-f)=", SUM(ABS(rhowann(:,iq,iwann,1) - rho_rotated_(:,1)))
+          rho_rotated(:,1) = rho_rotated_(:,1)
+          IF( nrho .eq. 4 ) THEN 
+            DO ip = 2, nrho
+              rho_rotated(:,ip) = sr(ip-1, 1, isym) * rho_rotated_(:, 2) + &
+                                  sr(ip-1, 2, isym) * rho_rotated_(:, 3) + &
+                                  sr(ip-1, 3, isym) * rho_rotated_(:, 4)
+              IF(t_rev(isym) .eq. 1) rho_rotated(:,ip) = -rho_rotated(:,ip)
+            END DO
+          END IF
+          rho_rotated(:,:) = rho_rotated(:,:)*EXP(-IMAG*tpi*dot_product(x_q_cryst(:),ft(:,isym))) 
+          IF (t_rev(isym) .eq. 1) THEN 
+            rho_rotated(:,:) = CONJG(rho_rotated(:,:))
+          END IF
+      !
+!          DO ip=1, nrho
+!            WRITE(*,*) "rho_rotated(:,ip) - rhowann(:,iq,iwann,ip)", SUM(ABS(rho_rotated(:,ip)-rhowann(:,iq,iwann,ip)))
+!          END DO
           !
           ! rotate q point
           !
-          CALL rotate_xk(iq, isym, iRq, Gvector, Gvector_cryst)
-          IF ( ANY( Gvector_cryst .EQ. 0.5 ) ) THEN 
-            EXIT
-          END IF
-        
           !WRITE(*,*) "k=", xk(:,iq), "Rk=", xk(:, iRq), "Gvector", Gvector, "isym=", isym
           !
           ! compare the two rho, in rho_Rq we apply the phase factor:
@@ -178,68 +212,77 @@ SUBROUTINE find_IBZ_q()
           CALL calculate_phase(Gvector, phase)
           !
           !
+          delta_rho = 0.
+          int_rho_Rq =0.
           DO ip = 1, nrho
-              rhowann_aux(:) = rho_rotated(:,ip) - phase(:)*rhowann(:,iRq,iwann,ip) 
+            rhowann_aux(:) = rho_rotated(:,ip) - phase(:)*rhowann(:,iRq,iwann,ip) 
             !
             ! integrate difference and normalize with respect to number of r points in the grid
             !delta_rho = SUM( ABS(rhowann_aux(:)) )/(dffts%nr1*dffts%nr2*dffts%nr3)
-            delta_rho = SUM( (rhowann_aux(:)) )/(dffts%nr1*dffts%nr2*dffts%nr3)
-            CALL mp_sum (delta_rho, intra_bgrp_comm)
-            !
-            int_rho_Rq = SUM( phase(:)*rhowann(:,iRq,iwann,ip)  ) / (dffts%nr1*dffts%nr2*dffts%nr3)
-            CALL mp_sum (int_rho_Rq, intra_bgrp_comm)
-            !
-            !
-            IF (use_wct .AND. ABS(delta_rho) .gt. 1D-02) THEN 
-              ! Try with the same Wannier in different cells:
-              ! Each q contribution to the self-Hxc or to the screened self-Hxc (i.e. the alpha coeff)
-              ! does not depend on the homecell of the Wannier density contribution at q. 
-              ! This means we can use also the symmetries that send 
-              ! \rho_q^{0n}(R^-1r -f) in \rho_Rq^{Ln}(r) = e^{-i(Rq).L}\rho_Rq^{0n}(r)
-              ! with L any lattice vector in the SC to reduce the number of q points. 
-              !
-              ! delta_rho_R = int [\rho_q^{0n}(R^-1r -f) - e^{-i(Rq).L}\rho_Rq^{0n}(r)] =
-              !             = int [\rho_q^{0n}(R^-1r -f) - \rho_Rq^{0n}(r)] + (1- e^{-i(Rq).L}) * \int [\rho_Rq^{0n}(r)]
-              ! 
-              ! NB: this is not true for the density response at q. For the symmetrization of the density response we must
-              ! use only the "real" symmetry of the wannier density.
-              ! sym_only_for_q store information of wheter the symmetry is a real one (FALSE) or if its an "extra" one to 
-              ! be used only for the reduction of the q points (TRUE)
-              !
-               DO ir = 1, nkstot/nspin
-                 eiRqR=EXP( -IMAG*tpi*DOT_PRODUCT(x_q(:,iRq),Rvect(:,ir)) )
-                 delta_rho_R = delta_rho + (CMPLX(1.D0,0.D0, kind=DP) - eiRqR)*int_rho_Rq
-                 !WRITE (stdout, *) "          ir  =", ir,  "Rvect  =", Rvect(1:3,ir)
-                 !WRITE (stdout, *) "          iRq =", iRq, "x(iRq) =", x_q(1:3,iRq)
-                 !WRITE (stdout, *) "          \int rho_Rq(r) dr = ", int_rho_Rq, "exp(-iRq*Rvec) =", eiRqR
-                 !WRITE (stdout,'(10X, "ir=", I5, 3X, "SUM =", 2F20.12)')&
-                 !    ir, delta_rho 
-                 !WRITE (stdout,'(10X, "ir=", I5, 3X, "SUM =", 2F20.12)')&
-                 !    ir, delta_rho_R
-                 !WRITE (stdout,*)
-                 IF (ABS(delta_rho_R) .lt. 1D-02) THEN 
-                    delta_rho = delta_rho_R
-                    sym_only_for_q(nsym_w_q(iwann) + 1, iwann) = .TRUE.
-                    EXIT 
-                 ENDIF 
-               ENDDO
-            ENDIF!use_wct
-            ! 
-            IF (kcw_iverbosity .gt. 2 ) & 
-               !WRITE(stdout,'(7X, "iq=", I5, 3X, "isym =", I5, 3X, "iwann =", I5, 3X, "SUM =", F20.12)')&
-               !   iq, isym, iwann, delta_rho
-               WRITE(stdout,'(7X, "iq=", I5, 3X, "isym =", I5, 3X, "iwann =", I5, 3X, "SUM =", 2F20.12, 3X, "(ir =", I5 " )")')&
-                     iq, isym, iwann, REAL(delta_rho), AIMAG(delta_rho), ir
-            !
-            IF ( ABS(REAL(delta_rho)) .gt. 1.D-02 .OR. ABS(AIMAG(delta_rho)) .gt. 1D-02)  THEN 
-               IF (kcw_iverbosity .gt. 2) WRITE(stdout, '(13X, "isym =", I5, 3X, "NOT RESPECTED, skipping")') isym
-               respected = .false.
-               EXIT
-            ENDIF
-            respected = .true.
-          END DO ! ip
+            delta_rho = delta_rho + SUM( ABS(rhowann_aux(:)) )/(nrho*dffts%nr1*dffts%nr2*dffts%nr3)
+            !int_rho_Rq = int_rho_Rq + SUM( phase(:)*rhowann(:,iRq,iwann,ip)  ) / (nrho*dffts%nr1*dffts%nr2*dffts%nr3)
+          END DO
+          CALL mp_sum (delta_rho, intra_bgrp_comm)
           !
-          IF  ( .not. respected ) EXIT 
+          CALL mp_sum (int_rho_Rq, intra_bgrp_comm)
+          !
+          !
+          IF (use_wct .AND. ABS(delta_rho) .gt. 1D-02) THEN 
+            ! Try with the same Wannier in different cells:
+            ! Each q contribution to the self-Hxc or to the screened self-Hxc (i.e. the alpha coeff)
+            ! does not depend on the homecell of the Wannier density contribution at q. 
+            ! This means we can use also the symmetries that send 
+            ! \rho_q^{0n}(R^-1r -f) in \rho_Rq^{Ln}(r) = e^{-i(Rq).L}\rho_Rq^{0n}(r)
+            ! with L any lattice vector in the SC to reduce the number of q points. 
+            !
+            ! The following is not true anymore when we have the ABS value (as it should have)
+            ! We cannot use the identity in the second line. The integrale needs to be calculated 
+            ! for each R. 
+            ! WRONG! 
+            ! delta_rho_R = int [\rho_q^{0n}(R^-1r -f) - e^{-i(Rq).L}\rho_Rq^{0n}(r)] =
+            !             = int [\rho_q^{0n}(R^-1r -f) - \rho_Rq^{0n}(r)] + (1- e^{-i(Rq).L}) * \int [\rho_Rq^{0n}(r)]
+            ! 
+            ! NB: this is not true for the density response at q. For the symmetrization of the density response we must
+            ! use only the "real" symmetry of the wannier density.
+            ! sym_only_for_q store information of wheter the symmetry is a real one (FALSE) or if its an "extra" one to 
+            ! be used only for the reduction of the q points (TRUE)
+            !
+            DO ir = 1, nqstot
+              eiRqR=EXP( -IMAG*tpi*DOT_PRODUCT(x_q(:,iRq),Rvect(:,ir)) )
+              delta_rho_R = 0.D0
+              DO ip = 1, nrho
+                rhowann_aux(:) = rho_rotated(:,ip) - phase(:)*eiRqR*rhowann(:,iRq,iwann,ip)
+                delta_rho_R = delta_rho_R + SUM( ABS(rhowann_aux(:)) )/(nrho*dffts%nr1*dffts%nr2*dffts%nr3)
+              ENDDO
+              !delta_rho_R = delta_rho + (CMPLX(1.D0,0.D0, kind=DP) - eiRqR)*int_rho_Rq
+              !WRITE (stdout, *) "          ir  =", ir,  "Rvect  =", Rvect(1:3,ir)
+              !WRITE (stdout, *) "          iRq =", iRq, "x(iRq) =", x_q(1:3,iRq)
+              !WRITE (stdout, *) "          \int rho_Rq(r) dr = ", int_rho_Rq, "exp(-iRq*Rvec) =", eiRqR
+              !WRITE (stdout,'(10X, "ir=", I5, 3X, "SUM =", 2F20.12)')&
+              !    ir, delta_rho 
+              !WRITE (stdout,'(10X, "ir=", I5, 3X, "SUM =", 2F20.12)')&
+              !    ir, delta_rho_R
+              !WRITE (stdout,*)
+              IF (ABS(delta_rho_R) .lt. 1D-02) THEN 
+                 delta_rho = delta_rho_R
+                 sym_only_for_q(nsym_w_q(iwann) + 1, iwann) = .TRUE.
+                 EXIT 
+              ENDIF 
+            ENDDO
+          ENDIF!use_wct
+          ! 
+          IF (kcw_iverbosity .gt. 2 ) & 
+             !WRITE(stdout,'(7X, "iq=", I5, 3X, "isym =", I5, 3X, "iwann =", I5, 3X, "SUM =", F20.12)')&
+             !   iq, isym, iwann, delta_rho
+             WRITE(stdout,'(7X, "iq=", I5, 3X, "isym =", I5, 3X, "t_rev=", I5, 3X, "iwann =", I5,&
+                           3X, "SUM =", 2F20.12, 3X, "(ir =", I5 " )")')&
+                   iq, isym, t_rev(isym), iwann, REAL(delta_rho), AIMAG(delta_rho), ir
+          !
+          IF ( ABS(REAL(delta_rho)) .gt. 1.D-02 .OR. ABS(AIMAG(delta_rho)) .gt. 1D-02)  THEN 
+             IF (kcw_iverbosity .gt. 2) WRITE(stdout, '(13X, "isym =", I5, 3X, "NOT RESPECTED, skipping")') isym
+             EXIT
+          ENDIF
+          !
           IF( (iq .eq. nqstot) ) THEN
              IF(.NOT. sym_only_for_q(nsym_w_q(iwann) + 1, iwann) ) THEN
                nsym_w_k(iwann) = nsym_w_k(iwann) + 1
@@ -284,8 +327,8 @@ SUBROUTINE find_IBZ_q()
     USE kinds,                 ONLY : DP
     USE io_global,             ONLY : stdout
     USE symm_base,             ONLY:  sr                !symmetry operation in cartesian coordinates
+    USE symm_base,             ONLY:  t_rev
     USE symm_base,             ONLY:  invs              !index of inverse of symmetry op
-    USE klist,                 ONLY:  xk, nkstot        !k points in cartesian coordinates
     USE cell_base,             ONLY : at
     USE control_kcw,           ONLY : x_q
     !
@@ -306,6 +349,9 @@ SUBROUTINE find_IBZ_q()
     ! rotate k point
     !
     Rxk(:) = MATMUL(x_q(:, ik_torotate), sr(:,:,isym))
+    IF(t_rev(isym) .eq. 1) THEN 
+      Rxk(:) = -Rxk(:)
+    END IF
     !
     ! Find k point that differs a reciprocal lattice vector from the rotated one
     !
@@ -318,10 +364,9 @@ SUBROUTINE find_IBZ_q()
   SUBROUTINE find_kpoint(xk_, ik_, Gvector, Gvector_cryst)
     USE kinds,                 ONLY : DP
     USE io_global,             ONLY : stdout
-    USE klist,                 ONLY:  xk, nkstot        !k points in cartesian coordinates
     USE cell_base,             ONLY : at
     USE lsda_mod,              ONLY : nspin
-    USE control_kcw,           ONLY : x_q
+    USE control_kcw,           ONLY : x_q, nqstot
     !
     IMPLICIT NONE
     !
@@ -343,7 +388,7 @@ SUBROUTINE find_IBZ_q()
     LOGICAL               :: isGvec
     !
     Gvector_cryst(:) = 0.5 ! Impossible condition. If not changed at the end of this routine, something wrong
-    DO ik = 1, nkstot/nspin
+    DO ik = 1, nqstot
       !
       !delta_xk in cartesian
       delta_xk(:) = xk_(:) - x_q(:, ik)
