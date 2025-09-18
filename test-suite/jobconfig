@@ -17,6 +17,10 @@ inputs_args = ('berry.in', ''), ('berry-1.in', ''), ('berry-2.in','')
 program = PW
 inputs_args = ('cluster1.in', ''), ('cluster2.in', ''), ('cluster3.in',''), ('cluster4.in',''), ('cluster5.in',''), ('cluster6.in',''),
 
+[pw_irrbz/]
+program = PW
+inputs_args = ('scf.in', '')
+
 [pw_lsda/]
 program = PW
 inputs_args = ('lsda.in', ''), ('lsda-2.in', ''), ('lsda-cg.in', ''), ('lsda-mixing_localTF.in', ''), ('lsda-mixing_ndim.in', ''), ('lsda-mixing_TF.in', ''), ('lsda-nelup+neldw.in', ''), ('lsda-tot_magnetization.in', '')

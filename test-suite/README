@@ -90,6 +90,12 @@ The following features of the code are tested:
 - HSE hybrid functional, nq=2
 - HSE hybrid functional, nq=4
 
+###############
+# pw_irrbz : MoS2 monolayer #
+###############
+The following features of the code are tested:
+- Proper treatment of k points when a user-provided full k points are given (see GitLab merge request 2690)
+
 ####################
 # pw_langevin : H2 #
 ####################
