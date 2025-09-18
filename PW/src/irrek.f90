@@ -59,12 +59,20 @@ SUBROUTINE irreducible_BZ( nrot, s, nsym, minus_q, magnetic_sym, at, bg, &
    INTEGER :: isym, jsym, nks0, jk, irot, jrot, ik
    ! nks0: used to save the initial number of k-points
    ! ncos: total number of cosets
+   INTEGER :: count
+   !! Number of k points equivalent to ik-th k point
    REAL(DP) :: xkg(3), xks(3), xkn(3), one, xk_new(3,npk), wk_new(npk), wk_sum
    ! coordinates of the k point in crystal axis
    ! coordinates of the rotated k point
    ! weight of each coset
    ! buffer which contains the weight of k points
    ! total weight of k-points
+   REAL(DP) :: wk_for_ik
+   !! used to sum the weights of k points equivalent to ik-th k point
+   LOGICAL, ALLOCATABLE :: done(:)
+   !! True if the k-point has been already processed
+   INTEGER, ALLOCATABLE :: equivalent_with_ik(:)
+   !! Index of k points equivalent to ik-th k point
    !
    ! ... We compute the multiplication table of the group.
    !
@@ -137,6 +145,59 @@ SUBROUTINE irreducible_BZ( nrot, s, nsym, minus_q, magnetic_sym, at, bg, &
       ENDDO ! irot
    ENDDO ! jk
    !
+   ! Average weights of equivalent k points
+   !
+   ALLOCATE(equivalent_with_ik(nks))
+   ALLOCATE(done(nks))
+   done(:) = .FALSE.
+   equivalent_with_ik(:) = -1
+   !
+   DO ik = 1, nks
+      !
+      count = 1
+      wk_for_ik = wk_new(ik)
+      equivalent_with_ik(count) = ik
+      done(ik) = .TRUE.
+      !
+      ! Find list of k points equivalent to ik
+      !
+      DO isym = 1, nsym
+         !
+         xkn(:) = invs(:,1,isym) * xk_new(1, ik) + &
+                  invs(:,2,isym) * xk_new(2, ik) + &
+                  invs(:,3,isym) * xk_new(3, ik)
+         IF (magnetic_sym .AND. (t_rev(isym) == 1)) xkn = -xkn
+         !
+         DO jk = ik+1, nks
+            IF (.NOT. done(jk)) THEN
+               satm = are_k_equivalent(xk_new(:,jk), xkn)
+               IF (minus_q) satm = satm .OR. are_k_equivalent(xk_new(:,jk), -xkn)
+               !
+               ! If the k points are equivalent, update the count and mark as done
+               !
+               IF (satm) THEN
+                  count = count + 1
+                  wk_for_ik = wk_for_ik + wk_new(jk)
+                  equivalent_with_ik(count) = jk
+                  done(jk) = .TRUE.
+               ENDIF
+            ENDIF
+         ENDDO
+      ENDDO
+      !
+      ! Set the average weight for all equivalent k points
+      !
+      IF (count > 1) THEN
+         DO jk = 1, count
+            wk_new(equivalent_with_ik(jk)) = wk_for_ik / REAL(count, DP)
+         ENDDO
+      ENDIF
+      !
+   ENDDO
+   !
+   DEALLOCATE(equivalent_with_ik)
+   DEALLOCATE(done)
+   !
    ! ... Divide the weights by nrot, because each k point is unfolded nrot times
    !
    wk_new = wk_new / nrot
@@ -167,8 +228,8 @@ CONTAINS
       REAL(DP), INTENT(IN) :: k1(3), k2(3)
       LOGICAL :: res
       res = ABS(  k1(1) - k2(1) - NINT( k1(1) - k2(1) ) ) < 1.0d-5 .AND. &
-         ABS(  k1(2) - k2(2) - NINT( k1(2) - k2(2) ) ) < 1.0d-5 .AND. &
-         ABS(  k1(3) - k2(3) - NINT( k1(3) - k2(3) ) ) < 1.0d-5
+            ABS(  k1(2) - k2(2) - NINT( k1(2) - k2(2) ) ) < 1.0d-5 .AND. &
+            ABS(  k1(3) - k2(3) - NINT( k1(3) - k2(3) ) ) < 1.0d-5
    END FUNCTION are_k_equivalent
    !
 END SUBROUTINE irreducible_BZ
