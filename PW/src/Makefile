@@ -124,7 +124,7 @@ init_us_2.o \
 init_vloc.o \
 input.o \
 io_rho_xml.o \
-irrek.o \
+irreducible_BZ.o \
 iweights.o \
 intersite_V.o \
 init_nsg.o \

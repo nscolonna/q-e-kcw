@@ -113,7 +113,7 @@ set(src_pw
    src/init_vloc.f90 
    src/input.f90 
    src/io_rho_xml.f90 
-   src/irrek.f90 
+   src/irreducible_BZ.f90
    src/iweights.f90 
    src/intersite_V.f90 
    src/init_nsg.f90 
