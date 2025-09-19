@@ -13,7 +13,7 @@ max_iter=3
 
 # SCF
 nks=`grep "number of Kohn-Sham states" $fname | awk '{print $5}'`
-num_kpts=`grep "number of k points=" $fname | awk '{print $5}'`
+num_kpts=`grep "number of k points=" $fname | head -n 1 | awk '{print $5}'`
 num_band=`awk "BEGIN{ print $nks * $max_iter }"`
 e1=`grep ^! $fname | tail -1 | awk '{printf "%12.6f\n", $5}'`
 n1=`grep 'convergence has' $fname | tail -1 | awk '{print $6}'`
