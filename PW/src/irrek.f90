@@ -58,13 +58,11 @@ SUBROUTINE irreducible_BZ( nrot, s, nsym, minus_q, magnetic_sym, at, bg, &
    ! invs:  contains the inverse of each rotation
    INTEGER :: isym, jsym, nks0, jk, irot, jrot, ik
    ! nks0: used to save the initial number of k-points
-   ! ncos: total number of cosets
    INTEGER :: count
    !! Number of k points equivalent to ik-th k point
    REAL(DP) :: xkg(3), xks(3), xkn(3), one, xk_new(3,npk), wk_new(npk), wk_sum
    ! coordinates of the k point in crystal axis
    ! coordinates of the rotated k point
-   ! weight of each coset
    ! buffer which contains the weight of k points
    ! total weight of k-points
    REAL(DP) :: wk_for_ik
