@@ -6,7 +6,7 @@
 ! or http://www.gnu.org/copyleft/gpl.txt .
 !
 !----------------------------------------------------------------------------
-SUBROUTINE setup_nscf ( newgrid, xq, elph_mat )
+SUBROUTINE setup_nscf ( newgrid, xq, dont_use_ibz )
   !----------------------------------------------------------------------------
   !
   ! ... This routine initializes variables for the non-scf calculations at k
@@ -47,7 +47,15 @@ SUBROUTINE setup_nscf ( newgrid, xq, elph_mat )
   !
   REAL (DP), INTENT(IN) :: xq(3)
   LOGICAL, INTENT (IN) :: newgrid
-  LOGICAL, INTENT (IN) :: elph_mat  ! used to be passed through a module.
+  LOGICAL, INTENT (IN) :: dont_use_ibz
+  !! If .FALSE., use irreducible BZ (with symmetries that preserve q).
+  !! - If newgrid is .FALSE., start with the k mesh of the previous pw.x calculation
+  !!   (read from xml), and unfold it to add k points needed because some symmetries are broken by q.
+  !! - If newgrid is .TRUE., create an IBZ of q using nk1, ... in start_k.
+  !! If .TRUE., do not use symmetry to unfold or reduce k points.
+  !! - If newgrid is .FALSE., use the k points of the previous pw.x calculation
+  !!   (read from xml). The k points may or may not have symmetry.
+  !! - If newgrid is .TRUE., create a full BZ using nk1, ... in start_k.
   !
   LOGICAL  :: skip_equivalence
   !
@@ -96,7 +104,7 @@ SUBROUTINE setup_nscf ( newgrid, xq, elph_mat )
      ! In the case of electron-phonon matrix element with wannier functions
      ! (and possibly in other cases as well) the k-points should not be reduced
      !
-     skip_equivalence = elph_mat
+     skip_equivalence = dont_use_ibz  ! If true, skip removal of symmetry-equivalent k ponints
      CALL kpoint_grid ( nrot, time_reversal, skip_equivalence, s, t_rev, &
                       bg, nk1*nk2*nk3, k1,k2,k3, nk1,nk2,nk3, nkstot, xk, wk)
   endif
@@ -104,7 +112,7 @@ SUBROUTINE setup_nscf ( newgrid, xq, elph_mat )
   ! ... If some symmetries of the lattice are missing in the crystal,
   ! ... "irreducible_BZ" computes the missing k-points.
   !
-  if (.NOT. elph_mat) CALL irreducible_BZ(nrot, s, nsymq, minus_q, noncolin .AND. domag, &
+  if (.NOT. dont_use_ibz) CALL irreducible_BZ(nrot, s, nsymq, minus_q, noncolin .AND. domag, &
                                           at, bg, npk, nkstot, xk, wk, t_rev)
   !
   ! ... add k+q to the list of k
