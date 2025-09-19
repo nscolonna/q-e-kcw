@@ -172,7 +172,9 @@ tolerance = ( (1.0e-6, 5.0e-3, 'e1'),
               (3.0e-3,   None, 'imepsm1'),
               (3.0e-3,   None, 'reeps'),
               (3.0e-3,   None, 'imeps'),
-              (1.0e-5, 5.0e-4, 'averageosc'))
+              (1.0e-5, 5.0e-4, 'averageosc'),
+              (1.0e-4,   None, 'epsiloninv'),
+              (1.0e-4,   None, 'chirr'),)
 
 skip_program = grep
 skip_args = 'not present in this version'

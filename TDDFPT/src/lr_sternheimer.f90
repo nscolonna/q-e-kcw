@@ -7,12 +7,12 @@
 !
 MODULE lr_sternheimer
   !
-  !    This routine generalizes to finite complex frequencies and 
-  !    finite q vectors the routine solve_e of the Quantum ESPRESSO 
-  !    distribution. 
+  !    This routine generalizes to finite complex frequencies and
+  !    finite q vectors the routine solve_e of the Quantum ESPRESSO
+  !    distribution.
   !
   !    This routine is a driver for the solution of the linear system which
-  !    defines the change of the wavefunction due to an electric field 
+  !    defines the change of the wavefunction due to an electric field
   !    of finite wavevector q and complex frequency omega.
   !    It performs the following tasks:
   !     a) computes the bare potential term  e^{iqr} | psi >
@@ -25,12 +25,12 @@ MODULE lr_sternheimer
 CONTAINS
 
 SUBROUTINE one_sternheimer_step(iu, flag)
-    !    
+    !
     USE kinds,                  ONLY : DP
     USE constants,              ONLY : e2, fpi, rytoev
     USE ions_base,              ONLY : nat
     USE io_global,              ONLY : stdout, ionode
-    USE io_files,               ONLY : diropn, nwordwfc, iunwfc
+    USE io_files,               ONLY : diropn, nwordwfc
     USE cell_base,              ONLY : tpiba2
     USE fft_interfaces,         ONLY : fwfft
     USE fft_interfaces,         ONLY : fft_interpolate
@@ -38,45 +38,44 @@ SUBROUTINE one_sternheimer_step(iu, flag)
     USE gvecs,                  ONLY : doublegrid
     USE fft_base,               ONLY : dfftp, dffts
     USE lsda_mod,               ONLY : lsda, nspin, current_spin, isk
-    USE wvfct,                  ONLY : nbnd, npwx, g2kin,  et
+    USE wvfct,                  ONLY : nbnd, npwx, et
     USE klist,                  ONLY : ngk, igk_k
     USE check_stop,             ONLY : check_stop_now
     USE buffers,                ONLY : get_buffer, save_buffer
     USE wavefunctions,          ONLY : evc
-    USE uspp,                   ONLY : okvan, vkb
+    USE uspp,                   ONLY : vkb
     USE uspp_param,             ONLY : nhm
     USE noncollin_module,       ONLY : noncolin, domag, npol, nspin_mag
-    USE scf,                    ONLY : rho, v_of_0
+    USE scf,                    ONLY : rho
     USE gvect,                  ONLY : gg
     USE paw_variables,          ONLY : okpaw
     USE paw_onecenter,          ONLY : paw_dpotential
     USE eqv,                    ONLY : dpsi, dvpsi, evq
-    USE units_lr,               ONLY : lrwfc, iuwfc
+    USE units_lr,               ONLY : lrwfc, iuwfc, iudwf, lrdwf
     USE control_lr,             ONLY : lgamma, alpha_pv, nbnd_occ, &
                                        ext_recover, rec_code, &
                                        lnoloc, convt, tr2_ph, &
                                        alpha_mix, lgamma_gamma, niter_ph, &
                                        flmixdpot, rec_code_read
 
-    USE lrus,                   ONLY : int3_paw, intq, intq_nc
+    USE lrus,                   ONLY : int3_paw
     USE qpoint,                 ONLY : xq, nksq, ikks, ikqs
     USE linear_solvers,         ONLY : ccg_many_vectors
     USE dv_of_drho_lr,          ONLY : dv_of_drho
-    USE mp_pools,               ONLY : inter_pool_comm
     USE mp_bands,               ONLY : intra_bgrp_comm
     USE mp_images,              ONLY : root_image, my_image_id
     USE mp,                     ONLY : mp_sum
     USE fft_helper_subroutines, ONLY : fftx_ntgrp
-    USE lr_variables,           ONLY : fru, fiu, iundvpsi, iudwf, &
+    USE lr_variables,           ONLY : fru, fiu, iundvpsi, &
                                        iudrho, n_ipol, lr_verbosity, &
                                        chirr, chirz, chizr, chizz, epsm1, &
-                                       current_w, lr1dwf, iu1dwf, itermax!, &
-                                       !intq, intq_nc
+                                       current_w, itermax
     USE paw_add_symmetry,       ONLY : paw_deqsymmetrize
     USE wavefunctions,          ONLY : psic
-    USE lr_sym_mod,             ONLY : psymeq
     USE apply_dpot_mod,         ONLY : apply_dpot_allocate, apply_dpot_deallocate, &
                                        apply_dpot_bands
+    USE response_kernels,      ONLY : sternheimer_kernel, sternheimer_kernel_freq, &
+                                      sternheimer_postprocess
     USE uspp_init,             ONLY : init_us_2
     !
     IMPLICIT NONE
@@ -86,70 +85,99 @@ SUBROUTINE one_sternheimer_step(iu, flag)
                                   ! charge magnetization responses
                                   ! if 2 and lsda computes the magnetization
                                   ! magnetization response
-    REAL(DP) ::  thresh, anorm, averlt, dr2
+    REAL(DP) ::  thresh, anorm, avg_iter, dr2
     ! thresh: convergence threshold
     ! anorm : the norm of the error
-    ! averlt: average number of iterations
+    ! avg_iter: average number of iterations
     ! dr2   : self-consistency error
     COMPLEX(DP), ALLOCATABLE :: h_diag (:,:)
     COMPLEX(DP), ALLOCATABLE :: h_diag1 (:,:)
-    REAL(DP),    ALLOCATABLE :: h_diagr (:,:)
-    REAL(DP),    ALLOCATABLE :: h_dia (:,:), s_dia(:,:)
-    ! h_diag: diagonal part of the Hamiltonian
     !
-    COMPLEX(DP) , ALLOCATABLE, TARGET ::      &
-                   dvscfin (:,:,:)     ! change of the scf potential (input)
-    COMPLEX(DP) , POINTER ::      &
-                   dvscfins (:,:,:)    ! change of the scf potential (smooth)
     COMPLEX(DP) , ALLOCATABLE ::   &
                    dpsi1(:,:),   &
-                   dvscfout (:,:,:), & ! change of the scf potential (output)
                    drhoscfout (:,:), & ! change of the scf charge (output)
                    dbecsum(:,:,:,:), & ! the becsum with dpsi
                    dbecsum_nc(:,:,:,:,:), & ! the becsum with dpsi
                    mixin(:), mixout(:), &  ! auxiliary for paw mixing
-                   ps (:,:), &
                    aux2(:,:), dvpsi1(:,:)
     !
-    LOGICAL :: conv_root, exst, all_done_asyn
+    LOGICAL :: conv_root
     ! conv_root: true if linear system is converged
-    INTEGER :: kter, iter0, ipol, ibnd, iter, lter, ik, ikk, ikq, &
-               ig, is, nrec, ndim, npw, npwq, ios
+    INTEGER :: kter, iter0, ibnd, iter, lter, ik, ikk, ikq, &
+               is, nrec, ndim, npw, npwq
     ! counters
-    INTEGER :: ltaver, lintercall, jpol, nwordd0psi
+    INTEGER :: nsolv
+    !! Number of linear systems to solve. (1 for zero frequency, 2 for finite frequency)
+    INTEGER :: isolv
+    !! Index of the linear system to solve.
+    INTEGER :: tot_num_iter, tot_cg_calls
     REAL(DP) :: xqmod2, alpha_pv0
     !
     REAL(DP) :: tcpu, get_clock
     ! timing variables
     !
     COMPLEX(DP) :: w  !frequency
-    REAL(DP) :: aa, weight
     LOGICAL :: ldpsi1
     !
     EXTERNAL ch_psi_all, cg_psi
     EXTERNAL ch_psi_all_complex, ccg_psi
-    COMPLEX(DP) :: scal_prod
     !
-
+    ! Input variables in dfpt_kernels
+    COMPLEX(DP), ALLOCATABLE :: drhos(:, :, :)
+    !! change of the charge density (smooth part only, but allocated with dfftp)
+    COMPLEX(DP), ALLOCATABLE :: drhop(:, :, :)
+    !! change of the charge density (smooth and hard parts, dfftp)
+    COMPLEX(DP), POINTER :: dvscfs(:, :, :)
+    !! change of the scf potential (smooth part only, dffts)
+    COMPLEX(DP), ALLOCATABLE, TARGET :: dvscfp(:, :, :)
+    !! change of the scf potential (smooth and hard parts, dfftp)
+    !
+    ! Local variables in dfpt_kernels
+    INTEGER :: ndim_pot, ndim_paw
+    COMPLEX(DP), ALLOCATABLE :: dvscftmp(:, :, :)
+    !! change of scf potential (output before mixing)
+    !
+    ! Input variables in sternheimer_kernel
+    LOGICAL :: time_reversed
+    !! True if solving a time-reversed Sternheimer equation
+    LOGICAL :: all_conv
+    !! True if sternheimer_kernel is converged at all k points and perturbations
+    LOGICAL :: first_iter
+    !! true if the first iteration.
+    INTEGER :: npert
+    !! number of perturbations
+    COMPLEX(DP), ALLOCATABLE :: drhoout(:, :, :)
+    !! induced charge density
+    !
+    ! Local variables in sternheimer_kernel
+    INTEGER :: ipert
+    REAL(DP) :: rsign
+   !! sign of the term in the magnetization
+    !
     CALL start_clock ('stern_step')
-
+    !
+    ! NOTE: In EELS, n_ipol = 1. In this code, n_ipol = 1 is assumed in a few places.
+    !
+    npert = n_ipol
+    !
     w=CMPLX(fru(iu),fiu(iu))
     ldpsi1=ABS(w)>1.D-7
     alpha_pv0=alpha_pv
     alpha_pv=alpha_pv0 + REAL(w)
     !
-    ALLOCATE (dvscfin( dfftp%nnr, nspin_mag, 1))
-    IF (doublegrid) THEN
-       ALLOCATE (dvscfins(dffts%nnr, nspin_mag, 1))
-    ELSE
-       dvscfins => dvscfin
-    ENDIF
-    ALLOCATE (dvscfout(dfftp%nnr, nspin_mag, 1))
     ALLOCATE (drhoscfout(dfftp%nnr, nspin_mag))
+    !
+    ndim_pot = dfftp%nnr * nspin_mag * 1
     IF (okpaw) THEN
-       ALLOCATE (mixin(dfftp%nnr*nspin_mag+(nhm*(nhm+1)*nat*nspin_mag)/2) )
-       ALLOCATE (mixout(dfftp%nnr*nspin_mag+(nhm*(nhm+1)*nat*nspin_mag)/2) )
+       ndim_paw = (nhm * (nhm+1) * nat * nspin_mag * 1) / 2
+       ALLOCATE(mixin(ndim_pot + ndim_paw))
+       ALLOCATE(mixout(ndim_pot + ndim_paw))
+       mixin = (0.0_DP, 0.0_DP)
+    ELSE
+       ALLOCATE(mixin(1))
+       ALLOCATE(mixout(1))
     ENDIF
+    !
     ALLOCATE (dbecsum( nhm*(nhm+1)/2, nat, nspin_mag, 1))
     IF (noncolin) ALLOCATE (dbecsum_nc (nhm, nhm, nat, nspin, 1))
     IF (ldpsi1) THEN
@@ -157,26 +185,32 @@ SUBROUTINE one_sternheimer_step(iu, flag)
        ALLOCATE (dvpsi1(npwx*npol,nbnd))
        ALLOCATE (h_diag(npwx*npol, nbnd))
        ALLOCATE (h_diag1(npwx*npol, nbnd))
-       ALLOCATE (h_dia(npwx,npol))
-       ALLOCATE (s_dia(npwx,npol))
-    ELSE
-       ALLOCATE (h_diagr(npwx*npol, nbnd))
     ENDIF
     ALLOCATE (aux2(npwx*npol, nbnd))
+    ALLOCATE(dvscftmp(dfftp%nnr, nspin_mag, npert))
+    ALLOCATE(drhos(dffts%nnr, nspin_mag, npert))
+    ALLOCATE(drhop(dfftp%nnr, nspin_mag, npert))
+    ALLOCATE(dvscfp(dfftp%nnr, nspin_mag, npert))
+    dvscfp(:,:,:)=(0.d0,0.d0)
+    IF (doublegrid) THEN
+       ALLOCATE(dvscfs(dffts%nnr, nspin_mag, npert))
+    ELSE
+       dvscfs => dvscfp
+    ENDIF
+    ALLOCATE(drhoout(dffts%nnr, nspin_mag, npert))
     CALL apply_dpot_allocate()
-    IF (okpaw) mixin=(0.0_DP,0.0_DP)
     !
-    !$acc enter data create(aux2, dvscfins)
+    !$acc enter data create(aux2, dvscfs)
     dvpsi =(0.0d0, 0.0d0)
 
 !    IF (rec_code_read == -20.AND.ext_recover) then
 !       ! restarting in Electric field calculation
 !       IF (okpaw) THEN
-!          CALL read_rec(dr2, iter0, 1, dvscfin, dvscfins, dvscfout, dbecsum)
+!          CALL read_rec(dr2, iter0, 1, dvscfp, dvscfs, drhop, dbecsum)
 !          CALL setmixout(3*dfftp%nnr*nspin_mag,(nhm*(nhm+1)*nat*nspin_mag*3)/2, &
-!                      mixin, dvscfin, dbecsum, ndim, -1 )
+!                      mixin, dvscfp, dbecsum, ndim, -1 )
 !       ELSE
-!          CALL read_rec(dr2, iter0, 1, dvscfin, dvscfins)
+!          CALL read_rec(dr2, iter0, 1, dvscfp, dvscfs)
 !       ENDIF
 !    ELSEIF (rec_code_read > -20 .AND. rec_code_read <= -10) then
 !       ! restarting in Raman: proceed
@@ -203,12 +237,56 @@ SUBROUTINE one_sternheimer_step(iu, flag)
     ENDIF
     !
     IF (.NOT. ALLOCATED(psic)) ALLOCATE(psic(dfftp%nnr))
-
-!    nwordd0psi = 2 * nbnd * npwx * npol * nksq
-!    CALL diropn ( iund0psi, 'dvpsi.', nwordd0psi, exst)
-!
-!    CALL diropn ( iudwf, 'dwf', nwordd0psi, exst)
-!    CALL diropn ( iu1dwf, 'mwf', nwordd0psi, exst)
+    !
+    IF (ldpsi1) THEN
+       nsolv = 2  ! Finite frequency, solve original and time-reversed Sternheimer equation
+    ELSE
+       nsolv = 1  ! Zero frequency, solve only one Sternheimer equation
+       ! For noncollinear magnetism, one needs to solve two Sternheimer equations even for
+       ! zero frequency. This is not implemented here.
+    ENDIF
+    !
+    ! Calculate bare perturbation multiplied to the wavefunctions, save on buffer iundvpsi
+    !
+    DO ik = 1, nksq
+       !
+       ikk  = ikks(ik)
+       ikq  = ikqs(ik)
+       npw  = ngk(ikk)
+       npwq = ngk(ikq)
+       IF (lsda) current_spin = isk (ikk)
+       !
+       ! Read unperturbed wavefuctions evc (wfct at k)
+       ! and evq (wfct at k+q)
+       !
+       IF (nksq > 1) THEN
+          CALL get_buffer(evc, lrwfc, iuwfc, ikk)
+       ENDIF
+       !
+       ! Calculate beta-functions vkb at k+q (Kleinman-Bylander projectors)
+       ! The vkb's are needed for the non-local potential in h_psi,
+       ! and for the ultrasoft term.
+       !
+       CALL init_us_2(npwq, igk_k(1, ikq), xk(1, ikq), vkb, .true.)
+       !$acc update host(vkb)
+       !
+       ! do over polarization
+       !
+       DO ipert = 1, npert
+          !
+          nrec = (ipert - 1) * nksq + ik
+          !  IF (isolv == 2) nrec = nrec + npert * nksq
+          !
+          CALL dveqpsi_us(ik)
+          !
+          !  with flag=2 the perturbation is a magnetic field along z
+          !
+          IF (lsda.AND.current_spin==2.AND.flag==2) dvpsi=-dvpsi
+          !
+          CALL save_buffer(dvpsi, nwordwfc, iundvpsi, nrec)
+          !
+       ENDDO ! ipert
+    ENDDO ! ik
     !
     ! Loop over the iterations
     !
@@ -216,321 +294,76 @@ SUBROUTINE one_sternheimer_step(iu, flag)
        !
        FLUSH( stdout)
        iter = kter + iter0
-
-       ltaver = 0
-       lintercall = 0
+       first_iter = (iter == 1)
        !
-       dvscfout(:,:,:) = (0.0d0, 0.0d0)
+       tot_num_iter = 0
+       tot_cg_calls = 0
+       !
+       drhos(:,:,:) = (0.0d0, 0.0d0)
        dbecsum(:,:,:,:) = (0.0d0, 0.0d0)
-       !
        IF (noncolin) dbecsum_nc = (0.0d0, 0.0d0)
        !
-       DO ik = 1, nksq
-          !
-          ikk  = ikks(ik)
-          ikq  = ikqs(ik)
-          npw  = ngk(ikk)
-          npwq = ngk(ikq)
-        if (lsda) current_spin = isk (ikk)
-          !
-          ! Calculate beta-functions vkb at k+q (Kleinman-Bylander projectors)
-          ! The vkb's are needed for the non-local potential in h_psi,
-          ! and for the ultrasoft term.
-          !
-          CALL init_us_2 (npwq, igk_k(1,ikq), xk(1,ikq), vkb, .true.)
-          !
-          !$acc update host(vkb)
-          ! Read unperturbed wavefuctions evc (wfct at k) 
-          ! and evq (wfct at k+q)
-          !
-          IF (nksq > 1) THEN 
-             CALL get_buffer (evc, nwordwfc, iunwfc, ikk)
-             CALL get_buffer (evq, nwordwfc, iunwfc, ikq)
-          ENDIF
-          !
-          !  Compute the kinetic energy g2kin: (k+q+G)^2
-          !
-          CALL g2_kin(ikq)
-          !
-          ! IF omega non zero
-          !
-          IF (ldpsi1) THEN
-             h_diag=(0.0_DP,0.0_DP)
-             h_diag1=(0.0_DP,0.0_DP)
-             CALL usnldiag( npwq, npol, h_dia, s_dia )
-             !
-
-             DO ibnd = 1, nbnd_occ (ikk)
-                !
-                DO ig = 1, npwq
-                   aa=h_dia(ig,1)- (et(ibnd,ikk)+w)*s_dia(ig,1)
-                   IF (ABS(aa)<1.0_DP) aa=1.0_DP
-                   h_diag(ig,ibnd)=CMPLX(1.0d0, 0.d0,kind=DP) / aa
-                   aa=h_dia(ig,1)- (et(ibnd,ikk)-w)*s_dia(ig,1)
-                   IF (ABS(aa)<1.0_DP) aa=1.0_DP
-                   h_diag1(ig,ibnd)=CMPLX(1.0d0, 0.d0,kind=DP) / aa
-                ENDDO
-                !
-                IF (noncolin) THEN
-                   DO ig = 1, npwq
-                      aa=h_dia(ig,2)- (et(ibnd,ikk)+w)*s_dia(ig,2)
-                      IF (ABS(aa)<1.0_DP) aa=1.0_DP
-                      h_diag(ig+npwx,ibnd)=CMPLX(1.d0, 0.d0,kind=DP) / aa
-                      aa=h_dia(ig,2)- (et(ibnd,ikk)-w)*s_dia(ig,2)
-                      IF (ABS(aa)<1.0_DP) aa=1.0_DP
-                      h_diag1(ig+npwx,ibnd)=CMPLX(1.d0, 0.d0,kind=DP) / aa
-                   ENDDO
-                ENDIF
-             ENDDO
-          ELSE
-             CALL h_prec (ik, evc, h_diagr)
-             !
-             DO ibnd = 1, nbnd_occ (ikk)
-                !
-                DO ig = 1, npwq
-                   aa=1.0_DP / h_diagr(ig,ibnd)-et(ibnd,ikk)-REAL(w,KIND=DP)
-                   h_diagr(ig,ibnd)=1.d0 /max(1.0d0,aa)
-                ENDDO
-                IF (noncolin) THEN
-                   DO ig = 1, npwq
-                      h_diagr(ig+npwx,ibnd)= h_diagr(ig,ibnd)
-                   ENDDO
-                ENDIF
-             ENDDO
-          ENDIF
-          !
-          ! do over polarization
-          !
-          DO ipol = 1, n_ipol
-             !
-             nrec = (ipol - 1) * nksq + ik
-             !
-             IF (iter ==1) THEN
-                !
-                !  At the first iteration dvbare_q*psi_kpoint is calculated
-                !  and written to file
-                !
-                CALL dveqpsi_us (ik)
-                !
-                !  with flag=2 the perturbation is a magnetic field along z
-                !
-                IF (lsda.AND.current_spin==2.AND.flag==2) dvpsi=-dvpsi
-!                call save_buffer (dvpsi, lrbar, iubar, nrec)
-
-                CALL save_buffer (dvpsi, nwordwfc, iundvpsi, nrec)
-                !
-             ELSE
-                !
-                ! After the first iteration dvbare_q*psi_kpoint is read from file
-                !
-!                call get_buffer (dvpsi, lrbar, iubar, nrec)
-                CALL get_buffer (dvpsi, nwordwfc, iundvpsi, nrec)
-                !
-                ! calculates dvscf_q*psi_k in G_space, for all bands, k=kpoint
-                ! dvscf_q from previous iteration (mix_potential)
-                !
-                CALL apply_dpot_bands(ik, nbnd_occ(ikk), dvscfins(:, :, ipol), evc, aux2)
-                !
-                dvpsi=dvpsi+aux2
-                !
-                CALL adddvscf(ipol,ik)
-                !
-             ENDIF
-             !
-             ! Orthogonalize dvpsi to valence states: ps = <evq|dvpsi>
-             !
-             IF (ldpsi1) THEN
-                dvpsi1=dvpsi
-                CALL orthogonalize_omega(dvpsi1, evq, ikk, ikq, dpsi, npwq, -w)
-             ENDIF
-             CALL orthogonalize_omega(dvpsi, evq, ikk, ikq, dpsi, npwq, w)
-             ! 
-             IF (iter == 1) THEN
-                !
-                !  At the first iteration dpsi and dvscfin are set to zero,
-                !
-                dpsi(:,:)=(0.d0,0.d0)
-                IF (ldpsi1) dpsi1(:,:)=(0.d0,0.d0)
-                dvscfin(:,:,:)=(0.d0,0.d0)
-                !
-                ! starting threshold for the iterative solution of the linear
-                ! system
-                !
-                thresh = 1.d-2
-                IF (lnoloc) thresh = 1.d-5
-                !
-             ELSE
-                !
-                ! starting value for  delta_psi is read from iudwf
-                !
-                nrec = (ipol - 1) * nksq + ik
-                CALL get_buffer (dpsi, nwordwfc, iudwf, nrec)
-!                call get_buffer (dpsi, lrdwf, iudwf, nrec)
-                IF (ldpsi1) CALL get_buffer (dpsi1, nwordwfc, iu1dwf, nrec)
-                !
-                ! threshold for iterative solution of the linear system
-                !
-                thresh = min (0.1d0 * sqrt (dr2), thresh)
-                !
-             ENDIF
-             !
-             ! iterative solution of the linear system (H-e)*dpsi=dvpsi
-             ! dvpsi=-P_c+ (dvbare+dvscf)*psi , dvscf fixed.
-             !
-             conv_root = .true.
-             !
-             current_w=w
-             IF (ldpsi1) THEN
-                !
-                ! Complex or imaginary frequency. Use bicojugate gradient.
-                !
-
-                CALL ccgsolve_all (ch_psi_all_complex,ccg_psi,et(1,ikk),dvpsi,dpsi, &
-                                    h_diag,npwx,npwq,thresh,ik,lter,conv_root,anorm,&
-                                                        nbnd_occ(ikk),npol,current_w)
-
-                !
-             ELSE
-                !
-                ! zero frequency. The standard QE solver
-                !
-                CALL cgsolve_all (ch_psi_all,cg_psi,et(1,ikk),dvpsi,dpsi, &
-                  h_diagr,npwx,npwq,thresh,ik,lter,conv_root,anorm,&
-                                                          nbnd_occ(ikk),npol)
-                !
-             ENDIF
-             !
-             ltaver = ltaver + lter
-             lintercall = lintercall + 1
-             IF (.not.conv_root) WRITE( stdout, "(5x,'kpoint',i4,' ibnd',i4, &
-                  &         ' solve_e: root not converged ',es10.3)") ik &
-                  &, ibnd, anorm
-             !
-             ! writes delta_psi on iunit iudwf, k=kpoint,
-             !
-             nrec = (ipol - 1) * nksq + ik
-             CALL save_buffer (dpsi, nwordwfc, iudwf, nrec)
-!             call save_buffer(dpsi, lrdwf, iudwf, nrec)
-             !
-
-             ! calculates dvscf, sum over k => dvscf_q_ipert
-             !
-             weight=wk(ikk)
-             IF (ldpsi1) THEN
-                !
-                ! complex frequency, two wavefunctions must be computed
-                !
-                weight=wk(ikk)/2.0_DP
-                !
-                ! In this case compute also the wavefunction at frequency -w.
-                !
-                current_w=-w
-
-                CALL ccgsolve_all (ch_psi_all_complex,ccg_psi,et(1,ikk),dvpsi1,dpsi1, &
-                                    h_diag1,npwx,npwq,thresh,ik,lter,conv_root,anorm,&
-                                                          nbnd_occ(ikk),npol,current_w)
-
-                ltaver = ltaver + lter
-                lintercall = lintercall + 1
-                IF (.not.conv_root) WRITE( stdout, "(5x,'kpoint',i4, &
-                  &         ' solve_e: root not converged ',es10.3)") ik &
-                  &, anorm
-                !
-                ! writes delta_psi on iunit iudwf, k=kpoint,
-                !
-                nrec = (ipol - 1) * nksq + ik
-                CALL save_buffer(dpsi1, nwordwfc, iu1dwf, nrec)
-                !
-                ! calculates dvscf, sum over k => dvscf_q_ipert
-                !
-                CALL DAXPY(npwx*nbnd_occ(ikk)*npol*2, 1.0_DP, dpsi1, 1, dpsi, 1)
-                !
-             ENDIF
-             IF (noncolin) THEN
-                CALL incdrhoscf_nc(dvscfout(1,1,ipol), weight, ik, &
-                                   dbecsum_nc(1,1,1,1,ipol), dpsi, 1.0d0)
-             ELSE
-
-                CALL incdrhoscf (dvscfout(1,current_spin,ipol), weight, &
-                           ik, dbecsum(1,1,current_spin,ipol), dpsi)
-             ENDIF
-             !
-          ENDDO   ! on polarizations
-          !
-!          IF ( with_asyn_images.AND.my_image_id==root_image.AND.ionode ) &
-!                             CALL asyn_master(all_done_asyn)
-       ENDDO ! on k points
+       ! Set threshold for iterative solution of the linear system (ccgsolve_all)
        !
-
-       current_w=w
-       !
-       !  The calculation of dbecsum is distributed across processors
-       !  (see addusdbec) - we sum over processors the contributions
-       !  coming from each slice of bands
-       !
-       IF (noncolin) THEN
-          CALL mp_sum ( dbecsum_nc, intra_bgrp_comm )
+       IF (first_iter) THEN
+          thresh = 1.d-2
+          IF (lnoloc) thresh = 1.d-5
        ELSE
-          CALL mp_sum ( dbecsum, intra_bgrp_comm )
+          thresh = min(1.d-1 * sqrt(dr2), thresh)
        ENDIF
        !
-       IF (doublegrid) then
-          DO is=1,nspin_mag
-             CALL fft_interpolate (dffts, dvscfout(:,is,1), dfftp, &
-                                                   dvscfout(:,is,1))
-          ENDDO
+       ! Compute drhos, the charge density response to the total potential
+       !
+       time_reversed = .FALSE.  ! magnetic case not implemented
+       !
+       IF (ldpsi1) THEN
+          !
+          ! Finite-frequency Sternheimer equation
+          CALL sternheimer_kernel_freq(first_iter, time_reversed, npert, nwordwfc, iundvpsi, &
+             thresh, w, dvscfs, all_conv, avg_iter, drhos, dbecsum, dbecsum_nc)
+          !
+       ELSE
+          !
+          ! Zero-frequency Sternheimer equation
+          CALL sternheimer_kernel(first_iter, time_reversed, npert, nwordwfc, iundvpsi, &
+             thresh, dvscfs, all_conv, avg_iter, drhos, dbecsum, dbecsum_nc)
+          !
        ENDIF
        !
-       IF (noncolin.and.okvan) CALL set_dbecsum_nc(dbecsum_nc, dbecsum, 1)
+       ! Postprocess the results of the Sternheimer kernel
        !
-       CALL addusddenseq (dvscfout, dbecsum)
+       CALL sternheimer_postprocess(nsolv, npert, drhos, drhop, dbecsum, dbecsum_nc)
        !
-       !   dvscfout contains the (unsymmetrized) linear charge response
-       !   for the three polarizations - symmetrize it
-       !
-       CALL mp_sum ( dvscfout, inter_pool_comm )
-       !
-       IF (okpaw) CALL mp_sum ( dbecsum, inter_pool_comm )
-       !
-       IF (.not. lgamma_gamma) THEN
-          CALL psymeq (dvscfout)
-       ENDIF
-       !
-       drhoscfout(:,:)=dvscfout(:,:,1)
-       !
-       !   save the symmetrized linear charge response to file
-       !   calculate the corresponding linear potential response
+       !   compute the corresponding change in scf potential : drhop -> dvscftmp
        !
        IF (lnoloc) THEN
-!          CALL dv_of_drho_nlf (dvscfout (1, 1, 1))
-       ELSE
-          CALL dv_of_drho (dvscfout (1, 1, 1))
+         ! No local field effect: set dvscf to 0
+         dvscftmp(:, :, ipert) = (0.d0, 0.d0)
+      ELSE
+         ! Compute the response HXC potential
+         CALL zcopy(dfftp%nnr*nspin_mag, drhop(1,1,1), 1, dvscftmp(1,1,1), 1)
+         CALL dv_of_drho(dvscftmp(1, 1, 1))
        ENDIF
        !
-       !   mix the new potential with the old
+       !  mix with the old potential: dvscftmp -> dvscfp
        !
        IF (okpaw) THEN
           !
           !  In this case we mix also dbecsum
           !
-          CALL setmixout(dfftp%nnr*nspin_mag,(nhm*(nhm+1)*nat*nspin_mag)/2, &
-                         mixout, dvscfout, dbecsum, ndim, -1 )
-          CALL mix_potential_eels (2*dfftp%nnr*nspin_mag+2*ndim, mixout, mixin, &
-                         alpha_mix(kter), dr2, tr2_ph/npol, iter, flmixdpot, &
-                         convt)
-          CALL setmixout(dfftp%nnr*nspin_mag,(nhm*(nhm+1)*nat*nspin_mag)/2, &
-                         mixin, dvscfin, dbecsum, ndim, 1 )
+          CALL setmixout(ndim_pot, ndim_paw, mixout, dvscftmp, dbecsum, ndim, -1)
+          CALL mix_potential_eels(2*(ndim_pot + ndim), mixout, mixin, alpha_mix(kter), dr2, &
+                                  tr2_ph / npol, iter, flmixdpot, convt)
+          CALL setmixout(ndim_pot, ndim_paw, mixin, dvscfp, dbecsum, ndim, 1)
        ELSE
-
-          CALL mix_potential_eels(2*dfftp%nnr*nspin_mag, dvscfout, dvscfin,  &
-               alpha_mix (kter), dr2,  tr2_ph/npol, iter, flmixdpot, convt)
-
+          ! nmix_ph ??
+          CALL mix_potential_eels(2*ndim_pot, dvscftmp, dvscfp, alpha_mix(kter), dr2, &
+                                  tr2_ph / npol, iter, flmixdpot, convt)
        ENDIF
        !
        IF (doublegrid) then
-          DO is=1,nspin_mag
-             CALL fft_interpolate (dfftp, dvscfin(:,is,1), dffts, &
-                                                 dvscfins(:,is,1))
+          DO is = 1, nspin_mag
+             CALL fft_interpolate(dfftp, dvscfp(:, is, 1), dffts, dvscfs(:, is, 1))
           ENDDO
        ENDIF
        !
@@ -547,17 +380,12 @@ SUBROUTINE one_sternheimer_step(iu, flag)
           ENDIF
        ENDIF
        !
-       CALL newdq(dvscfin,1)
-       !
-       CALL mp_sum(ltaver,inter_pool_comm)
-       CALL mp_sum(lintercall,inter_pool_comm)
-       !
-       averlt = DBLE (ltaver) / DBLE (lintercall)
+       CALL newdq(dvscfp, 1)
        !
 !       tcpu = get_clock ('PHONON')
        tcpu = get_clock ('ccgsolve')
        WRITE( stdout, '(/,5x," iter # ",i3," total cpu time :",f8.1, &
-            &      " secs   av.it.: ",f5.1)') iter, tcpu, averlt
+            &      " secs   av.it.: ",f5.1)') iter, tcpu, avg_iter
        WRITE( stdout, "(5x,' thresh=',es10.3, ' alpha_mix = ',f6.3, &
             &      ' |ddv_scf|^2 = ',es10.3 )") thresh, alpha_mix (kter), dr2
        !
@@ -568,10 +396,10 @@ SUBROUTINE one_sternheimer_step(iu, flag)
        !
        rec_code=-20
 !       IF (okpaw) THEN
-!          CALL write_rec('solve_e...', 0, dr2, iter, convt, 1, dvscfin, &
-!                                                      dvscfout, dbecsum)
+!          CALL write_rec('solve_e...', 0, dr2, iter, convt, 1, dvscfp, &
+!                                                      drhop, dbecsum)
 !       ELSE
-!          CALL write_rec('solve_e...', 0, dr2, iter, convt, 1, dvscfin)
+!          CALL write_rec('solve_e...', 0, dr2, iter, convt, 1, dvscfp)
 !       ENDIF
        !
 !       IF (check_stop_now()) CALL stop_smoothly_ph (.false.)
@@ -582,13 +410,13 @@ SUBROUTINE one_sternheimer_step(iu, flag)
     !
 155 CONTINUE
     !
+    drhoscfout(:,:) = drhop(:,:,1)
+    !
     !  compute here the susceptibility and the inverse of the dielectric
     !  constant
     !
     !  CALL compute_susceptibility(drhoscfout)
     !
-!    CLOSE( UNIT = iund0psi)
-
     DO is=1,nspin_mag
        CALL fwfft ('Rho', drhoscfout(:,is), dfftp)
     ENDDO
@@ -654,29 +482,22 @@ SUBROUTINE one_sternheimer_step(iu, flag)
        deallocate (dvpsi1)
        deallocate (h_diag)
        deallocate (h_diag1)
-       deallocate (h_dia)
-       deallocate (s_dia)
-    ELSE
-       deallocate (h_diagr)
     ENDIF
     deallocate (dbecsum)
-    deallocate (dvscfout)
     IF (okpaw) THEN
        DEALLOCATE(mixin)
        DEALLOCATE(mixout)
     ENDIF
     deallocate (drhoscfout)
-    !$acc exit data delete(aux2, dvscfins)
-    if (doublegrid) deallocate (dvscfins)
-    deallocate (dvscfin)
+    !$acc exit data delete(aux2, dvscfs)
     if (noncolin) deallocate(dbecsum_nc)
     deallocate(aux2)
-
-!    CLOSE( unit = iund0psi)
-!    CLOSE( unit = iudwf)
-!    CLOSE( unit = iu1dwf)
-
-
+    IF (doublegrid) DEALLOCATE (dvscfs)
+    DEALLOCATE(drhos)
+    DEALLOCATE(drhop)
+    DEALLOCATE(dvscfp)
+    DEALLOCATE(drhoout)
+    !
     alpha_pv=alpha_pv0
     !
     CALL stop_clock ('stern_step')

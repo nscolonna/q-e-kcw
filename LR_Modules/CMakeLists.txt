@@ -19,6 +19,7 @@ set(sources
     dfpt_tetra_mod.f90
     dynmat_sub.f90
     h_prec.f90
+    h_prec_freq.f90
     incdrhoscf.f90
     incdrhoscf_nc.f90
     dv_of_drho.f90
@@ -28,6 +29,7 @@ set(sources
     dv_rVV10.f90
     newdq.f90
     orthogonalize.f90
+    orthogonalize_omega.f90
     setup_nscf.f90
     set_dbecsum_nc.f90
     set_int3_nc.f90
