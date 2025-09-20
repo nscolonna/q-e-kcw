@@ -53,7 +53,6 @@ compute_rho.o \
 compute_qdipol.o \
 compute_qdipol_so.o \
 compute_ux.o \
-coset.o \
 Coul_cut_2D.o \
 d_matrix.o \
 data_structure.o \
@@ -125,7 +124,7 @@ init_us_2.o \
 init_vloc.o \
 input.o \
 io_rho_xml.o \
-irrek.o \
+irreducible_BZ.o \
 iweights.o \
 intersite_V.o \
 init_nsg.o \
