@@ -39,8 +39,6 @@ SUBROUTINE vhpsi_gpu( ldap, np, mps, psip, hpsi )
   !
   IF ( .NOT. ANY(is_hubbard(:)) .AND. .NOT.ANY(is_hubbard_back(:)) ) RETURN
   !
-  CALL start_clock( 'vhpsi' )
-  !
   !$acc data present(wfcU)
   !
   IF (gamma_only) THEN
@@ -50,8 +48,6 @@ SUBROUTINE vhpsi_gpu( ldap, np, mps, psip, hpsi )
   ENDIF
   !
   !$acc end data
-  !
-  CALL stop_clock( 'vhpsi' )
   !
   RETURN
   !
