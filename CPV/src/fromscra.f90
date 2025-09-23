@@ -18,7 +18,7 @@ SUBROUTINE from_scratch( )
                                      taum 
     USE ions_base,            ONLY : na, nsp, randpos, zv, ions_vel, vel, ityp, &
                                      amass, randvel
-    USE ions_base,            ONLY : cdmi, nat, iforce
+    USE ions_base,            ONLY : nat, iforce
     USE ions_nose,            ONLY : xnhp0, xnhpm, vnhp, tempw
     USE cell_base,            ONLY : ainv, h, s_to_r, ibrav, omega, press, &
                                      hold, r_to_s, deth, wmass, iforceh,   &
