@@ -6,7 +6,7 @@
 ! or http://www.gnu.org/copyleft/gpl.txt .
 !
 !-----------------------------------------------------------------------
-SUBROUTINE vhpsi_gpu( ldap, np, mps, psip, hpsi )
+SUBROUTINE vhpsi_U( ldap, np, mps, psip, hpsi )
   !-----------------------------------------------------------------------
   !! This routine computes the Hubbard potential applied to the electronic
   !! structure of the current k-point. The result is added to hpsi.
@@ -39,8 +39,6 @@ SUBROUTINE vhpsi_gpu( ldap, np, mps, psip, hpsi )
   !
   IF ( .NOT. ANY(is_hubbard(:)) .AND. .NOT.ANY(is_hubbard_back(:)) ) RETURN
   !
-  CALL start_clock( 'vhpsi' )
-  !
   !$acc data present(wfcU)
   !
   IF (gamma_only) THEN
@@ -50,8 +48,6 @@ SUBROUTINE vhpsi_gpu( ldap, np, mps, psip, hpsi )
   ENDIF
   !
   !$acc end data
-  !
-  CALL stop_clock( 'vhpsi' )
   !
   RETURN
   !
@@ -319,5 +315,5 @@ SUBROUTINE vhpsi_k_acc()
 END SUBROUTINE vhpsi_k_acc
 !
 !-------------------------------------------------------------------------
-END SUBROUTINE vhpsi_gpu
+END SUBROUTINE vhpsi_U
 !-------------------------------------------------------------------------

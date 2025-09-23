@@ -1,5 +1,5 @@
 !
-! Copyright (C) 2002-2022 Quantum ESPRESSO group
+! Copyright (C) 2002-2025 Quantum ESPRESSO Foundation
 ! This file is distributed under the terms of the
 ! GNU General Public License. See the file `License'
 ! in the root directory of the present distribution,
@@ -99,7 +99,7 @@ SUBROUTINE h_psi_( lda, n, m, psi, hpsi )
   USE scf,                     ONLY: vrs  
   USE wvfct,                   ONLY: g2kin
   USE uspp,                    ONLY: vkb, nkb
-  USE ldaU,                    ONLY: lda_plus_u, lda_plus_u_kind, Hubbard_projectors
+  USE ldaU,                    ONLY: lda_plus_u
   USE gvect,                   ONLY: gstart
   USE control_flags,           ONLY: gamma_only, offload_type, scissor, use_gpu
   USE noncollin_module,        ONLY: npol, noncolin
@@ -274,17 +274,7 @@ SUBROUTINE h_psi_( lda, n, m, psi, hpsi )
   !
   ! ... Here we add the Hubbard potential times psi
   !
-  IF ( lda_plus_u .AND. Hubbard_projectors.NE."pseudo" ) THEN
-     !
-     IF ( noncolin ) THEN
-        !$acc update host(psi, hpsi)
-        CALL vhpsi_nc( lda, n, m, psi, hpsi )
-        !$acc update device(hpsi)
-     ELSE
-        CALL vhpsi( lda, n, m, psi, hpsi )
-     ENDIF
-     !
-  ENDIF
+  IF ( lda_plus_u ) CALL vhpsi( lda, n, m, psi, hpsi )
   !
   ! ... apply scissor operator
   !
