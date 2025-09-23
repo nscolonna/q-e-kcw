@@ -246,6 +246,7 @@ v_of_rho.o \
 vcsmd.o \
 vcsubs.o \
 vhpsi.o \
+vhpsi_U.o \
 vloc_psi_tg.o \
 vloc_psi_acc.o \
 utils.o \
@@ -277,7 +278,6 @@ d3hess_mod.o
 
 # CUDA Fortran versions of routines
 PWLIBS += \
-  vhpsi_gpu.o \
   rotate_wfc_gpu.o \
   utils_gpu.o \
   oscdft_functions_gpu.o

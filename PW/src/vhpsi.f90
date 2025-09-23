@@ -39,7 +39,7 @@ SUBROUTINE vhpsi ( lda, n, m, psi, hpsi )
      !$acc update device(hpsi)
   ELSE IF ( lda_plus_u_kind == 0 .OR. lda_plus_u_kind == 1 ) THEN
      !
-     CALL vhpsi_gpu ( lda, n, m, psi, hpsi )
+     CALL vhpsi_U ( lda, n, m, psi, hpsi )
      !
   ELSE
      !
