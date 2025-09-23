@@ -407,7 +407,7 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
       !
       IF (lnoloc) THEN
          ! No local field effect: set dvscf to 0
-         dvscftmp(:, :, ipert) = (0.d0, 0.d0)
+         dvscftmp(:, :, :) = (0.d0, 0.d0)
       ELSE
          ! Compute the response HXC potential
          DO ipert = 1, npert
