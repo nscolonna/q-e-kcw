@@ -33,19 +33,21 @@ SUBROUTINE vhpsi ( lda, n, m, psi, hpsi )
   IF ( Hubbard_projectors == "pseudo" ) RETURN
   !
   CALL start_clock('vhpsi')
-  IF ( noncolin ) THEN
-     !$acc update host(psi, hpsi)
-     CALL vhpsi_nc( lda, n, m, psi, hpsi )
-     !$acc update device(hpsi)
-  ELSE IF ( lda_plus_u_kind == 0 .OR. lda_plus_u_kind == 1 ) THEN
+  !
+  IF ( lda_plus_u_kind == 0 .OR. lda_plus_u_kind == 1 ) THEN
      !
      CALL vhpsi_U ( lda, n, m, psi, hpsi )
      !
+  ELSE IF ( noncolin ) THEN
+     !$acc update host(psi, hpsi)
+     CALL vhpsi_nc( lda, n, m, psi, hpsi )
+     !$acc update device(hpsi)
   ELSE
      !
      CALL vhpsi_UV( lda, n, m, psi, hpsi )
      !
-  ENDIF
+  END IF
+  !
   CALL stop_clock('vhpsi')
   !
   RETURN
@@ -463,16 +465,10 @@ SUBROUTINE vhpsi_nc( lda, np, mps, psi, hpsi )
   ! calculate <psi_at | phi_k> 
   CALL ZGEMM ('C', 'N', nwfcU, mps, lda*npol, (1.0_dp, 0.0_dp), wfcU, &
                     lda*npol, psi, lda*npol, (0.0_dp, 0.0_dp),  proj, nwfcU)
-#if defined(__MPI)
   CALL mp_sum ( proj, intra_bgrp_comm )
-#endif
-!--
   !
-  IF ( lda_plus_u_kind.EQ.0 .OR. lda_plus_u_kind.EQ.1 ) THEN
-     CALL vhpsi_U_nc ()  ! DFT+U
-  ELSEIF ( lda_plus_u_kind.EQ.2 ) THEN
-     CALL vhpsi_UV_nc () ! DFT+U+V
-  ENDIF
+  IF ( lda_plus_u_kind.EQ.0 .OR. lda_plus_u_kind.EQ.1 ) CALL errore('vhpsi','molto volentieri',2)
+  CALL vhpsi_UV_nc () ! DFT+U+V
   !
   deallocate (proj)
   !

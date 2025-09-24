@@ -23,6 +23,7 @@ SUBROUTINE vhpsi_U( ldap, np, mps, psip, hpsi )
   USE ions_base,     ONLY : nat, ntyp => nsp, ityp
   USE control_flags, ONLY : gamma_only, offload_type
   USE becmod,        ONLY : calbec
+  USE noncollin_module, ONLY: noncolin, npol
   !
   IMPLICIT NONE
   !
@@ -32,9 +33,9 @@ SUBROUTINE vhpsi_U( ldap, np, mps, psip, hpsi )
   !! true dimension of psip, hpsi
   INTEGER, INTENT(IN) :: mps
   !! number of states psip
-  COMPLEX(DP), INTENT(IN) :: psip(ldap,mps)
+  COMPLEX(DP), INTENT(IN) :: psip(npol*ldap,mps)
   !! the wavefunction
-  COMPLEX(DP), INTENT(INOUT) :: hpsi(ldap,mps)
+  COMPLEX(DP), INTENT(INOUT) :: hpsi(npol*ldap,mps)
   !! Hamiltonian dot psi
   !
   IF ( .NOT. ANY(is_hubbard(:)) .AND. .NOT.ANY(is_hubbard_back(:)) ) RETURN
@@ -43,6 +44,8 @@ SUBROUTINE vhpsi_U( ldap, np, mps, psip, hpsi )
   !
   IF (gamma_only) THEN
      CALL vhpsi_gamma_acc ()
+  ELSE IF ( noncolin ) THEN
+     CALL vhpsi_nc_acc( ldap, np, mps, psip, hpsi )
   ELSE
      CALL vhpsi_k_acc ()
   ENDIF
@@ -317,3 +320,114 @@ END SUBROUTINE vhpsi_k_acc
 !-------------------------------------------------------------------------
 END SUBROUTINE vhpsi_U
 !-------------------------------------------------------------------------
+
+!-------------------------------------------------------------------------
+SUBROUTINE vhpsi_nc_acc( lda, np, mps, psi, hpsi )
+  !-----------------------------------------------------------------------
+  !! Noncollinear version of \(\texttt{vhpsi} routine (A. Smogunov).
+  !! Ported to GPU (DFT+U only)
+  !
+  USE kinds,            ONLY: dp
+  USE control_flags,    ONLY: offload_type
+  USE ldaU,             ONLY: Hubbard_lmax, Hubbard_l, is_Hubbard, nwfcU, &
+                              wfcU, offsetU, lda_plus_u_kind
+  USE scf,              ONLY: v
+  USE ions_base,        ONLY: nat, ntyp => nsp, ityp
+  USE noncollin_module, ONLY: npol
+  USE mp_bands,         ONLY: intra_bgrp_comm
+  USE mp,               ONLY: mp_sum
+  USE lsda_mod,         ONLY: nspin
+  !
+  IMPLICIT NONE
+  !
+  INTEGER, INTENT(IN) :: lda
+  !! leading dimension of arrays psi, hpsi
+  INTEGER, INTENT(IN) :: np
+  !! true dimension of psi, hpsi
+  INTEGER, INTENT(IN) :: mps
+  !! number of states psi
+  COMPLEX(dp), INTENT(IN) :: psi(lda*npol,mps)
+  !! the wavefunction
+  COMPLEX(dp), INTENT(INOUT) :: hpsi(lda*npol,mps)
+  !! Hamiltonian dot psi
+  !
+  ! ... local variables
+  !
+  INTEGER :: ibnd, na, nwfc, is1, is2, nt, m1, m2, ldim
+  COMPLEX(dp) :: temp
+  COMPLEX(dp), ALLOCATABLE :: proj(:,:)
+  COMPLEX(dp), ALLOCATABLE :: ctemp(:,:), vns(:,:)
+  !
+  !
+  IF ( lda_plus_u_kind.EQ.2 ) CALL errore('vhpsi_nc','volentieri',1)
+  !
+  ALLOCATE( proj(nwfcU, mps) )
+  !$acc enter data create(proj)
+  !
+  ! calculate proj=<psi_at | psi_k> 
+  !$acc host_data use_device(wfcU,psi,proj)
+  CALL MYZGEMM ('C', 'N', nwfcU, mps, lda*npol, (1.0_dp, 0.0_dp), wfcU, &
+                    lda*npol, psi, lda*npol, (0.0_dp, 0.0_dp),  proj, nwfcU)
+  CALL mp_sum ( proj, intra_bgrp_comm )
+  !$acc end host_data
+  !
+  DO nt = 1, ntyp
+     !
+     ! Compute the action of the Hubbard potential on the KS wave functions:
+     ! V_Hub |psi > = \sum v%ns |wfcU> <wfcU|psi>
+     ! where v%ns = U ( delta/2 - rho%ns ) is computed in v_of_rho
+     !
+     IF ( is_hubbard(nt) ) THEN
+        !  
+        ldim = 2*Hubbard_l(nt) + 1
+        !
+        ALLOCATE ( ctemp(ldim*npol,mps) )
+        ALLOCATE ( vns (ldim*npol,ldim*npol) )
+        !$acc data create(vns, ctemp)
+        !
+        DO na = 1, nat
+           IF ( nt == ityp(na) ) THEN
+              !
+              do is1 = 1, npol
+                 do is2 = 1, npol
+                    DO m2 = 1, ldim
+                       DO m1 = 1, ldim
+                          vns (m1+ldim*(is1-1), m2+ldim*(is2-1))  &
+                               = v%ns_nc(m1,m2,npol*(is1-1)*is2,na)
+                       ENDDO
+                    ENDDO
+                 enddo
+              enddo
+              !$acc update device(vns)
+              !
+              !$acc host_data use_device(vns,proj,ctemp)
+              CALL MYZGEMM ('n','n', ldim*npol, mps, ldim*npol,(1.0_dp,0.0_dp),&
+                   vns, ldim*npol, proj(offsetU(na)+1,1),&
+                   nwfcU,(0.0_dp,0.0_dp),ctemp,ldim*npol)
+              !$acc end host_data
+              !
+              !$acc host_data use_device(wfcU,ctemp,hpsi)
+              CALL MYZGEMM ('n','n', lda*npol, mps, ldim*npol, (1.0_dp,0.0_dp),&
+                   wfcU(1,offsetU(na)+1), lda*npol, ctemp, ldim*npol, &
+                   (1.0_dp,0.0_dp), hpsi, lda*npol)
+              !$acc end host_data
+              !
+           ENDIF
+        ENDDO
+        !
+        !$acc end data
+        DEALLOCATE(vns)
+        DEALLOCATE ( ctemp )
+        !
+     ENDIF
+     !
+  ENDDO
+  !
+  !$acc exit data destroy(proj)
+  deallocate (proj)
+  !$acc end data
+  !
+  RETURN
+  !
+END SUBROUTINE vhpsi_nc_acc
+
