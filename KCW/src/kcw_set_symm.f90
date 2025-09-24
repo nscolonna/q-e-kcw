@@ -19,12 +19,12 @@
     !
     nxxs = nr1x*nr2x*nr3x
     !
-    IF (.NOT. ALLOCATED(rir)) THEN   
-        ALLOCATE( rir(nxxs,nsym) )
-    ELSEIF ((SIZE(rir,1) /= nxxs) ) THEN 
-        DEALLOCATE( rir )
-        ALLOCATE( rir(nxxs,nsym) )
-    ENDIF
+    IF (ALLOCATED(rir)) deallocate(rir)
+    ALLOCATE( rir(nxxs,nsym) )
+    !ELSEIF ((SIZE(rir,1) /= nxxs) ) THEN 
+    !    DEALLOCATE( rir )
+    !    ALLOCATE( rir(nxxs,nsym) )
+    !ENDIF
     !
     rir = 0
     ALLOCATE ( ftau(3,nsym), s_scaled(3,3,nsym) )

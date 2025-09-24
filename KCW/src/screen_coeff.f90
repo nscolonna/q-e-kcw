@@ -40,10 +40,21 @@ SUBROUTINE screen_coeff ()
   USE control_kcw,          ONLY : nsym_old
   USE symm_base,            ONLY : nsym
   USE cell_base,            ONLY : omega
-  !
+  USE control_kcw,          ONLY : qstar_Gvec, qstar_iq, qstar_isym, nqstar
+  USE io_kcw,               ONLY : read_rhowann, read_rhowann_g
+  USE control_kcw,    ONLY: io_real_space
+  USE control_kcw,    ONLY: num_wann, nrho, tmp_dir_kcwq
+  USE control_flags,  ONLY: gamma_only
+  USE fft_base,          ONLY : dffts
+  USE cell_base,         ONLY : at, omega !, bg
+  USE gvect,             ONLY : ig_l2g
+  USE gvecs,             ONLY : ngms
+  USE mp_bands,          ONLY : root_bgrp, intra_bgrp_comm
+  USE fft_interfaces,    ONLY : invfft
+!
   IMPLICIT NONE
   ! 
-  INTEGER :: iq, nqs, spin_ref, is, ip, iq_ibz
+  INTEGER :: iq, nqs, spin_ref, is, ip, iq_ibz, iq1
   !! Counter for the k/q points in the BZ, 
   !! nqs: total number of q points 
   !! spin_ref: spin of the Wannier function
@@ -68,10 +79,14 @@ SUBROUTINE screen_coeff ()
   LOGICAL :: do_band 
   !
   COMPLEX(DP) :: phase(dffts%nnr), wann_c(dffts%nnr,num_wann,nrho), rho_c(dffts%nnr,num_wann,nrho)
+  INTEGER     :: index(2)
   !! The phase associated to the hift k+q-> k'
   !
+  COMPLEX(DP), ALLOCATABLE :: drhor_rotated(:,:), rhor_rotated(:,:), drhog_rotated(:,:)
   COMPLEX(DP) :: int_rho, int_wann, pi_q_unrelax, pi_q_unrelax_, sh_q, pi_q_relax, pi_q_relax_rs
   COMPLEX(DP) :: struct_fact
+  COMPLEX(DP), ALLOCATABLE :: rhog__(:),   rhowann_aux__(:)
+
   LOGICAL :: do_real_space = .false. 
   LOGICAL :: exst
   !
@@ -80,11 +95,13 @@ SUBROUTINE screen_coeff ()
   REAL(DP) :: xq_(3), weight(nkstot)
   REAL(DP) :: alpha
   REAL(DP) :: div, div_eps
+  CHARACTER (LEN=256)      :: file_base
+  CHARACTER (LEN=6), EXTERNAL :: int_to_char
   !
   nqs = nqstot
   !
   IF (nqs == 1) do_real_space = .TRUE. 
-  IF (do_real_space) THEN 
+  IF (do_real_space .or. (irr_bz .and. get_coulomb)) THEN 
      ALLOCATE ( drhor_scf(dffts%nnr,nspin_mag) ) 
      drhor_scf = ZERO
   ENDIF
@@ -129,6 +146,14 @@ SUBROUTINE screen_coeff ()
     ALLOCATE ( Vcoulomb(2, nkstot/nspin, num_wann, num_wann), Wcoulomb(2, nkstot/nspin, num_wann, num_wann))
     Vcoulomb = 0.D0
     Wcoulomb = 0.D0
+    IF (irr_bz) THEN
+          ALLOCATE( drhor_rotated(dffts%nnr, nspin_mag))
+          ALLOCATE( rhor_rotated(dffts%nnr, nspin_mag) )
+          ALLOCATE( drhog_rotated(ngms, nspin_mag))
+          ALLOCATE ( rhowann_aux__(dffts%nnr) )
+          ALLOCATE ( rhog__ (ngms) )
+          CALL kcw_starq()
+         END IF        
   END IF
   !
   DO iq = iq_start, nqs
@@ -265,8 +290,79 @@ SUBROUTINE screen_coeff ()
        ENDIF
        !
        IF(get_coulomb) THEN 
-        CALL coulomb_me( iwann, iq, drhog_scf, rhowann, weight(iq))
-       END IF
+         DO jwann = 1, num_wann
+           IF (.not. irr_bz) THEN
+            DO is = 1, nspin_mag
+              !write(*,*) "drhog_scf MINVAL", is, minval(ABS(drhog_scf(:,is))),"MAXVAL", MAXVAL(ABS(drhog_scf(:,is)))
+            END DO
+                write(*,*) "rhowann", jwann, iq, "MINVAL", minval(ABS(rhowann(:,jwann,1))),"MAXVAL", MAXVAL(ABS(rhowann(:,jwann,1)))
+            CALL coulomb_me( iwann, jwann, iq, drhog_scf, rhowann, weight(iq))
+            WRITE(*,*) iq, jwann, iwann, "bare", Vcoulomb(1,:,iwann,jwann), "screen", Wcoulomb(1,:,iwann,jwann) 
+          ELSE
+             !loop over the star of the hard quantity, drhog_scf
+            !WRITE(*,*) "fbz2ibz(iq,iwann)", fbz2ibz(iq,iwann), "nqstar(fbz2ibz(iq,iwann), iwann)",&
+           ! nqstar(fbz2ibz(iq,iwann), iwann)
+             DO iq1 = 1, nqstar(iq, iwann)
+                !WRITE(*,*) "iq1: ", iq1, "iq", iq, "qstar_iq", qstar_iq(iq1,iq,iwann)
+               !WRITE(*,*) "index:", index
+               !rotate drhog_scf(iwann). for rhowann better to read it again with the correct q.
+               !read again wannier density at jwann
+               IF ( .NOT. io_real_space) THEN
+                !
+                DO ip = 1, nrho
+                  file_base=TRIM (tmp_dir_kcw) // 'q' &
+                  & // TRIM(int_to_char(qstar_iq(iq1,iq,iwann)))//'/'&
+                  //'rhowann_g_iwann_'//TRIM(int_to_char((jwann-1)*nrho+ip))
+                  CALL read_rhowann_g( file_base, &
+                       root_bgrp, intra_bgrp_comm, &
+                       ig_l2g, 1, rhog__(:), .FALSE., gamma_only )
+                       rhowann_aux__=(0.d0,0.d0)
+                  rhowann_aux__(dffts%nl(:)) = rhog__(:)
+                  CALL invfft ('Rho', rhowann_aux__, dffts)
+                  rhowann(:,jwann,ip) = rhowann_aux__(:)*omega
+                  !
+                ENDDO
+                !
+               ELSE 
+                !  
+                DO ip = 1, nrho    
+                  file_base=TRIM(tmp_dir_kcwq)//'rhowann_iwann_'//TRIM(int_to_char((jwann-1)*nrho+ip))
+                  CALL read_rhowann( file_base, dffts, rhowann_aux__ )
+                  rhowann(:,jwann,ip) = rhowann_aux__(:)
+                ENDDO
+                !
+              ENDIF
+                      !
+               !apply phase to both
+              !WRITE(*,*) "rotate_rhowann_r", qstar_isym(iq1,iq,iwann)
+              drhor_scf = 0.0 
+              CALL kcw_set_symm( dffts%nr1,  dffts%nr2,  dffts%nr3, &
+              dffts%nr1x, dffts%nr2x, dffts%nr3x )  
+              DO is = 1, nspin_mag
+                ! G -> r
+                drhor_scf(dffts%nl(:),is) = drhog_scf(:,is)
+                CALL invfft ('Rho', drhor_scf(:,is), dffts)                
+                ! rotate using r space
+                !write(*,*) "drhor_scf", "MINVAL", minval(ABS(drhor_scf(:,is))),"MAXVAL", MAXVAL(ABS(drhor_scf(:,is)))
+                CALL rotate_rhowann_r(qstar_isym(iq1,iq,iwann), drhor_scf(:, is), drhor_rotated(:, is))
+                !write(*,*) "drhor_rotated", "MINVAL", minval(ABS(drhor_rotated(:,is))),"MAXVAL", MAXVAL(ABS(drhor_rotated(:,is)))
+                CALL calculate_phase(qstar_Gvec(:,iq1,iq,iwann), phase)
+                drhor_rotated(:,is) = phase(:)*drhor_rotated(:,is)
+                ! r -> G
+                CALL fwfft ('Rho', drhor_rotated(:,is), dffts)
+                drhog_rotated(:,is)  = drhor_rotated(dffts%nl(:),is)
+                !write(*,*) "drhog_scf MINVAL", is, minval(ABS(drhog_scf(:,is))),"MAXVAL", MAXVAL(ABS(drhog_scf(:,is)))
+                !write(*,*) "drhog_rotated MINVAL", minval(ABS(drhog_rotated(:,is))),"MAXVAL", MAXVAL(ABS(drhog_rotated(:,is)))
+              END DO
+              write(*,*) "rhowann", jwann, int_to_char(qstar_iq(iq1,iq,iwann)), &
+              "MINVAL", minval(ABS(rhowann(:,jwann,1))),"MAXVAL", MAXVAL(ABS(rhowann(:,jwann,1)))
+              !write(*,*) "nqstot", nqstot
+               CALL coulomb_me( iwann, jwann, qstar_iq(iq1,iq,iwann), drhog_rotated, rhowann, 1.0d0 / dble(nqstot))
+             WRITE(*,*) qstar_iq(iq1,iq,iwann), jwann, iwann, "bare", Vcoulomb(1,:,iwann,jwann), "screen", Wcoulomb(1,:,iwann,jwann) 
+            END DO!iq1
+          END IF!irr_bz
+         END DO!jwann            
+        END IF!get_coulomb
        !
        pi_q_relax    = ZERO
        pi_q_relax_rs = ZERO

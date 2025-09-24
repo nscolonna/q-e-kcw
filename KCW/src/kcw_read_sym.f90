@@ -3,6 +3,7 @@ SUBROUTINE read_symmetry_op(iwann, nsym_aux, s_aux, ft_aux)
 !computed at step wann2kcw
   USE kinds,               ONLY : DP
   USE control_kcw,         ONLY : tmp_dir_kcw
+  USE control_kcw,         ONLY : sym_w2sym
   !
   implicit none
   !

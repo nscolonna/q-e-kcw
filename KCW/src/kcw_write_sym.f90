@@ -4,7 +4,7 @@ SUBROUTINE write_symmetry_op(iwann)
   USE control_kcw,         ONLY : tmp_dir_kcw
   USE symm_base,           ONLY : ft, nsym
   USE control_kcw,         ONLY : nsym_w_k, s_w, ft_w,&
-                                  sym_only_for_q, nsym_w_q
+                                  sym_only_for_q, nsym_w_q, sym_w2sym
   !
   implicit none
   !

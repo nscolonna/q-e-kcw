@@ -25,6 +25,7 @@ MODULE io_kcw
   !
   PUBLIC :: rho_binary
   PUBLIC :: write_rhowann, read_rhowann, write_mlwf, read_mlwf, write_rhowann_sgl, read_rhowann_sgl
+  PUBLIC :: read_rhowann_wrap
   PUBLIC :: write_rhowann_g, read_rhowann_g
   CHARACTER(LEN=6), EXTERNAL :: int_to_char
   !
@@ -437,6 +438,58 @@ MODULE io_kcw
      RETURN
      !
    END SUBROUTINE read_rhowann
+   !
+   !
+   SUBROUTINE read_rhowann_wrap(rhowann)
+      USE control_kcw,    ONLY: io_real_space
+      USE control_kcw,    ONLY: num_wann, nrho, tmp_dir_kcwq
+      USE control_flags,  ONLY: gamma_only
+      USE fft_base,          ONLY : dffts
+      USE cell_base,         ONLY : at, omega !, bg
+      USE gvect,             ONLY : ig_l2g
+      USE gvecs,             ONLY : ngms
+      USE mp_bands,          ONLY : root_bgrp, intra_bgrp_comm
+      USE fft_interfaces,    ONLY : invfft
+
+     INTEGER:: i, ip
+
+     CHARACTER (LEN=256) :: file_base
+     CHARACTER (LEN=6), EXTERNAL :: int_to_char
+     COMPLEX(DP), ALLOCATABLE :: rhog(:), rhowann_aux(:)
+     COMPLEX(DP) :: rhowann(dffts%nnr, num_wann,nrho)
+     !
+     ALLOCATE ( rhowann_aux(dffts%nnr) )
+     ALLOCATE ( rhog (ngms) )
+     DO i = 1, num_wann
+        !
+        IF ( .NOT. io_real_space) THEN
+          !
+          DO ip = 1, nrho
+            file_base=TRIM(tmp_dir_kcwq)//'rhowann_g_iwann_'//TRIM(int_to_char((i-1)*nrho+ip))
+            CALL read_rhowann_g( file_base, &
+                 root_bgrp, intra_bgrp_comm, &
+                 ig_l2g, 1, rhog(:), .FALSE., gamma_only )
+            rhowann_aux=(0.d0,0.d0)
+            rhowann_aux(dffts%nl(:)) = rhog(:)
+            CALL invfft ('Rho', rhowann_aux, dffts)
+            rhowann(:,i,ip) = rhowann_aux(:)*omega
+            !
+          ENDDO
+          !
+        ELSE 
+          !  
+          DO ip = 1, nrho    
+            file_base=TRIM(tmp_dir_kcwq)//'rhowann_iwann_'//TRIM(int_to_char((i-1)*nrho+ip))
+            CALL read_rhowann( file_base, dffts, rhowann_aux )
+            rhowann(:,i,ip) = rhowann_aux(:)
+          ENDDO
+          !
+        ENDIF
+      ENDDO
+END SUBROUTINE
+   
+   
+   
    !
    !
    ! NsC: OBOSOLETE, incorporated into write_rhowann. Kept for reference/backup

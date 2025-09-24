@@ -34,7 +34,8 @@ SUBROUTINE find_IBZ_q()
     USE io_global,             ONLY : stdout
     USE mp,                    ONLY : mp_sum  
     USE symme,                 ONLY : sym_rho, sym_rho_init
-  
+    USE control_kcw,           ONLY : nqstar, qstar_iq, qstar_isym, qstar_Gvec, sym_w2sym
+
     IMPLICIT NONE 
     !
     COMPLEX(DP)              ::IMAG
@@ -61,7 +62,8 @@ SUBROUTINE find_IBZ_q()
     INTEGER :: is_sym( nsym )
     LOGICAL :: respected 
     INTEGER :: nkstot_eff
-    !
+    ALLOCATE ( sym_w2sym(48, num_wann) )
+    !for the star of q
     !
     CALL start_clock ( 'check_symm' )
     !
@@ -156,7 +158,7 @@ SUBROUTINE find_IBZ_q()
           !
           x_q_cryst(:)=x_q(:,iq)
           CALL cryst_to_cart(1,x_q_cryst,at,-1)
-          CALL rotate_xk(iq, isym, iRq, Gvector, Gvector_cryst)
+          CALL rotate_xk(x_q(:, iq), iRq, Gvector, Gvector_cryst, sr(:,:,isym), t_rev(isym))
           IF ( ANY( Gvector_cryst .EQ. 0.5 ) ) THEN 
             EXIT
           END IF
@@ -290,6 +292,7 @@ SUBROUTINE find_IBZ_q()
              nsym_w_q(iwann) = nsym_w_q(iwann) + 1
              s_w(:,:,nsym_w_q(iwann),iwann) = s(:,:,isym)
              ft_w(:, nsym_w_q(iwann), iwann) = ft(:, isym)
+             sym_w2sym(nsym_w_q(iwann), iwann) = isym
              IF (kcw_iverbosity .gt. 1 ) THEN 
                 IF (ir /= 1) THEN 
                    WRITE(stdout, '(13X, "isym =", I5, 3X,"    RESPECTED - only q")') isym
@@ -318,26 +321,25 @@ SUBROUTINE find_IBZ_q()
   
   
   
-  SUBROUTINE rotate_xk(ik_ToRotate, isym, iRk, Gvector, Gvector_cryst)
-  ! This subroutine rotates the vector with index ik_ToRotate with symmetry isym.
+  SUBROUTINE rotate_xk(xk_ToRotate, iRk, Gvector, Gvector_cryst, &
+                       sr_isym, t_rev_isym)
+    ! This subroutine rotates the vector with index ik_ToRotate with symmetry isym.
   ! Then, it finds which of the k vectors in the mesh matches the rotated one, 
   ! in the sense that they difference is a reciprocal lattice vector. 
   ! Equation to satisfy:
   !         xk(:, iRk) = sr(:,:,isym).xk(:, ik_ToRotate) + Gvector(:)
     USE kinds,                 ONLY : DP
     USE io_global,             ONLY : stdout
-    USE symm_base,             ONLY:  sr                !symmetry operation in cartesian coordinates
-    USE symm_base,             ONLY:  t_rev
-    USE symm_base,             ONLY:  invs              !index of inverse of symmetry op
     USE cell_base,             ONLY : at
-    USE control_kcw,           ONLY : x_q
+    USE control_kcw,           ONLY : nqstot, x_q
     !
     IMPLICIT NONE 
     !
-    INTEGER,  INTENT(IN)  :: ik_torotate
+    REAL(DP),  INTENT(IN)  :: xk_ToRotate(3)
     !k point to rotate
-    INTEGER,  INTENT(IN)  :: isym
-    !symmetry to apply
+    REAL(DP), INTENT(IN)  :: sr_isym(3,3)
+    !symmetry op to apply in cartesian coordinates
+    INTEGER, INTENT(IN)   :: t_rev_isym
     INTEGER,  INTENT(OUT) :: iRk
     !index of Rxk in FBZ
     REAL(DP), INTENT(OUT) :: Gvector(3), Gvector_cryst(3)
@@ -348,9 +350,9 @@ SUBROUTINE find_IBZ_q()
     !
     ! rotate k point
     !
-    Rxk(:) = MATMUL(x_q(:, ik_torotate), sr(:,:,isym))
-    IF(t_rev(isym) .eq. 1) THEN 
-      Rxk(:) = -Rxk(:)
+    Rxk(:) = MATMUL(xk_ToRotate, sr_isym(:,:))
+    IF(t_rev_isym .eq. 1) THEN 
+          Rxk(:) = -Rxk(:)
     END IF
     !
     ! Find k point that differs a reciprocal lattice vector from the rotated one

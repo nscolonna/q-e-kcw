@@ -12,11 +12,13 @@ SUBROUTINE kcw_kpoint_grid()
   USE klist,              ONLY : xk
   USE control_kcw,        ONLY : ibz2fbz, fbz2ibz
   USE cell_base,          ONLY : bg
-  USE symm_base,          ONLY : time_reversal
+  USE symm_base,          ONLY : time_reversal, t_rev, sr
+  USE control_kcw,        ONLY:   sym_w2sym, nsym_w_q
+  USE control_kcw,        ONLY : nqstar, qstar_iq, qstar_isym, qstar_Gvec, nqstot
   !
   implicit none
   !
-  INTEGER                :: iwann, iq
+  INTEGER                :: iwann, iq, isym, iRxq
   ! indices
   INTEGER                :: nsym_w_iwann
   ! number of symmetries respected by current wannier function
@@ -70,4 +72,56 @@ SUBROUTINE kcw_kpoint_grid()
   DEALLOCATE( wq_ibz_iwann )
   DEALLOCATE( s_w_iwann )
   !
+END SUBROUTINE
+
+
+
+SUBROUTINE kcw_starq()
+  USE kinds,              ONLY : DP  
+  USE control_kcw,        ONLY : nqstar, qstar_iq, qstar_isym, qstar_Gvec, nqstot, xq_ibz
+  USE control_kcw,        ONLY : nqstot_ibz,ibz2fbz, nsym_w_q, sym_w2sym, num_wann
+  USE symm_base,          ONLY : time_reversal, t_rev, sr, nsym
+  !
+  ! generate the star of q for each q point
+  !
+  INTEGER :: iq_ibz, iq, iwann
+  REAL(DP) :: xq(3)
+  REAL(DP)               :: Gvector(3), Gvector_cryst(3)
+  !
+  WRITE(*,*) "starq", "nqstot_ibz:", nqstot_ibz, "xq_ibz", xq_ibz
+  ALLOCATE ( nqstar(nqstot, num_wann) )
+  ALLOCATE ( qstar_iq(nqstot, nqstot, num_wann) )
+  ALLOCATE ( qstar_isym(nqstot, nqstot, num_wann) )
+  ALLOCATE ( qstar_Gvec(3, nqstot, nqstot, num_wann) )
+  !
+  nqstar(:,:) = 0
+  DO iwann = 1, num_wann
+    CALL reset_symmetry_op(iwann)
+    WRITE(*,*) "iwann: ", iwann, "nqstot_ibz(iwann)", nqstot_ibz(iwann)
+    DO iq_ibz = 1, nqstot_ibz(iwann)
+      iq = ibz2fbz(iq_ibz,iwann)
+      xq(:) = xq_ibz(:, iq_ibz, iwann)
+      WRITE(*,*) "xq_ibz", xq
+      WRITE(*,*) "nsym", nsym
+      DO isym = 1, nsym
+        WRITE(*,*) "isym", isym
+        CALL rotate_xk(xq, iRxq, Gvector, Gvector_cryst, &
+                       sr(:,:,isym), t_rev(isym))
+                       WRITE(*,*) "iRxq", iRxq
+        ! check if this point is already in the list of the star
+        IF( .NOT. ( ANY(qstar_iq(:, iq, iwann) .EQ. iRxq ) ) ) THEN
+          WRITE(*,*) "nqstar"
+          nqstar(iq, iwann) = nqstar(iq, iwann) + 1
+          WRITE(*,*) "qstar_iq"
+          qstar_iq(nqstar(iq, iwann), iq, iwann) = iRxq
+          WRITE(*,*) "qstar_isym"
+          qstar_isym(nqstar(iq, iwann), iq, iwann) = isym
+          WRITE(*,*) "qstar_Gvec"
+          qstar_Gvec(:, nqstar(iq, iwann), iq, iwann) = Gvector(:)
+        END IF
+      END DO!isym
+    END DO!iq
+    WRITE(*,*) "nqstar:", nqstar
+    WRITE(*,*) "qstar_iq", qstar_iq
+  END DO!iwann
 END SUBROUTINE

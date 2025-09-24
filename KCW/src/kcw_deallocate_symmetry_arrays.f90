@@ -5,6 +5,7 @@ SUBROUTINE kcw_deallocate_symmetry_arrays()
   USE control_kcw,     ONLY: r, s_w, ft_w, &
                              nsym_w_k, nsym_w_q, nqstot_ibz
   USE control_kcw,     ONLY: xq_ibz, wq_ibz, ibz2fbz, fbz2ibz
+  USE control_kcw,     ONLY: nqstar, qstar_iq, qstar_isym, qstar_Gvec
   !
   IMPLICIT NONE
   !
@@ -18,6 +19,10 @@ SUBROUTINE kcw_deallocate_symmetry_arrays()
   if( allocated(wq_ibz)) deallocate(wq_ibz)
   if( allocated(ibz2fbz)) deallocate(ibz2fbz)
   if( allocated(fbz2ibz)) deallocate(fbz2ibz)
-  !
+  if( allocated ( nqstar )) deallocate(nqstar)
+  if( allocated ( qstar_iq )) deallocate(qstar_iq)
+  if( allocated ( qstar_isym )) deallocate(qstar_isym)
+  if( allocated ( qstar_Gvec )) deallocate(qstar_Gvec)
+    !
 END SUBROUTINE kcw_deallocate_symmetry_arrays
   

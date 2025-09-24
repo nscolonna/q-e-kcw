@@ -141,7 +141,17 @@ MODULE control_kcw
   LOGICAL                  :: irr_bz
   INTEGER                  :: nsym_old
   !to keep track of number of symmetries of crystal, without restrictions
-  LOGICAL                  :: setup_pw
+  INTEGER, ALLOCATABLE     :: sym_w2sym(:, :)
+  !map from s_w to s
+  INTEGER, ALLOCATABLE     :: nqstar(:,:)
+  !for each q point iq and wannier funtion iwann, the number of q in the star 
+  INTEGER, ALLOCATABLE     :: qstar_iq(:,:,:)
+  !q in the star of every iq. indices: iq_, iq, iwann 
+  INTEGER, ALLOCATABLE     :: qstar_isym(:,:,:)
+  !index of symmetry operation to bring q_ibz to qstar_iq, in the array s and sr
+  REAL(DP), ALLOCATABLE    :: qstar_Gvec(:,:,:,:)
+  !G vector such that R.q_ibz = qstar + G 
+    LOGICAL                  :: setup_pw
 !  !variable to decide wether we want to move the wannier centers in the origin when checking symmetries
   LOGICAL                  :: use_wct
   !variable to decide wether we want to verify if symmetries move a Wannier in an other unitcell in the supercell
