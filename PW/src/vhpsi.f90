@@ -15,7 +15,7 @@ SUBROUTINE vhpsi ( lda, n, m, psi, hpsi )
   !
   USE kinds,            ONLY : dp
   USE ldaU,             ONLY : lda_plus_u_kind, Hubbard_projectors
-  USE noncollin_module, ONLY: noncolin
+  USE noncollin_module, ONLY : npol, noncolin
   !
   IMPLICIT NONE
   !
@@ -25,9 +25,9 @@ SUBROUTINE vhpsi ( lda, n, m, psi, hpsi )
   !! true dimension of psi, hpsi
   INTEGER, INTENT(IN) :: m
   !! number of states psi
-  COMPLEX(dp), INTENT(IN) :: psi(lda,m)
+  COMPLEX(dp), INTENT(IN) :: psi(lda*npol,m)
   !! the wavefunction
-  COMPLEX(dp), INTENT(INOUT) :: hpsi(lda,m)
+  COMPLEX(dp), INTENT(INOUT) :: hpsi(lda*npol,m)
   !! Hamiltonian dot psi
   !
   IF ( Hubbard_projectors == "pseudo" ) RETURN
@@ -436,7 +436,6 @@ SUBROUTINE vhpsi_nc( lda, np, mps, psi, hpsi )
   USE mp_bands,         ONLY: intra_bgrp_comm
   USE mp,               ONLY: mp_sum
   USE lsda_mod,         ONLY: nspin
-  USE io_global,     ONLY : stdout
   !
   IMPLICIT NONE
   !
