@@ -354,13 +354,13 @@ SUBROUTINE vhpsi_nc_acc( lda, np, mps, psi, hpsi )
   ! ... local variables
   !
   INTEGER :: ibnd, na, nwfc, is1, is2, nt, m1, m2, ldim
-  COMPLEX(dp) :: temp
   COMPLEX(dp), ALLOCATABLE :: proj(:,:)
   COMPLEX(dp), ALLOCATABLE :: ctemp(:,:), vns(:,:)
   !
   !
-  IF ( lda_plus_u_kind.EQ.2 ) CALL errore('vhpsi_nc','volentieri',1)
+  IF ( lda_plus_u_kind == 2 ) CALL errore('vhpsi_nc','incorrectly called',1)
   !
+  !$acc data present(wfcU,psi,hpsi)
   ALLOCATE( proj(nwfcU, mps) )
   !$acc enter data create(proj)
   !
@@ -393,7 +393,7 @@ SUBROUTINE vhpsi_nc_acc( lda, np, mps, psi, hpsi )
                     DO m2 = 1, ldim
                        DO m1 = 1, ldim
                           vns (m1+ldim*(is1-1), m2+ldim*(is2-1))  &
-                               = v%ns_nc(m1,m2,npol*(is1-1)*is2,na)
+                               = v%ns_nc(m1,m2,npol*(is1-1)+is2,na)
                        ENDDO
                     ENDDO
                  enddo
@@ -416,14 +416,14 @@ SUBROUTINE vhpsi_nc_acc( lda, np, mps, psi, hpsi )
         ENDDO
         !
         !$acc end data
-        DEALLOCATE(vns)
-        DEALLOCATE ( ctemp )
+        DEALLOCATE (vns)
+        DEALLOCATE (ctemp)
         !
      ENDIF
      !
   ENDDO
   !
-  !$acc exit data destroy(proj)
+  !$acc exit data delete(proj)
   deallocate (proj)
   !$acc end data
   !
