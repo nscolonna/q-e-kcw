@@ -118,8 +118,12 @@ SUBROUTINE lr_apply_liouvillian( evc1, evc1_new, interaction )
      IF (gamma_only) THEN
         ALLOCATE( dvrs(dfftp%nnr, nspin) )
         ALLOCATE( dvrss(dffts%nnr) )
+        !$acc enter data create(dvrs, dvrss)
+
+        !$acc kernels 
         dvrs(:,:)=0.0d0
         dvrss(:)=0.0d0
+        !$acc end kernels
      ELSE
         ALLOCATE( dvrsc(dfftp%nnr, nspin) )
         ALLOCATE( dvrssc(dffts%nnr) )
@@ -141,7 +145,9 @@ SUBROUTINE lr_apply_liouvillian( evc1, evc1_new, interaction )
         ! approximation, so we zero the interation.
         !
         IF (gamma_only) THEN
+           !$acc kernels     
            dvrs(:,1) = 0.0d0
+           !$acc end kernels
            CALL fft_interpolate (dfftp, dvrs(:,1), dffts, dvrss)
         ELSE
            dvrsc(:,1) = (0.0d0,0.0d0)
@@ -152,23 +158,27 @@ SUBROUTINE lr_apply_liouvillian( evc1, evc1_new, interaction )
         !
         IF (gamma_only) THEN
            !
+           !$acc kernels
            dvrs(:,1) = rho_1(:,1)
+           !$acc end kernels
            !
            ! In the gamma_only case dvrs is real, but dv_of_drho expects
            ! a complex array on input, hence this temporary variable.
            !
            ALLOCATE( dvrs_temp(dfftp%nnr, nspin) )
            !
-           dvrs_temp = CMPLX( dvrs, 0.0d0, kind=DP )
-           !
-           DEALLOCATE ( dvrs )  ! to save memory
+           !$acc enter data create(dvrs_temp)
+           !$acc kernels
+           dvrs_temp(:,:) = CMPLX( dvrs(:,:), 0.0d0, kind=DP )
+           !$acc end kernels
            !
            CALL dv_of_drho(dvrs_temp)
            !
-           ALLOCATE ( dvrs(dfftp%nnr, nspin) )
+           !$acc kernels 
+           dvrs(:,:) = DBLE(dvrs_temp(:,:))
+           !$acc end kernels
            !
-           dvrs = DBLE(dvrs_temp)
-           !
+           !$acc exit data delete(dvrs_temp)
            DEALLOCATE(dvrs_temp)
            !
 #if defined (__ENVIRON)
@@ -329,9 +339,18 @@ SUBROUTINE lr_apply_liouvillian( evc1, evc1_new, interaction )
                        & sevc1_new(1,1,ik), evc1_new(1,1,ik))
   ENDDO
   !
+  IF ( interaction ) THEN  
+     IF (gamma_only) THEN
+        !$acc exit data delete(dvrs, dvrss)     
+        DEALLOCATE(dvrs)
+        DEALLOCATE(dvrss)
+     ELSE
+        DEALLOCATE(dvrsc)
+        DEALLOCATE(dvrssc)               
+     ENDIF
+  ENDIF   
+
   !$acc end data
-  IF (allocated(dvrs)) DEALLOCATE(dvrs)
-  IF (allocated(dvrss)) DEALLOCATE(dvrss)
   DEALLOCATE(d_deeq)
   DEALLOCATE(spsi1)
   DEALLOCATE(sevc1_new)
@@ -451,7 +470,6 @@ CONTAINS
        !
        IF (lr_exx) CALL lr_exx_sum_int()
        !
-       !$acc enter data copyin(dvrss(1:nnr_siz))
        DO ibnd = ibnd_start_gamma ,ibnd_end_gamma, incr
           !
           ! Product with the potential vrs = (vltot+vr)
@@ -549,8 +567,6 @@ CONTAINS
           CALL fwfft_orbital_gamma (evc1_new(:,:,1), ibnd, nbnd,.false.)
           !
        ENDDO
-       !
-       !$acc exit data delete (dvrss)
        !
 #if defined(__MPI)
        !$acc host_data use_device(evc1_new)

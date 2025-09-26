@@ -119,9 +119,11 @@ subroutine compute_dvloc (uact, addnlcc, dvlocin)
      !
      CALL addcore (uact, drhoc)
      !
+     !$acc kernels
      aux(:,:) = (0.0_dp, 0.0_dp)
+     !$acc end kernels
+     !
      CALL dv_of_drho_xc(aux, drhoc = drhoc)
-     !$acc update device(aux) 
      !
      !$acc exit data delete (drhoc)
      deallocate (drhoc)
