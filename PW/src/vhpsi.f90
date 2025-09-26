@@ -33,19 +33,21 @@ SUBROUTINE vhpsi ( lda, n, m, psi, hpsi )
   IF ( Hubbard_projectors == "pseudo" ) RETURN
   !
   CALL start_clock('vhpsi')
-  IF ( noncolin ) THEN
-     !$acc update host(psi, hpsi)
-     CALL vhpsi_nc( lda, n, m, psi, hpsi )
-     !$acc update device(hpsi)
-  ELSE IF ( lda_plus_u_kind == 0 .OR. lda_plus_u_kind == 1 ) THEN
+  !
+  IF ( lda_plus_u_kind == 0 .OR. lda_plus_u_kind == 1 ) THEN
      !
      CALL vhpsi_U ( lda, n, m, psi, hpsi )
      !
+  ELSE IF ( noncolin ) THEN
+     !$acc update host(psi, hpsi)
+     CALL vhpsi_UV_nc( lda, n, m, psi, hpsi )
+     !$acc update device(hpsi)
   ELSE
      !
      CALL vhpsi_UV( lda, n, m, psi, hpsi )
      !
-  ENDIF
+  END IF
+  !
   CALL stop_clock('vhpsi')
   !
   RETURN
@@ -422,14 +424,15 @@ END SUBROUTINE vhpsi_UV
 !-------------------------------------------------------------------------
 
 !-------------------------------------------------------------------------
-SUBROUTINE vhpsi_nc( lda, np, mps, psi, hpsi )
+SUBROUTINE vhpsi_UV_nc( lda, np, mps, psi, hpsi )
   !-----------------------------------------------------------------------
   !! Noncollinear version of \(\texttt{vhpsi} routine (A. Smogunov).
   !! Extended to DFT+U+V and reorganised by L. Binci 
   !
   USE kinds,            ONLY: dp
   USE ldaU,             ONLY: Hubbard_lmax, Hubbard_l, is_Hubbard, nwfcU, &
-                              wfcU, offsetU, lda_plus_u_kind
+                              wfcU, offsetU, lda_plus_u_kind, ldim_u, v_nsg, &
+                              ldim_u, neighood, at_sc, phase_fac, Hubbard_V
   USE scf,              ONLY: v
   USE ions_base,        ONLY: nat, ntyp => nsp, ityp
   USE noncollin_module, ONLY: npol
@@ -453,9 +456,15 @@ SUBROUTINE vhpsi_nc( lda, np, mps, psi, hpsi )
   ! ... local variables
   !
   INTEGER :: ibnd, na, nwfc, is1, is2, nt, m1, m2
-  COMPLEX(dp) :: temp
+  INTEGER :: ldim2, ldimx, ldim1, equiv_na2, &
+              off1, off2, ig, viz, na1, na2, nt1, nt2
+  COMPLEX(dp) :: temp, phase
   COMPLEX(dp), ALLOCATABLE :: proj(:,:)
   COMPLEX(dp), ALLOCATABLE :: ctemp(:,:), vaux(:,:)
+  COMPLEX(dp), ALLOCATABLE :: projauxc(:,:), wfcUaux(:,:)
+  !
+  !
+  IF ( lda_plus_u_kind == 0 .OR. lda_plus_u_kind == 1 ) CALL errore('vhpsi','incorrectly called',2)
   !
   ALLOCATE( proj(nwfcU, mps) )
   proj(:,:) = (0.0_dp,0.0_dp)
@@ -463,96 +472,8 @@ SUBROUTINE vhpsi_nc( lda, np, mps, psi, hpsi )
   ! calculate <psi_at | phi_k> 
   CALL ZGEMM ('C', 'N', nwfcU, mps, lda*npol, (1.0_dp, 0.0_dp), wfcU, &
                     lda*npol, psi, lda*npol, (0.0_dp, 0.0_dp),  proj, nwfcU)
-#if defined(__MPI)
   CALL mp_sum ( proj, intra_bgrp_comm )
-#endif
-!--
   !
-  IF ( lda_plus_u_kind.EQ.0 .OR. lda_plus_u_kind.EQ.1 ) THEN
-     CALL vhpsi_U_nc ()  ! DFT+U
-  ELSEIF ( lda_plus_u_kind.EQ.2 ) THEN
-     CALL vhpsi_UV_nc () ! DFT+U+V
-  ENDIF
-  !
-  deallocate (proj)
-  !
-  return
-  !
-CONTAINS
-  !
-  ! -----------------------------
-  !
-SUBROUTINE vhpsi_U_nc ()
-   !
-   IMPLICIT NONE
-   INTEGER :: na, nt, ldim
-   !
-   DO nt = 1, ntyp
-      !
-      ! Compute the action of the Hubbard potential on the KS wave functions:
-      ! V_Hub |psi > = \sum v%ns |wfcU> <wfcU|psi>
-      ! where v%ns = U ( delta/2 - rho%ns ) is computed in v_of_rho
-      !
-      IF ( is_hubbard(nt) ) THEN
-         !  
-         ldim = 2*Hubbard_l(nt) + 1
-         !
-         ALLOCATE ( ctemp(ldim*npol,mps) )
-         ALLOCATE ( vaux (ldim*npol,ldim*npol) )
-         !
-         DO na = 1, nat
-            IF ( nt == ityp(na) ) THEN
-               !
-               vaux(:,:) = (0.0_dp,0.0_dp)
-               do is1 =1 , npol
-                  do is2 =1 , npol
-                     !DO m1 = 1, ldim1
-                     !   DO m2 = 1, ldim2
-                     vaux(1+ldim*(is1-1):ldim+ldim*(is1-1), &
-                          1+ldim*(is2-1):ldim+ldim*(is2-1)) &
-                           = v%ns_nc(1:ldim,1:ldim,npol*(is1-1)+is2,na)
-                     !   ENDDO
-                     !ENDDO
-                  enddo 
-               enddo
-               !
-               ctemp(:,:) = (0.0_dp,0.0_dp)
-               !
-               CALL ZGEMM ('n','n', ldim*npol, mps, ldim*npol, (1.0_dp,0.0_dp), &
-                     vaux, ldim*npol, proj(offsetU(na)+1,1),&
-                     nwfcU,(0.0_dp,0.0_dp),ctemp,ldim*npol)
-               
-               CALL ZGEMM ('n','n', lda*npol, mps, ldim*npol, (1.0_dp,0.0_dp), &
-                     wfcU(1,offsetU(na)+1), lda*npol, ctemp, ldim*npol, &
-                     (1.0_dp,0.0_dp), hpsi, lda*npol)
-               !
-            ENDIF
-         ENDDO
-         !
-         DEALLOCATE(vaux)
-         DEALLOCATE ( ctemp )
-         !
-      ENDIF
-      !
-      !
-   ENDDO
-   !
-   !
-  RETURN
-  !
-END SUBROUTINE vhpsi_U_nc 
-  !
-  !---------------------------------------------
-  ! 
-SUBROUTINE vhpsi_UV_nc ()
-   !
-   USE ldaU,      ONLY : ldim_u, neighood, at_sc, phase_fac, Hubbard_V, v_nsg
-   !
-   IMPLICIT NONE
-   COMPLEX(dp) :: phase
-   INTEGER :: ldim2, ldimx, ldim1,  m1, m2, equiv_na2, &
-              off1, off2, ig, viz, na1, na2, nt1, nt2
-   COMPLEX(dp), ALLOCATABLE :: projauxc(:,:), wfcUaux(:,:)
    !
    ! Find the maximum number of magnetic quantum numbers [i.e. MAX(2l+1)]
    !
@@ -686,11 +607,10 @@ SUBROUTINE vhpsi_UV_nc ()
    DEALLOCATE (vaux)
    !
    DEALLOCATE (wfcUaux)
+   DEALLOCATE (proj)
    !
    RETURN
    !
-END SUBROUTINE vhpsi_UV_nc
-  !
   ! --------------------------------------------
-END SUBROUTINE vhpsi_nc
+END SUBROUTINE vhpsi_UV_nc
 
