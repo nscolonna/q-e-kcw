@@ -705,7 +705,8 @@ PROGRAM pw2wannier90
        scdm_proj, scdm_entanglement, scdm_mu, scdm_sigma, &
    ! end change Vitale
        atom_proj, atom_proj_dir, atom_proj_ext, atom_proj_exclude, &
-       atom_proj_ortho, atom_proj_frozen
+       atom_proj_ortho, atom_proj_frozen, &
+       write_vmn, write_pmn
   !
   ! initialise environment
   !
@@ -771,6 +772,8 @@ PROGRAM pw2wannier90
      atom_proj_frozen = -1
      ! Haven't tested symmetrization with external projectors, disable it for now
      atom_proj_sym = .false.
+     write_vmn = .false.
+     write_pmn = .false.
      !
      !     reading the namelist inputpp
      !
@@ -829,6 +832,8 @@ PROGRAM pw2wannier90
   CALL mp_bcast(atom_proj_sym, ionode_id, world_comm)
   CALL mp_bcast(atom_proj_exclude, ionode_id, world_comm)
   CALL mp_bcast(atom_proj_frozen, ionode_id, world_comm)
+  CALL mp_bcast(write_vmn, ionode_id, world_comm)
+  CALL mp_bcast(write_pmn, ionode_id, world_comm)
   !
   IF (wan_mode /= 'standalone' .AND. wan_mode /= 'library' .AND. &
       wan_mode /= 'wannier2sic') CALL errore('pw2wannier90', &
@@ -887,6 +892,8 @@ PROGRAM pw2wannier90
      IF (write_sHu) CALL errore('pw2wannier90', "irr_bz and write_sHu not implemented", 1)
      IF (write_sIu) CALL errore('pw2wannier90', "irr_bz and write_sIu not implemented", 1)
      IF (write_dmn) CALL errore('pw2wannier90', "irr_bz and write_dmn not implemented", 1)
+     IF (write_vmn) CALL errore('pw2wannier90', "irr_bz and write_vmn not implemented", 1)
+     IF (write_pmn) CALL errore('pw2wannier90', "irr_bz and write_pmn not implemented", 1)
      IF (scdm_proj) CALL errore('pw2wannier90', "irr_bz and SCDM not implemented", 1)
      IF (write_unkg) CALL errore('pw2wannier90', "irr_bz and write_unkg not implemented", 1)
   ENDIF
@@ -1077,6 +1084,32 @@ PROGRAM pw2wannier90
         WRITE(stdout,*) ' -----------------------------'
         WRITE(stdout,*)
      ENDIF
+     IF(write_vmn) THEN
+        WRITE(stdout,*) ' ----------------'
+        WRITE(stdout,*) ' *** Compute velocity '
+        WRITE(stdout,*) ' ----------------'
+        WRITE(stdout,*)
+        CALL compute_vmn(.TRUE.)
+        WRITE(stdout,*)
+     ELSE
+        WRITE(stdout,*) ' -----------------------------------'
+        WRITE(stdout,*) ' *** Velocity terms are not computed '
+        WRITE(stdout,*) ' -----------------------------------'
+        WRITE(stdout,*)
+     ENDIF
+     IF(write_pmn) THEN
+        WRITE(stdout,*) ' ----------------'
+        WRITE(stdout,*) ' *** Compute momentum '
+        WRITE(stdout,*) ' ----------------'
+        WRITE(stdout,*)
+        CALL compute_vmn(.FALSE.)
+        WRITE(stdout,*)
+     ELSE
+        WRITE(stdout,*) ' -----------------------------------'
+        WRITE(stdout,*) ' *** Momentum terms are not computed '
+        WRITE(stdout,*) ' -----------------------------------'
+        WRITE(stdout,*)
+     ENDIF
      WRITE(stdout,*) ' ------------'
      WRITE(stdout,*) ' *** Stop pp '
      WRITE(stdout,*) ' ------------'
@@ -1152,6 +1185,7 @@ SUBROUTINE print_clock_pw2wannier90
   CALL print_clock('compute_amn')
   CALL print_clock('compute_mmn')
   CALL print_clock('compute_spin')
+  CALL print_clock('compute_vmn')
   CALL print_clock('compute_immn')
   CALL print_clock('compute_shc')
   CALL print_clock('compute_orb')
@@ -5067,7 +5101,210 @@ SUBROUTINE compute_shc
    !
    RETURN
    !
-END SUBROUTINE
+END SUBROUTINE compute_shc
+
+!-----------------------------------------------------------------------
+SUBROUTINE compute_vmn(add_nonlocal)
+   !-----------------------------------------------------------------------
+   !! Compute the velocity or momentum matrix elements between the included bands.
+   !! Compute three elements in the Cartesian coordinates.
+   !! If add_nonlocal = .TRUE., compute the velocity matrix element for the velocity
+   !! operator v = i [H, r] = p/m + i [V_nl, r], where V_nl is the nonlocal potential.
+   !! If add_nonlocal = .FALSE., compute only the momentum operator matrix elements.
+   !! Note: QE uses Rydberg units, where m = 0.5. Here we compute p/m = 2*p.
+   !
+   USE kinds,           ONLY : DP
+   USE mp,              ONLY : mp_sum, mp_barrier
+   USE mp_world,        ONLY : world_comm
+   USE mp_pools,        ONLY : intra_pool_comm, me_pool, root_pool
+   USE io_global,       ONLY : stdout, ionode
+   USE wvfct,           ONLY : nbnd, npwx
+   USE wavefunctions,   ONLY : evc
+   USE klist,           ONLY : ngk, igk_k, nks, xk
+   USE io_files,        ONLY : iunwfc, nwordwfc
+   USE gvect,           ONLY : g
+   USE cell_base,       ONLY : tpiba
+   USE uspp,            ONLY : nkb, vkb
+   USE becmod,          ONLY : bec_type, becp, calbec, allocate_bec_type, deallocate_bec_type
+   USE noncollin_module,ONLY : noncolin, npol
+   USE lsda_mod,        ONLY : lsda, isk
+   USE uspp_init,       ONLY : init_us_2
+   USE wannier,         ONLY : excluded_band, num_bands, iknum, ispinw, print_progress, &
+                               utility_merge_files
+   !
+   IMPLICIT NONE
+   !
+   LOGICAL, INTENT(IN) :: add_nonlocal
+   !! If true, add the nonlocal pseudopotential contribution and compute the full velocity,
+   !! If false, only compute the mometum operator matrix elements.
+   !
+   INTEGER :: npw, m, ibnd, ibnd_m, ierr, ig, ik
+   !! Counters
+   INTEGER :: iun
+   !! File IO unit
+   INTEGER :: idir
+   !! Cartesian direction index
+   REAL(DP) :: vpol(3)
+   !! Cartesian vector along ipol
+   REAL(DP) :: gk_ig(3)
+   !! k+G vector
+   REAL(DP), ALLOCATABLE  :: gk_vpol(:)
+   !! k+G vector for all G projected along vpol
+   COMPLEX(DP), ALLOCATABLE :: v_evc(:, :)
+   !! Wavefunction at k multiplied by v or p
+   COMPLEX(DP), ALLOCATABLE :: evc_trim(:, :)
+   !! evc with only the included bands
+   COMPLEX(DP), ALLOCATABLE :: v_evc_trim(:, :)
+   !! v_evc with only the included bands
+   COMPLEX(DP), ALLOCATABLE :: mel(:, :)
+   !! Calculated matrix elements
+   TYPE(bec_type) :: becp2
+   !! Temporary variable used in commutator_Hx_psi
+   !
+   ! INTEGER, EXTERNAL :: global_kpoint_index
+   INTEGER, EXTERNAL :: find_free_unit
+   !
+   CALL start_clock("compute_vmn")
+   !
+   iun = find_free_unit()
+   !
+   ALLOCATE(mel(num_bands, num_bands), stat=ierr)
+   IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating mel', 1)
+   ALLOCATE(v_evc(npol*npwx, nbnd), stat=ierr)
+   IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating v_evc', 1)
+   ALLOCATE(evc_trim(npol*npwx, num_bands), stat=ierr)
+   IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating evc_trim', 1)
+   ALLOCATE(v_evc_trim(npol*npwx, num_bands), stat=ierr)
+   IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating v_evc_trim', 1)
+   !
+   IF (.NOT. add_nonlocal) THEN
+      ALLOCATE(gk_vpol(npwx), stat=ierr)
+      IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating gk_vpol', 1)
+   ENDIF
+   !
+   CALL allocate_bec_type(nkb, nbnd, becp)
+   CALL allocate_bec_type(nkb, nbnd, becp2)
+   !
+   IF (add_nonlocal) THEN
+      CALL utility_open_output_file("vmn", .TRUE., iun)
+   ELSE
+      CALL utility_open_output_file("pmn", .TRUE., iun)
+   ENDIF
+   !
+   IF (ionode) THEN
+      WRITE (iun, *) num_bands, iknum
+   ENDIF
+   !
+   WRITE(stdout, '(a,i8)') '  Number of local k points = ', nks
+   !
+   DO ik = 1, nks
+      !
+      CALL print_progress(ik, nks)
+      !
+      IF (lsda .AND. isk(ik) /= ispinw) CYCLE
+      !
+      npw = ngk(ik)
+      CALL davcio(evc, 2*nwordwfc, iunwfc, ik, -1)
+      CALL init_us_2(npw, igk_k(1,ik), xk(1,ik), vkb)
+      CALL calbec(npw, vkb, evc, becp, nbnd)
+      !
+      DO idir = 1, 3
+         !
+         vpol(1:3) = 0.d0
+         vpol(idir) = 1.d0
+         !
+         IF (add_nonlocal) THEN
+            !
+            ! Compute v * evc (v = i * [H, r] = p/m + i [V_nl, r])
+            !
+            CALL commutator_Hx_psi(ik, nbnd, vpol, becp, becp2, v_evc)
+            !
+            ! commutator_v_evc computes [H, r] = -i * v. We multiply +i to get v.
+            v_evc = v_evc * (0.d0, 1.d0)
+            !
+         ELSE
+            !
+            ! Compute p/m * evc (m = 0.5 in Rydberg units)
+            ! Code taken from the first part of commutator_Hx_psi
+            !
+            v_evc = (0.d0, 0.d0)
+            !
+            npw = ngk(ik)
+            DO ig = 1, npw
+               gk_ig(1:3) = (xk (1:3, ik) + g (1:3, igk_k(ig,ik) ) ) * tpiba
+               !
+               ! Take the component along the vpol vector
+               gk_vpol(ig) = SUM(vpol * gk_ig(:))
+            ENDDO
+            !
+            ! Compute 2 * (k+G) * evc. (Factor 2 because p/m with m=0.5)
+            !
+            DO ibnd = 1, nbnd
+               DO ig = 1, npw
+                  v_evc(ig, ibnd) = gk_vpol(ig) * evc(ig, ibnd) * 2.d0
+               ENDDO
+               IF (noncolin) THEN
+                  DO ig = 1, npw
+                     v_evc(ig+npwx, ibnd) = gk_vpol(ig) * evc(ig+npwx, ibnd) * 2.d0
+                  ENDDO
+               ENDIF
+            ENDDO
+         ENDIF
+         !
+         ! Trim excluded bands from evc and v_evc
+         !
+         ibnd_m = 0
+         DO m = 1, nbnd
+            IF (excluded_band(m)) CYCLE
+            ibnd_m = ibnd_m + 1
+            evc_trim(:, ibnd_m) = evc(:, m)
+            v_evc_trim(:, ibnd_m) = v_evc(:, m)
+         ENDDO
+         !
+         ! Compute matrix elements
+         !
+         CALL ZGEMM('C', 'N', num_bands, num_bands, npwx*npol, &
+                  (1.d0, 0.d0), evc_trim, npwx*npol, v_evc_trim, npwx*npol, &
+                  (0.d0, 0.d0), mel, num_bands)
+         !
+         CALL mp_sum(mel, intra_pool_comm)
+         !
+         ! Write to file
+         !
+         IF (me_pool == root_pool) THEN
+            CALL utility_write_array(iun, .TRUE., num_bands, num_bands, mel)
+         ENDIF
+         !
+      ENDDO ! idir
+      !
+   ENDDO ! ik
+   !
+   IF (me_pool == root_pool) CLOSE (iun, STATUS="KEEP")
+   !
+   CALL mp_barrier(world_comm)
+   !
+   ! If using pool parallelization, concatenate files written by other nodes
+   ! to the main output.
+   !
+   IF (add_nonlocal) THEN
+      CALL utility_merge_files("vmn", .TRUE., 3*num_bands*num_bands)
+      WRITE(stdout, *) ' VMN calculated'
+   ELSE
+      CALL utility_merge_files("pmn", .TRUE., 3*num_bands*num_bands)
+      WRITE(stdout, *) ' PMN calculated'
+   ENDIF
+   !
+   DEALLOCATE(evc_trim)
+   DEALLOCATE(v_evc_trim)
+   DEALLOCATE(v_evc)
+   DEALLOCATE(mel)
+   IF (.NOT. add_nonlocal) DEALLOCATE(gk_vpol)
+   CALL deallocate_bec_type(becp)
+   CALL deallocate_bec_type(becp2)
+   !
+   CALL stop_clock("compute_vmn")
+   !
+END SUBROUTINE compute_vmn
 
 !--------------------------------------------------------------------------
 SUBROUTINE utility_write_array(iun, formatted, ndim1, ndim2, arr)

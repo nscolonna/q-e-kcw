@@ -48,6 +48,10 @@ module wannier
                             irr_bz, &
    ! vv: Begin SCDM keywords
                             scdm_proj
+   LOGICAL :: write_vmn
+   !! Input parameter. If true, write vmn file. (Default: .FALSE.)
+   LOGICAL :: write_pmn
+   !! Input parameter. If true, write pmn file. (Default: .FALSE.)
    character(LEN=15)     :: scdm_entanglement
    real(DP)              :: scdm_mu, scdm_sigma
    ! vv: End SCDM keywords
