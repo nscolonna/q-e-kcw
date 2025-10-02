@@ -276,7 +276,7 @@ SUBROUTINE protate_wfc_k( h_psi_ptr, s_psi_ptr, overlap, &
   END IF
   call stop_clock('protwfck:hc')
   !
-  ! ... Diagonalize
+  ! ... Diagonalize (ACC: hc, sc are on host after call to compute_distmat) 
   !
   call start_clock('protwfck:diag')
   IF ( do_distr_diag_inside_bgrp ) THEN ! NB on output of pdiaghg en and vc are the same across ortho_parent_comm

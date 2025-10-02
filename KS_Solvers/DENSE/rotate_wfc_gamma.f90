@@ -284,9 +284,7 @@ SUBROUTINE protate_wfc_gamma( h_psi_ptr, s_psi_ptr, overlap, &
   END IF
   call stop_clock('protwfcg:hc'); !write(*,*) 'stop protwfcg:hc' ; FLUSH(6)
   !
-  ! ... Diagonalize
-  !
-  !!! $acc update host(hr, sr, vr, en)
+  ! ... Diagonalize (ACC: hr, sr are on host after call to compute_distmat) 
   !
   call start_clock('protwfcg:diag'); !write(*,*) 'start protwfcg:diag' ; FLUSH(6)
   IF ( do_distr_diag_inside_bgrp ) THEN ! NB on output of pdiaghg en and vr are the same across ortho_parent_comm
