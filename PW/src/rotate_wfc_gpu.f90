@@ -38,8 +38,6 @@ SUBROUTINE rotate_wfc_gpu &
     ! input and output eigenvectors (may overlap)
   REAL(DP), INTENT(OUT) :: e(nbnd)
     ! eigenvalues
-  COMPLEX(DP), ALLOCATABLE :: psi_h(:,:), evc_h(:,:)
-  REAL(DP), ALLOCATABLE    :: e_h(:)
   EXTERNAL h_psi, s_psi
   !
     ! h_psi(npwx,npw,nvec,psi,hpsi)
@@ -53,33 +51,21 @@ SUBROUTINE rotate_wfc_gpu &
 
   IF( use_para_diag ) THEN
      !
-     ! Allocate arrays to workaround parallel case
-     !
-     ALLOCATE(psi_h(npwx*npol,nstart), evc_h(npwx*npol,nbnd), e_h(nbnd))
-     !$acc update self(psi)
-     psi_h(1:npwx*npol,1:nstart) = psi(1:npwx*npol,1:nstart)
-     evc_h(1:npwx*npol,1:nbnd) = evc(1:npwx*npol,1:nbnd)
-     !
      ! use data distributed subroutine
      !
      IF ( gamma_only ) THEN
   !write (*,*) 'inside para gamma'; FLUSH(6)
         !
         CALL protate_wfc_gamma ( h_psi, s_psi, overlap, &
-                                 npwx, npw, nstart, nbnd, psi_h, evc_h, e_h )
+                                 npwx, npw, nstart, nbnd, psi, evc, e )
         !
      ELSE
   !write (*,*) 'inside para k'; FLUSH(6)
         !
         CALL protate_wfc_k ( h_psi, s_psi, overlap, &
-                             npwx, npw, nstart, nbnd, npol, psi_h, evc_h, e_h )
+                             npwx, npw, nstart, nbnd, npol, psi, evc, e )
         !
      END IF
-     psi(1:npwx*npol,1:nstart) = psi_h(1:npwx*npol,1:nstart)
-     !$acc update device(psi)
-     evc(1:npwx*npol,1:nbnd)   = evc_h(1:npwx*npol,1:nbnd)
-     e(1:nbnd)                 = e_h(1:nbnd)
-     DEALLOCATE(psi_h, evc_h, e_h)
      !
   ELSE
      !
