@@ -366,12 +366,7 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
              !
              IF ( .NOT. lrot ) THEN
                 !
-                IF (.not. use_gpu) THEN
-                   CALL rotate_wfc( npwx, npw, nbnd, gstart, nbnd, evc, npol, okvan, evc, et(1,ik) )
-                ELSE
-                   CALL rotate_wfc_gpu( npwx, npw, nbnd, gstart, nbnd, evc, npol, okvan, evc, et(1,ik) )
-                END IF
-                !
+                CALL rotate_wfc( npwx, npw, nbnd, gstart, nbnd, evc, npol, okvan, evc, et(1,ik) )
                 avg_iter = avg_iter + 1.D0
                 !
              ENDIF
@@ -624,13 +619,9 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
              !
              IF ( .NOT. lrot ) THEN
                 !
-                IF ( .not. use_gpu ) THEN
-                   CALL rotate_wfc( npwx, npw, nbnd, gstart, nbnd, evc, npol, okvan, evc, et(1,ik) )
-                ELSE
-                   CALL rotate_wfc_gpu( npwx, npw, nbnd, gstart, nbnd, evc, npol, okvan, evc, et(1,ik) )
-                END IF
-                !
+                CALL rotate_wfc( npwx, npw, nbnd, gstart, nbnd, evc, npol, okvan, evc, et(1,ik) )
                 avg_iter = avg_iter + 1.D0
+                !
              ENDIF
           ENDIF
           !

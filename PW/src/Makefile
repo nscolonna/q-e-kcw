@@ -278,7 +278,6 @@ d3hess_mod.o
 
 # CUDA Fortran versions of routines
 PWLIBS += \
-  rotate_wfc_gpu.o \
   utils_gpu.o \
   oscdft_functions_gpu.o
 
