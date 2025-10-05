@@ -124,7 +124,6 @@ SUBROUTINE pcegterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   nhpsi = 0
   CALL start_clock( 'cegterg' )
   !
-  !$acc data deviceptr(e)
   CALL laxlib_getval( np_ortho = np_ortho, ortho_parent_comm = ortho_parent_comm, &
     do_distr_diag_inside_bgrp = do_distr_diag_inside_bgrp )
   !
@@ -224,6 +223,7 @@ SUBROUTINE pcegterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   ALLOCATE( ew( nvecx ), STAT=ierr )
   IF( ierr /= 0 ) &
      CALL errore( ' pcegterg ',' cannot allocate ew ', ABS(ierr) )
+  !$acc enter data create(ew)
   !
   ALLOCATE( conv( nvec ), STAT=ierr )
   IF( ierr /= 0 ) &
@@ -233,7 +233,7 @@ SUBROUTINE pcegterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   nbase  = nvec
   conv   = .FALSE.
   !
-  !$acc enter data create(psi, hpsi, ew)
+  !$acc enter data create(psi, hpsi)
   !$acc update host( evc_d)
   !$acc kernels
   psi(:,1:nvec) = evc_d(:,1:nvec)
@@ -295,6 +295,7 @@ SUBROUTINE pcegterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
      CALL stop_clock( 'cegterg:diag' )
      !
      e(1:nvec) = ew(1:nvec)
+     !$acc update device(e)
      !
   END IF
   !
@@ -461,6 +462,7 @@ SUBROUTINE pcegterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
      notcnv = COUNT( .NOT. conv(:) )
      !
      e(1:nvec) = ew(1:nvec)
+     !$acc update device(e)
      !
      ! ... if overall convergence has been achieved, or the dimension of
      ! ... the reduced basis set is becoming too large, or in any case if
@@ -562,7 +564,6 @@ SUBROUTINE pcegterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   DEALLOCATE( hpsi )
   DEALLOCATE( psi )  
   !
-  !$acc end data
   CALL stop_clock( 'cegterg' )
   !call print_clock( 'cegterg' )
   !call print_clock( 'cegterg:init' )

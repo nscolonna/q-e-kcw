@@ -509,11 +509,9 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
                 !
              ELSE
                 !
-                !$acc host_data use_device(et)
                 CALL pregterg_gpu( h_psi, s_psi, okvan, g_psi, &
                             npw, npwx, nbnd, nbndx, evc, ethr, &
                             et(1, ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
-                !$acc end host_data
                 ! 
              END IF
              !
@@ -757,11 +755,9 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
                 !
              ELSE
                 !
-                !$acc host_data use_device(et)
                 CALL pcegterg_gpu( h_psi, s_psi, okvan, g_psi, &
                                npw, npwx, nbnd, nbndx, npol, evc, ethr, &
                                et(1, ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
-                !$acc end host_data
                 !
              END IF
              !
