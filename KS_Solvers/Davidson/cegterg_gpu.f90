@@ -1,5 +1,5 @@
 !
-! Copyright (C) 2001-2015 Quantum ESPRESSO group
+! Copyright (C) 2001-2025 Quantum ESPRESSO Foundation
 ! This file is distributed under the terms of the
 ! GNU General Public License. See the file `License'
 ! in the root directory of the present distribution,
@@ -14,11 +14,6 @@
 #define ZERO ( 0.D0, 0.D0 )
 #define ONE  ( 1.D0, 0.D0 )
 !
-#if ! defined(__CUDA)
-! workaround for some old compilers that don't like CUDA fortran code
-SUBROUTINE pcegterg_gpu( )
-end SUBROUTINE pcegterg_gpu
-#else
 !----------------------------------------------------------------------------
 !
 !  Wrapper for subroutine with distributed matrixes (written by Carlo Cavazzoni)
@@ -26,7 +21,7 @@ end SUBROUTINE pcegterg_gpu
 !----------------------------------------------------------------------------
 SUBROUTINE pcegterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &  
                     npw, npwx, nvec, nvecx, npol, evc_d, ethr, &
-                    e_d, btype, notcnv, lrot, dav_iter , nhpsi )
+                    e, btype, notcnv, lrot, dav_iter , nhpsi )
   !----------------------------------------------------------------------------
   !
   ! ... iterative solution of the eigenvalue problem:
@@ -66,10 +61,7 @@ SUBROUTINE pcegterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
     ! band type ( 1 = occupied, 0 = empty )
   LOGICAL, INTENT(IN) :: lrot
     ! .TRUE. if the wfc have already been rotated
-  REAL(DP), INTENT(OUT) :: e_d(nvec)
-#if defined(__CUDA)
-   attributes(DEVICE)   :: e_d
-#endif
+  REAL(DP), INTENT(OUT) :: e(nvec)
     ! contains the estimated roots.
   INTEGER, INTENT(OUT) :: dav_iter, notcnv
     ! integer  number of iterations performed
@@ -79,8 +71,6 @@ SUBROUTINE pcegterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   !
   ! ... LOCAL variables
   !
-  REAL(DP), ALLOCATABLE :: e(:)
-  
   INTEGER, PARAMETER :: maxter = 20
     ! maximum number of iterations
   !
@@ -158,10 +148,6 @@ SUBROUTINE pcegterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   ! compute the number of chuncks
   numblock  = (npw+blocksize-1)/blocksize
   !
-  ALLOCATE(  e( nvec ), STAT=ierr )
-  IF( ierr /= 0 ) &
-     CALL errore( ' pcegterg ',' cannot allocate e (host) ', ABS(ierr) )
-  !
   ALLOCATE(  psi( npwx*npol, nvecx ), STAT=ierr )
   IF( ierr /= 0 ) &
      CALL errore( ' pcegterg ',' cannot allocate psi ', ABS(ierr) )
@@ -237,6 +223,7 @@ SUBROUTINE pcegterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   ALLOCATE( ew( nvecx ), STAT=ierr )
   IF( ierr /= 0 ) &
      CALL errore( ' pcegterg ',' cannot allocate ew ', ABS(ierr) )
+  !$acc enter data create(ew)
   !
   ALLOCATE( conv( nvec ), STAT=ierr )
   IF( ierr /= 0 ) &
@@ -246,7 +233,7 @@ SUBROUTINE pcegterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   nbase  = nvec
   conv   = .FALSE.
   !
-  !$acc enter data create(psi, hpsi, ew)
+  !$acc enter data create(psi, hpsi)
   !$acc update host( evc_d)
   !$acc kernels
   psi(:,1:nvec) = evc_d(:,1:nvec)
@@ -286,7 +273,6 @@ SUBROUTINE pcegterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   IF ( lrot ) THEN
      !
      CALL set_e_from_h()
-     e_d = e
      !
      CALL set_to_identity( vl, idesc )
      !
@@ -309,7 +295,7 @@ SUBROUTINE pcegterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
      CALL stop_clock( 'cegterg:diag' )
      !
      e(1:nvec) = ew(1:nvec)
-     e_d(1:nvec) = ew(1:nvec)
+     !$acc update device(e)
      !
   END IF
   !
@@ -476,7 +462,7 @@ SUBROUTINE pcegterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
      notcnv = COUNT( .NOT. conv(:) )
      !
      e(1:nvec) = ew(1:nvec)
-     e_d(1:nvec) = e(1:nvec)
+     !$acc update device(e)
      !
      ! ... if overall convergence has been achieved, or the dimension of
      ! ... the reduced basis set is becoming too large, or in any case if
@@ -568,7 +554,6 @@ SUBROUTINE pcegterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   DEALLOCATE( nrc_ip )
   DEALLOCATE( notcnv_ip )
   DEALLOCATE( conv )
-  DEALLOCATE( e )
   !$acc exit data delete(ew)
   DEALLOCATE( ew )  
   IF ( uspp ) THEN
@@ -1074,4 +1059,3 @@ CONTAINS
   END SUBROUTINE set_h_from_e
   !
 END SUBROUTINE pcegterg_gpu
-#endif

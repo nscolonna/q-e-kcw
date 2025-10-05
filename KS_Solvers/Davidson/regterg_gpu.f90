@@ -1,5 +1,5 @@
 !
-! Copyright (C) 2001-2024 Quantum ESPRESSO Foundation
+! Copyright (C) 2001-2025 Quantum ESPRESSO Foundation
 ! This file is distributed under the terms of the
 ! GNU General Public License. See the file `License'
 ! in the root directory of the present distribution,
@@ -13,12 +13,6 @@
 !
 #define ZERO ( 0.D0, 0.D0 )
 #define ONE  ( 1.D0, 0.D0 )
-#if !defined(__CUDA)
-#define cublasDgemm dgemm
-! workaround for some old compilers that don't like CUDA fortran code
-SUBROUTINE pregterg_gpu( )
-end SUBROUTINE pregterg_gpu
-#else
 !----------------------------------------------------------------------------
 !
 !  Wrapper for subroutine with distributed matrixes (written by Carlo Cavazzoni)
@@ -26,7 +20,7 @@ end SUBROUTINE pregterg_gpu
 !----------------------------------------------------------------------------
 SUBROUTINE pregterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &  
                     npw, npwx, nvec, nvecx, evc_d, ethr, &
-                    e_d, btype, notcnv, lrot, dav_iter, nhpsi )
+                    e, btype, notcnv, lrot, dav_iter, nhpsi )
   !----------------------------------------------------------------------------
   !
   ! ... iterative solution of the eigenvalue problem:
@@ -63,10 +57,7 @@ SUBROUTINE pregterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
     ! band type ( 1 = occupied, 0 = empty )
   LOGICAL, INTENT(IN) :: lrot
     ! .TRUE. if the wfc have already been rotated
-  REAL(DP), INTENT(OUT) :: e_d(nvec)
-#if defined(__CUDA)
-  attributes(DEVICE) :: e_d
-#endif
+  REAL(DP), INTENT(OUT) :: e(nvec)
     ! contains the estimated roots.
   INTEGER, INTENT(OUT) :: dav_iter, notcnv
     ! integer  number of iterations performed
@@ -76,9 +67,6 @@ SUBROUTINE pregterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   !
   ! ... LOCAL variables
   !
-  !COMPLEX(DP), ALLOCATABLE :: evc(:,:)
-  REAL(DP), ALLOCATABLE :: e(:)
-  
   INTEGER, PARAMETER :: maxter = 20
     ! maximum number of iterations
   !
@@ -145,10 +133,6 @@ SUBROUTINE pregterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   ! ... threshold for empty bands
   !
   empty_ethr = MAX( ( ethr * 5.D0 ), 1.D-5 )
-  !
-  ALLOCATE(  e( nvec ), STAT=ierr )
-  IF( ierr /= 0 ) &
-     CALL errore( ' pregterg ',' cannot allocate e (host) ', ABS(ierr) )
   !
   ALLOCATE( psi(  npwx, nvecx ), STAT=ierr )
   IF( ierr /= 0 ) &
@@ -281,7 +265,6 @@ SUBROUTINE pregterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   IF ( lrot ) THEN
      !
      CALL set_e_from_h()
-     e_d = e
      !
      CALL set_to_identity( vl, idesc )
      !
@@ -304,7 +287,7 @@ SUBROUTINE pregterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
      CALL stop_clock( 'regterg:diag' )
      !
      e(1:nvec) = ew(1:nvec)
-     e_d(1:nvec) = ew(1:nvec)
+     !$acc update device(e)
      !
   END IF
   !
@@ -456,7 +439,7 @@ SUBROUTINE pregterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
      notcnv = COUNT( .NOT. conv(:) )
      !
      e(1:nvec) = ew(1:nvec)
-     e_d(1:nvec) = e(1:nvec)
+     !$acc update device(e)
      !
      ! ... if overall convergence has been achieved, or the dimension of
      ! ... the reduced basis set is becoming too large, or in any case if
@@ -548,7 +531,6 @@ SUBROUTINE pregterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   DEALLOCATE( nrc_ip )
   DEALLOCATE( notcnv_ip )
   DEALLOCATE( conv )
-  DEALLOCATE( e )
   !$acc exit data delete(ew)
   DEALLOCATE( ew )
   !
@@ -1045,5 +1027,3 @@ CONTAINS
   END SUBROUTINE set_h_from_e
   !
 END SUBROUTINE pregterg_gpu
-
-#endif

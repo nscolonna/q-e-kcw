@@ -251,7 +251,6 @@ set(src_pw
    src/wannier_occ.f90
    src/d3hess_mod.f90
    # CUDA Fortran
-   src/rotate_wfc_gpu.f90
    src/utils_gpu.f90)
 # OSCDFT
 if (QE_ENABLE_OSCDFT)

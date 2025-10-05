@@ -366,12 +366,7 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
              !
              IF ( .NOT. lrot ) THEN
                 !
-                IF (.not. use_gpu) THEN
-                   CALL rotate_wfc( npwx, npw, nbnd, gstart, nbnd, evc, npol, okvan, evc, et(1,ik) )
-                ELSE
-                   CALL rotate_wfc_gpu( npwx, npw, nbnd, gstart, nbnd, evc, npol, okvan, evc, et(1,ik) )
-                END IF
-                !
+                CALL rotate_wfc( npwx, npw, nbnd, gstart, nbnd, evc, npol, okvan, evc, et(1,ik) )
                 avg_iter = avg_iter + 1.D0
                 !
              ENDIF
@@ -514,11 +509,9 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
                 !
              ELSE
                 !
-                !$acc host_data use_device(et)
                 CALL pregterg_gpu( h_psi, s_psi, okvan, g_psi, &
                             npw, npwx, nbnd, nbndx, evc, ethr, &
                             et(1, ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
-                !$acc end host_data
                 ! 
              END IF
              !
@@ -624,13 +617,9 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
              !
              IF ( .NOT. lrot ) THEN
                 !
-                IF ( .not. use_gpu ) THEN
-                   CALL rotate_wfc( npwx, npw, nbnd, gstart, nbnd, evc, npol, okvan, evc, et(1,ik) )
-                ELSE
-                   CALL rotate_wfc_gpu( npwx, npw, nbnd, gstart, nbnd, evc, npol, okvan, evc, et(1,ik) )
-                END IF
-                !
+                CALL rotate_wfc( npwx, npw, nbnd, gstart, nbnd, evc, npol, okvan, evc, et(1,ik) )
                 avg_iter = avg_iter + 1.D0
+                !
              ENDIF
           ENDIF
           !
@@ -766,11 +755,9 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
                 !
              ELSE
                 !
-                !$acc host_data use_device(et)
                 CALL pcegterg_gpu( h_psi, s_psi, okvan, g_psi, &
                                npw, npwx, nbnd, nbndx, npol, evc, ethr, &
                                et(1, ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
-                !$acc end host_data
                 !
              END IF
              !
