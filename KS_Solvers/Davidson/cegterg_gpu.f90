@@ -562,6 +562,7 @@ SUBROUTINE pcegterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   DEALLOCATE( hpsi )
   DEALLOCATE( psi )  
   !
+  !$acc end data
   CALL stop_clock( 'cegterg' )
   !call print_clock( 'cegterg' )
   !call print_clock( 'cegterg:init' )
