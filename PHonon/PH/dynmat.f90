@@ -235,7 +235,7 @@ program dynmat
      DEALLOCATE (dyn)
   ENDIF
   !
-  CALL environment_end('DYNMAT')
+  CALL environment_end( )
   !
   CALL mp_global_end()
   !

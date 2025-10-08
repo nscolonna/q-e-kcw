@@ -739,7 +739,7 @@ PROGRAM dvscf_q2r
   CALL print_clock('calc_w_pot')
   CALL print_clock('write_w_pot')
   !
-  CALL environment_end('DVSCF_Q2R')
+  CALL environment_end( )
   CALL mp_global_end()
   !
 CONTAINS

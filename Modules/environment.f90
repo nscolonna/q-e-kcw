@@ -35,7 +35,7 @@ MODULE environment
   IMPLICIT NONE
 
   ! ... code name
-  CHARACTER(LEN=20) :: code
+  CHARACTER(LEN=20) :: code = 'notset'
 
   SAVE
 
@@ -147,9 +147,12 @@ CONTAINS
 #endif
     IF ( meta_ionode ) WRITE( stdout, * )
 
-    CALL stop_clock(  TRIM(code) )
-    CALL print_clock( TRIM(code) )
-
+    IF ( code == 'notset' ) THEN
+       WRITE( stdout,'(5X,"WARNING: environment_end needs a call to environment_start at the beginning of the run")')
+    ELSE
+       CALL stop_clock(  TRIM(code) )
+       CALL print_clock( TRIM(code) )
+    END IF
     CALL closing_message( )
 
     IF( meta_ionode ) THEN
