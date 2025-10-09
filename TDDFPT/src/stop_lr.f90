@@ -189,13 +189,7 @@ SUBROUTINE stop_lr( full_run  )
   IF (use_environ) CALL clean_environ('TD', .TRUE.)
 #endif
   !
-  IF (eels) THEN
-     CALL environment_end( )
-  ELSEIF(magnons) THEN
-     CALL environment_end( )
-  ELSE
-     CALL environment_end( ) 
-  ENDIF
+  CALL environment_end( )
   !
   CALL mp_global_end( )
   !
