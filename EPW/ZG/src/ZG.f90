@@ -996,7 +996,7 @@ PROGRAM ZG
      DEALLOCATE(frc_lr)
   !
 
-  CALL environment_end('ZG')
+  CALL environment_end( )
   !
   CALL mp_global_end()
   !

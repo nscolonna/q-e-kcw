@@ -889,7 +889,7 @@ PROGRAM matdyn
      DEALLOCATE(high_sym)
      DEALLOCATE(frc_lr)
   !
-  CALL environment_end('MATDYN')
+  CALL environment_end( )
   !
   CALL mp_global_end()
   !

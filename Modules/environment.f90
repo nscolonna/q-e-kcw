@@ -1,5 +1,5 @@
 !
-! Copyright (C) 2002-2023 Quantum ESPRESSO Foundation
+! Copyright (C) 2002-2025 Quantum ESPRESSO Foundation
 ! This file is distributed under the terms of the
 ! GNU General Public License. See the file `License'
 ! in the root directory of the present distribution,
@@ -34,8 +34,8 @@ MODULE environment
 
   IMPLICIT NONE
 
-  ! ...  title of the simulation
-  CHARACTER(LEN=75) :: title
+  ! ... code name
+  CHARACTER(LEN=20) :: code = 'notset'
 
   SAVE
 
@@ -52,9 +52,9 @@ MODULE environment
 CONTAINS
   !==-----------------------------------------------------------------------==!
 
-  SUBROUTINE environment_start( code )
+  SUBROUTINE environment_start( code_in )
 
-    CHARACTER(LEN=*), INTENT(IN) :: code
+    CHARACTER(LEN=*), INTENT(IN) :: code_in
 
     LOGICAL           :: exst, debug = .false.
     CHARACTER(LEN=80) :: code_version, uname
@@ -72,6 +72,7 @@ CONTAINS
     ! ... use ".FALSE." to disable all clocks except the total cpu time clock
     ! ... use ".TRUE."  to enable clocks
     CALL init_clocks(.TRUE.) 
+    code = code_in
     CALL start_clock( TRIM(code) )
 
     code_version = TRIM (code) // " v." // TRIM (version_number)
@@ -122,7 +123,7 @@ CONTAINS
     CALL opening_message( code_version )
     CALL compilation_info ( )
 #if defined(__MPI)
-    CALL parallel_info ( code )
+    CALL parallel_info ( )
 #else
     CALL serial_info()
 #endif
@@ -139,17 +140,23 @@ CONTAINS
 
   !==-----------------------------------------------------------------------==!
 
-  SUBROUTINE environment_end( code )
-
-    CHARACTER(LEN=*), INTENT(IN) :: code
+  SUBROUTINE environment_end( code_in )
+    ! next line for back-compatibility
+    CHARACTER(LEN=*), INTENT(IN), OPTIONAL :: code_in
 #if defined(_HDF5)
     CALL finalize_hdf5()
 #endif
     IF ( meta_ionode ) WRITE( stdout, * )
 
-    CALL stop_clock(  TRIM(code) )
-    CALL print_clock( TRIM(code) )
-
+    IF ( PRESENT(code_in) ) THEN
+       code = code_in
+    END IF
+    IF ( code == 'notset' ) THEN
+       WRITE( stdout,'(5X,"WARNING: environment_end needs a call to environment_start at the beginning of the run")')
+    ELSE
+       CALL stop_clock(  TRIM(code) )
+       CALL print_clock( TRIM(code) )
+    END IF
     CALL closing_message( )
 
     IF( meta_ionode ) THEN
@@ -223,9 +230,8 @@ CONTAINS
   END SUBROUTINE closing_message
 
   !==-----------------------------------------------------------------------==!
-  SUBROUTINE parallel_info ( code )
+  SUBROUTINE parallel_info ( )
     !
-    CHARACTER(LEN=*), INTENT(IN) :: code
 #if defined(_OPENMP)
     INTEGER, EXTERNAL :: omp_get_max_threads
     !

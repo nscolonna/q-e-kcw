@@ -618,7 +618,7 @@ PROGRAM pw2bgw
     CALL print_clock ( 'real_wfng' )
   ENDIF
 
-  CALL environment_end ( codename )
+  CALL environment_end( )
 
   CALL stop_pp ( )
 
