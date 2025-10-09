@@ -140,13 +140,17 @@ CONTAINS
 
   !==-----------------------------------------------------------------------==!
 
-  SUBROUTINE environment_end( )
-
+  SUBROUTINE environment_end( code_in )
+    ! next line for back-compatibility
+    CHARACTER(LEN=*), INTENT(IN), OPTIONAL :: code_in
 #if defined(_HDF5)
     CALL finalize_hdf5()
 #endif
     IF ( meta_ionode ) WRITE( stdout, * )
 
+    IF ( PRESENT(code_in) ) THEN
+       code = code_in
+    END IF
     IF ( code == 'notset' ) THEN
        WRITE( stdout,'(5X,"WARNING: environment_end needs a call to environment_start at the beginning of the run")')
     ELSE

@@ -830,7 +830,7 @@ PROGRAM diff_sca
      DEALLOCATE(frc_lr)
   !
 
-  CALL environment_end('DISCA')
+  CALL environment_end( )
   !
   CALL mp_global_end()
   !

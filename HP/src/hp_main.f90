@@ -233,7 +233,7 @@ PROGRAM hp_main
      CALL hp_print_clock()
   ENDIF
   !
-  CALL environment_end(code)
+  CALL environment_end( )
   !
   IF ( use_para_diag ) CALL laxlib_end() 
   CALL mp_global_end()
