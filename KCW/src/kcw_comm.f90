@@ -142,5 +142,7 @@ MODULE control_kcw
   LOGICAL                  :: use_wct
   !variable to decide wether we want to verify if symmetries move a Wannier in an other unitcell in the supercell
   LOGICAL, ALLOCATABLE     :: sym_only_for_q(:,:)
+  !
+  INTEGER :: iband_start
 END MODULE control_kcw
 

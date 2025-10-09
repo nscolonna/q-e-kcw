@@ -1,0 +1,20 @@
+This example shows how to run a KCW calculation for GaAs excluding the semi-core
+states using the input variable iband_start in the Wannier namelist. 
+In this case this is set to 11 as we aim at excluding all the bands from 1 
+to 10 that comes from As and Ga semi-core d states. 
+
+1) run a standard scf and nscf calculation at PBE level on a regular 2x2x2 mesh. 
+   The regular mesh is needed by Wannier90. 
+   input=GaAs.(n)scf.in, output=GaAs.(n)scf.out
+
+2) perform a separate wannierization for the valence occupied manifold. 
+   Using exclude_bands we perform the wannierzation.
+   results in ./wann_block3 
+
+4) prepare the KCW calculation.
+   input=kc.w2ki output=kc.w2ko
+
+5) calculate, interpolate and diagonalize the KI Hamiltonian 
+   input=kc.khi, output=kc.kho
+
+The band structure is in GaAs.kcw_bands.dat.

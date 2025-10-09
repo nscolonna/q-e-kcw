@@ -55,6 +55,7 @@ subroutine input_summary ( )
       WRITE(stdout, 43)  "# have_empty          =", have_empty 
       WRITE(stdout, 43)  "# has_disentangle     =", has_disentangle 
       WRITE(stdout, 43)  "# l_unique_manifold   =", l_unique_manifold 
+      WRITE(stdout, 45)  "# iband_start         =", iband_start
     ENDIF
     !
     IF (calculation == 'screen') THEN 

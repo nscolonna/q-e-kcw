@@ -60,7 +60,7 @@ SUBROUTINE kcw_readin()
                         get_coulomb
   !
   NAMELIST / WANNIER /  num_wann_occ, num_wann_emp, have_empty, has_disentangle, &
-                        seedname, check_ks, l_unique_manifold
+                        seedname, check_ks, l_unique_manifold, iband_start
   !
   NAMELIST / SCREEN /   fix_orb, niter, nmix, tr2, i_orb, eps_inf, check_spread, alpha_mix
   !
@@ -95,6 +95,7 @@ SUBROUTINE kcw_readin()
   !! l_unique_manifold : TRUE if a unique wannierization was performed for occupied and empty states (use with caution). 
   !! check_ks        : if TRUE a check of the KS hamiltonian build on the Wannier representation is performed (eigenvalues
   !!                   are compared to the original one from PW.
+  !! iband_start     : index of firt bands (to exlcude all band below)
   !
   !### SCREEN 
   !! fix_orb         : if .true. and kcw_at_ks froze the response of the KS we are looking at (FIXME obsolete, to be removed?) 
@@ -185,6 +186,7 @@ SUBROUTINE kcw_readin()
   assume_isolated     = 'none'
   l_alpha_corr        = .FALSE. 
   l_unique_manifold   = .FALSE.
+  iband_start         = 1
   check_spread        = .FALSE.
   on_site_only        = .FALSE.
   calculation         = " " 

@@ -247,7 +247,8 @@ END subroutine read_wannier_unique_manifold
   USE kinds,                ONLY : DP
   USE control_kcw,          ONLY : unimatrx, have_empty, num_wann_occ, seedname, &
                                    has_disentangle, have_empty, num_wann_emp, & 
-                                   unimatrx_opt, num_wann, kcw_iverbosity, spin_component
+                                   unimatrx_opt, num_wann, kcw_iverbosity, spin_component, &
+                                   iband_start
   USE mp_global,            ONLY : intra_image_comm
   USE mp,                   ONLY : mp_bcast
   USE io_global,            ONLY : ionode, ionode_id
@@ -321,7 +322,7 @@ END subroutine read_wannier_unique_manifold
      num_wann_occ = num_wann_file
      !! Store the number of occupied wannier in a  global variable
      !
-     IF (num_wann_occ /= nbnd_pw) & 
+     IF (num_wann_occ /= nbnd_pw-(iband_start-1)) & 
           CALL errore ('read_wannier', 'Mismatch between  num occ bands and num wann', 1)
      !
   ENDIF
