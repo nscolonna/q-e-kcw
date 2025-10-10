@@ -16,11 +16,11 @@ SUBROUTINE stop_lr( full_run  )
   USE lr_variables,         ONLY : n_ipol, LR_polarization, beta_store,          &
                                  & gamma_store, zeta_store, norm0, code1,code2,  &
                                  & lr_verbosity, itermax, bgz_suffix,            &
-                                 & eels, q1, q2, q3, calculator, iundvpsi, iudwf,&
-                                 & iu1dwf, magnons, code3, alpha_magnons_store,  &  
+                                 & eels, q1, q2, q3, calculator, iundvpsi,       &
+                                 & magnons, code3, alpha_magnons_store,  &
                                  & gamma_magnons_store, n_op
   USE io_global,            ONLY : ionode, stdout
-  USE io_files,             ONLY : tmp_dir, prefix, iunwfc
+  USE io_files,             ONLY : tmp_dir, prefix
   USE environment,          ONLY : environment_end
   USE lsda_mod,             ONLY : nspin
   USE noncollin_module,     ONLY : noncolin
@@ -28,6 +28,7 @@ SUBROUTINE stop_lr( full_run  )
   USE cell_base,            ONLY : celldm, at, bg, alat, omega
   USE klist,                ONLY : nelec
   USE buffers,              ONLY : close_buffer
+  USE units_lr,             ONLY : iudwf, iuwfc
   !
 #if defined (__ENVIRON)
   USE plugin_flags,        ONLY : use_environ
@@ -128,7 +129,7 @@ SUBROUTINE stop_lr( full_run  )
            !
         ENDDO
         !
-     ELSE
+     ELSEIF(eels) THEN
         DO i = 1, itermax-1
            !
            WRITE(158,*) beta_store(ip,i+1)
@@ -148,6 +149,28 @@ SUBROUTINE stop_lr( full_run  )
         WRITE(158,*) beta_store(ip,itermax)
         WRITE(158,*) gamma_store(ip,itermax)
         DO j=1,n_ipol
+           WRITE(158,*) zeta_store (ip,j,itermax)
+        ENDDO             
+     ELSE
+        DO i = 1, itermax-1
+           !
+           WRITE(158,*) beta_store(ip,i+1)
+           WRITE(158,*) gamma_store(ip,i+1)
+           !
+           ! This is absolutely necessary for cross platform compatibility
+           !
+           DO j = 1, n_op
+              WRITE(158,*) zeta_store (ip,j,i)
+           ENDDO
+           !
+        ENDDO
+        !
+        ! X. Ge: These two faked values will not be
+        ! really used in the spectrum calculation.
+        !
+        WRITE(158,*) beta_store(ip,itermax)
+        WRITE(158,*) gamma_store(ip,itermax)
+        DO j=1,n_op
            WRITE(158,*) zeta_store (ip,j,itermax)
         ENDDO
      ENDIF
@@ -178,11 +201,10 @@ SUBROUTINE stop_lr( full_run  )
   !
   ! EELS: Close the file where it read the wavefunctions at k and k+q.
   !
-  IF (eels) CALL close_buffer(iunwfc, 'keep')
+  IF (eels) CALL close_buffer(iuwfc, 'keep')
   IF ( trim(calculator)=='sternheimer' ) THEN
      CALL close_buffer ( iundvpsi,'delete' )
      CALL close_buffer ( iudwf,'delete' )
-     CALL close_buffer ( iu1dwf,'delete' )
   ENDIF
   !
   STOP

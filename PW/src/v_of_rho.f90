@@ -69,6 +69,9 @@ SUBROUTINE v_of_rho( rho, rho_core, rhog_core, &
   !
   ! ... calculate exchange-correlation potential
   !
+  !$acc data copyin(rho,v)
+  !$acc data copyin(rho%of_r,rho%of_g,rho_core,rhog_core) copyout(v%of_r,v%kin_r)
+  !
   IF (xclib_dft_is('meta')) THEN
      CALL v_xc_meta( rho, rho_core, rhog_core, etxc, vtxc, v%of_r, v%kin_r )
   ELSE
@@ -82,6 +85,9 @@ SUBROUTINE v_of_rho( rho, rho_core, rhog_core, &
   ! ... calculate hartree potential
   !
   CALL v_h( rho%of_g(:,1), ehart, charge, v%of_r )
+  !
+  !$acc end data
+  !$acc end data
   !
   ! ... DFT+U(+V): build up (extended) Hubbard potential 
   !
@@ -600,15 +606,23 @@ SUBROUTINE v_xc( rho, rho_core, rhog_core, etxc, vtxc, v )
   !
   CALL gradcorr( rho%of_r, rho%of_g, rho_core, rhog_core, etxc, vtxc, v )
   !
-  !$acc end data
-  !$acc end data
-  !
   ! ... to avoid NaN in some rare cases (see summations in subroutine delta_e)
-  IF ( nspin==4 .AND. .NOT.domag ) v(:,2:nspin) = 0.D0
+  IF ( nspin==4 .AND. .NOT.domag ) THEN
+     !$acc kernels
+     v(:,2:nspin) = 0.D0
+     !$acc end kernels
+  ENDIF
   !
   ! ... add non local corrections (if any)
   !
-  IF ( dft_is_nonlocc() ) CALL nlc( rho%of_r, rho_core, nspin, etxc, vtxc, v )
+  IF ( dft_is_nonlocc() ) THEN
+    !$acc update self(v)
+    CALL nlc( rho%of_r, rho_core, nspin, etxc, vtxc, v )
+    !$acc update device(v)
+  ENDIF
+  !
+  !$acc end data
+  !$acc end data
   !
   CALL mp_sum(  vtxc , intra_bgrp_comm )
   CALL mp_sum(  etxc , intra_bgrp_comm )
@@ -636,7 +650,7 @@ SUBROUTINE v_h( rhog, ehart, charge, v )
   USE mp,                ONLY : mp_sum
   USE martyna_tuckerman, ONLY : wg_corr_h, do_comp_mt
   USE esm,               ONLY : do_comp_esm, esm_hartree, esm_bc
-  USE Coul_cut_2D,       ONLY : do_cutoff_2D, cutoff_2D, cutoff_hartree  
+  USE Coul_cut_2D,       ONLY : do_cutoff_2D, cutoff_hartree
   !
   IMPLICIT NONE
   !
@@ -659,7 +673,11 @@ SUBROUTINE v_h( rhog, ehart, charge, v )
   !
   CALL start_clock( 'v_h' )
   !
+  !$acc data copyin(rhog) copy(v)
+  !
   ALLOCATE( aux(dfftp%nnr), aux1(2,ngm), vh(dfftp%nnr) )
+  !$acc data create(aux,aux1,vh)
+  !
   charge = 0.D0
   !
   IF ( gstart == 2 ) THEN
@@ -677,16 +695,23 @@ SUBROUTINE v_h( rhog, ehart, charge, v )
      ! ... calculate modified Hartree potential for ESM
      !
      CALL esm_hartree( rhog, ehart, aux )
+     !$acc update device(aux)
      !
   ELSE
      !
-     ehart     = 0.D0
+     ehart = 0.D0
+     !$acc kernels
      aux1(:,:) = 0.D0
+     !$acc end kernels
      !
      IF (do_cutoff_2D) THEN  !TS
         CALL cutoff_hartree(rhog(:), aux1, ehart)
      ELSE
-!$omp parallel do private( fac, rgtot_re, rgtot_im ), reduction(+:ehart)
+#if defined(_OPENACC)
+        !$acc parallel loop reduction(+:ehart)
+#elif defined(__OPENMP)
+        !$omp parallel do private( fac, rgtot_re, rgtot_im ), reduction(+:ehart)
+#endif
         DO ig = gstart, ngm
            !
            fac = 1.D0 / gg(ig) 
@@ -700,14 +725,18 @@ SUBROUTINE v_h( rhog, ehart, charge, v )
            aux1(2,ig) = rgtot_im * fac
            !
         ENDDO
-!$omp end parallel do
+#if defined(__OPENMP)
+        !$omp end parallel do
+#endif
      ENDIF
      !
      fac = e2 * fpi / tpiba2
      !
      ehart = ehart * fac
      !
-     aux1 = aux1 * fac
+     !$acc kernels
+     aux1(:,:) = aux1(:,:) * fac
+     !$acc end kernels
      !
      IF ( gamma_only ) THEN
         !
@@ -721,17 +750,25 @@ SUBROUTINE v_h( rhog, ehart, charge, v )
      !
      IF (do_comp_mt) THEN
         ALLOCATE( vaux(ngm), rgtot(ngm) )
+        !$acc data create(vaux,rgtot)
+        !$acc kernels
         rgtot(:) = rhog(:)
+        !$acc end kernels
         CALL wg_corr_h( omega, ngm, rgtot, vaux, eh_corr )
+        !$acc kernels
         aux1(1,1:ngm) = aux1(1,1:ngm) + REAL( vaux(1:ngm))
         aux1(2,1:ngm) = aux1(2,1:ngm) + AIMAG(vaux(1:ngm))
+        !$acc end kernels
         ehart = ehart + eh_corr
+        !$acc end data
         DEALLOCATE( rgtot, vaux )
      ENDIF
      !
      CALL mp_sum( ehart, intra_bgrp_comm )
      !
+     !$acc kernels
      aux(1:ngm) = CMPLX( aux1(1,1:ngm), aux1(2,1:ngm), KIND=DP )
+     !$acc end kernels
      !
   ENDIF
   !
@@ -743,19 +780,26 @@ SUBROUTINE v_h( rhog, ehart, charge, v )
   !
   IF ( nspin == 4 ) THEN
      !
+     !$acc kernels
      v(:,1) = v(:,1) + vh(:)
+     !$acc end kernels
      !
   ELSE
      !
      DO is = 1, nspin
         !
+        !$acc kernels
         v(:,is) = v(:,is) + vh(:)
+        !$acc end kernels
         !
      ENDDO
      !
   ENDIF
   !
+  !$acc end data
   DEALLOCATE( aux, aux1, vh )
+  !
+  !$acc end data
   !
   CALL stop_clock( 'v_h' )
   !
@@ -1748,7 +1792,7 @@ USE kinds,                ONLY : DP
 USE ions_base,            ONLY : nat, ityp
 USE ldaU,                 ONLY : Hubbard_lmax, Hubbard_l, Hubbard_Um, &
                                  Hubbard_alpha_m, lambda_ns, &
-                                 eigenvecs_ref, apply_U, hub_pot_fix
+                                 eigenvecs_ref, order_um, apply_U, hub_pot_fix
 USE lsda_mod,             ONLY : nspin
 USE constants,            ONLY : eps16, RYTOEV
 USE control_flags,        ONLY : iverbosity, dfpt_hub
@@ -1774,6 +1818,16 @@ COMPLEX(DP)              :: eigenvecs_current(2*Hubbard_lmax+1,2*Hubbard_lmax+1,
 INTEGER                  :: is, na, nt, m1, m2, m3, ldim, m_order
 ! the ordering vector for the orbital-tracking routine
 INTEGER                  :: order(2*Hubbard_lmax+1)
+LOGICAL                  :: is_first
+IF (.NOT. ALLOCATED(order_um)) THEN 
+  IF (nspin == 2 ) THEN 
+     ALLOCATE(order_um(2*Hubbard_lmax+1,nspin, nat))  
+  ELSE 
+     ALLOCATE(order_um(2*Hubbard_lmax+1,1,nat)) 
+  END IF 
+  order_um = 0
+END IF 
+
 !
 !
 eth    = 0.d0
@@ -1799,6 +1853,8 @@ DO na = 1, nat
       !
       ldim = 2 * Hubbard_l(nt) + 1
       eigenvecs_current(:,:,:) = CMPLX(0.d0,0.d0, kind=dp)
+      is_first = ALL(eigenvecs_ref(:,:,:,na) == eigenvecs_current)  
+
       !
       effU = 0.0
       effalpha = 0.0
@@ -1809,10 +1865,19 @@ DO na = 1, nat
       DO is = 1, nspin
          !
          ! sort eigenvectors with respect to the (reference) order established in eigvecs_first
+         IF (is_first)  THEN  
+             order(1:ldim) = order_um(1:ldim,is,na)
+             IF (ALL(order(1:ldim)==0)) order(1:ldim) = [(m1,m1=1,ldim)] 
+             DO m1 =1, ldim 
+               eigenvecs_ref(1:ldim, order(m1), is, na) = eigenvecs_current(1:ldim, m1, is) 
+             END DO 
+         END IF 
          order(:) = 0
          CALL order_eigenvecs( order(1:ldim), eigenvecs_current(1:ldim,1:ldim,is), &
                                  eigenvecs_ref(1:ldim,1:ldim,is,na), ldim )
          !
+         
+         order_um(1:ldim,is,na) = order(1:ldim) 
          DO m1 = 1, ldim
             !
             ! calculate Hubbard potential and -energy
@@ -1896,7 +1961,7 @@ SUBROUTINE v_hubbard_resolved_nc( ns, v_hub, eth )
 USE kinds,                ONLY : DP
 USE ions_base,            ONLY : nat, ityp
 USE ldaU,                 ONLY : Hubbard_lmax, Hubbard_l, Hubbard_Um_nc, &
-                                 Hubbard_alpha_m_nc, lambda_ns, &
+                                 Hubbard_alpha_m_nc, lambda_ns, order_um,&
                                  eigenvecs_ref, apply_U, hub_pot_fix
 USE lsda_mod,             ONLY : nspin
 USE constants,            ONLY : eps16, RYTOEV
@@ -1922,8 +1987,14 @@ COMPLEX(DP)              :: eigenvecs_current(4*Hubbard_lmax+2,4*Hubbard_lmax+2)
 INTEGER                  :: is, na, nt, m1, m2, m3, ldim, m_order
 !
 INTEGER                  :: order(4*Hubbard_lmax+2) 
+LOGICAL                  :: is_first
 !! ordering vector
 !
+IF (.NOT. ALLOCATED(order_um)) THEN 
+  ALLOCATE(order_um(4*Hubbard_lmax+2,1,nat)) 
+  order_um = 0
+END IF 
+
 eth    = 0.d0
 lambda_ns(:,:,:) = 0.d0
 ! orbital occupations (=eigenvalues of rho%ns)
@@ -1948,6 +2019,7 @@ DO na = 1, nat
       !
       ldim = 2 * Hubbard_l(nt) + 1
       eigenvecs_current(:,:) = CMPLX(0.d0,0.d0, kind=dp)
+      is_first = ALL(eigenvecs_ref(:,1,:,na) == eigenvecs_current)  
       !
       effU = 0.0
       effalpha = 0.0
@@ -1956,12 +2028,20 @@ DO na = 1, nat
                      eigenvecs_current(1:2*ldim,1:2*ldim) )
                               !
       ! sort eigenvectors with respect to the (reference) order established in eigvecs_first
+      IF (is_first)  THEN  
+        order(1:2*ldim) = order_um(1:2*ldim,1,na)
+        IF (ALL(order(1:2*ldim)==0)) order(1:2*ldim) = [(m1,m1=1,2*ldim)] 
+        DO m1 =1, 2*ldim 
+          eigenvecs_ref(1:2*ldim, order(m1), 1, na) = eigenvecs_current(1:2*ldim, m1) 
+        END DO 
+      END IF 
       order(:) = 0
       !
       CALL order_eigenvecs( order(1:2*ldim), eigenvecs_current(1:2*ldim,1:2*ldim), &
                                  eigenvecs_ref(1:2*ldim,1:2*ldim,1,na), 2*ldim )
       !
       ! No need to iterate over is (all done in diag_ns_nc)
+      order_um(1:2*ldim,1,na) = order(1:2*ldim) 
       DO m1 = 1, 2*ldim
          !
          ! calculate Hubbard potential and -energy

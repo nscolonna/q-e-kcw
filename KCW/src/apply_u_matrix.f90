@@ -62,8 +62,14 @@ subroutine apply_u_matrix(evc_ks, evc_var, c_occ_mat, ik_eff, n_orb)
   ALLOCATE ( evc_opt(npwx*npol,num_wann) )
   evc_opt(:,:) = CMPLX(0.D0,0.D0,kind=DP)
   !
-  dim_ks = nbnd 
+  dim_ks = nbnd - iband_start + 1
   IF ( .NOT. have_empty) dim_ks = num_wann
+  !
+  !WRITE(stdout,*) "NICOLA dim_ks = ", dim_ks
+  !WRITE(stdout,*) "NICOLA num_wan = ", num_wann
+  !WRITE(stdout,*) "NICOLA ibnd_start = ", iband_start
+  !WRITE(stdout,*) "NICOLA size U_opt)", SIZE(unimatrx_opt(:,1,1))
+  !WRITE(stdout,*) "NICOLA size U_opt)", SIZE(unimatrx_opt(1,:,1))
   !
   DO i = 1, num_wann
     !

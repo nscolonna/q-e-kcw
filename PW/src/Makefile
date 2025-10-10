@@ -53,7 +53,6 @@ compute_rho.o \
 compute_qdipol.o \
 compute_qdipol_so.o \
 compute_ux.o \
-coset.o \
 Coul_cut_2D.o \
 d_matrix.o \
 data_structure.o \
@@ -125,7 +124,7 @@ init_us_2.o \
 init_vloc.o \
 input.o \
 io_rho_xml.o \
-irrek.o \
+irreducible_BZ.o \
 iweights.o \
 intersite_V.o \
 init_nsg.o \
@@ -198,7 +197,6 @@ ruotaijk.o \
 run_pwscf.o \
 s_1psi.o \
 s_psi.o \
-s_psi_acc.o \
 save_in_cbands.o \
 save_in_electrons.o \
 scale_h.o \
@@ -248,6 +246,7 @@ v_of_rho.o \
 vcsmd.o \
 vcsubs.o \
 vhpsi.o \
+vhpsi_U.o \
 vloc_psi_tg.o \
 vloc_psi_acc.o \
 utils.o \
@@ -279,12 +278,7 @@ d3hess_mod.o
 
 # CUDA Fortran versions of routines
 PWLIBS += \
-  h_psi_gpu.o \
-  vhpsi_gpu.o \
   rotate_wfc_gpu.o \
-  hs_1psi_gpu.o \
-  hs_psi_gpu.o \
-  s_1psi_gpu.o \
   utils_gpu.o \
   oscdft_functions_gpu.o
 

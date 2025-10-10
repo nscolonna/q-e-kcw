@@ -30,6 +30,7 @@ check_q_points_sym.o \
 dfpt_tetra_mod.o \
 dynmat_sub.o \
 h_prec.o \
+h_prec_freq.o \
 incdrhoscf.o \
 incdrhoscf_nc.o \
 dv_of_drho.o \
@@ -46,6 +47,7 @@ psymdvscf.o \
 symdvscf.o \
 sym_dmag.o \
 orthogonalize.o \
+orthogonalize_omega.o \
 setup_nscf.o \
 set_dbecsum_nc.o \
 set_int3_nc.o \

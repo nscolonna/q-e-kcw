@@ -300,7 +300,7 @@ clean :
 		NEB ACFDT COUPLE GWW XSpectra PWCOND dft-d3 \
 		atomic LR_Modules upflib \
 		dev-tools extlibs Environ TDDFPT PHonon HP GWW Doc GUI \
-		QEHeat KCW \
+		QEHeat KCW PIOUD \
 	; do \
 	    if test -d $$dir ; then \
 		( cd $$dir ; \
@@ -317,7 +317,7 @@ veryclean : clean
 	- @(cd install ; $(MAKE) -f extlibs_makefile veryclean)
 	- (cd install ; rm -rf config.log configure.msg config.status \
 		configure.h make_wannier90.inc autom4te.cache )
-	- (cd include; rm -rf configure.in qe_cdefs.h )
+	- rm include/configure.h
 	- rm -f espresso.tar.gz
 	- rm -rf make.inc
 	- rm -rf FoX

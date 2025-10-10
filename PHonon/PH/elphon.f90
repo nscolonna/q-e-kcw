@@ -12,13 +12,11 @@ SUBROUTINE elphon()
   !! Electron-phonon calculation from data saved in \(\texttt{fildvscf}\).
   !
   USE kinds, ONLY : DP
-  USE constants, ONLY : amu_ry, RY_TO_THZ, RY_TO_CMM1
-  USE cell_base, ONLY : celldm, omega, ibrav, at, bg
-  USE ions_base, ONLY : nat, ntyp => nsp, ityp, tau, amass
+  USE ions_base, ONLY : nat
   USE gvecs, ONLY: doublegrid
   USE fft_base, ONLY : dfftp, dffts
   USE fft_interfaces, ONLY : fft_interpolate
-  USE noncollin_module, ONLY : nspin_mag, noncolin, m_loc
+  USE noncollin_module, ONLY : nspin_mag, noncolin
   USE lsda_mod, ONLY : nspin
   USE uspp,  ONLY: okvan
   USE paw_variables, ONLY : okpaw
@@ -26,11 +24,8 @@ SUBROUTINE elphon()
   USE dynmat, ONLY : dyn, w2
   USE modes,  ONLY : npert, nirr, u, nmodes
   USE uspp_param, ONLY : nhm
-  USE control_ph, ONLY : trans, xmldyn
-  USE output,     ONLY : fildyn,fildvscf
-  USE io_dyn_mat, ONLY : read_dyn_mat_param, read_dyn_mat_header, &
-                         read_dyn_mat, read_dyn_mat_tail
-  USE units_ph, ONLY : iudyn, lrdrho, iudvscf, iuint3paw, lint3paw
+  USE output,     ONLY : fildvscf
+  USE units_ph, ONLY :  lrdrho, iudvscf, iuint3paw, lint3paw
   USE dfile_star,    ONLY : dvscf_star
   USE mp_images,  ONLY : intra_image_comm
   USE mp,        ONLY : mp_bcast
@@ -38,7 +33,6 @@ SUBROUTINE elphon()
   USE lrus,   ONLY : int3, int3_nc, int3_paw
   USE qpoint, ONLY : xq
   USE dvscf_interpolate, ONLY : ldvscf_interpolate, dvscf_r2q
-  USE ahc,    ONLY : elph_ahc
   !
   IMPLICIT NONE
   !
@@ -46,15 +40,9 @@ SUBROUTINE elphon()
   ! counter on the representations
   ! counter on the modes
   ! the change of Vscf due to perturbations
-  INTEGER :: i,j
   COMPLEX(DP), ALLOCATABLE :: dvscfin_all(:, :, :)
   !! dvscfin for all modes. Used when doing dvscf_r2q interpolation.
   COMPLEX(DP), POINTER :: dvscfin(:,:,:), dvscfins (:,:,:)
-  COMPLEX(DP), allocatable :: phip (:, :, :, :)
-
-  INTEGER :: ntyp_, nat_, ibrav_, nspin_mag_, mu, nu, na, nb, nta, ntb, nqs_
-  REAL(DP) :: celldm_(6), w1
-  CHARACTER(LEN=3) :: atm(ntyp)
 
   CALL start_clock ('elphon')
 
@@ -129,16 +117,40 @@ SUBROUTINE elphon()
   !
   IF (ldvscf_interpolate) DEALLOCATE(dvscfin_all)
   !
-  ! In AHC calculation, we do not need the dynamical matrix. So return here.
-  IF (elph_ahc) THEN
-     CALL stop_clock('elphon')
-     RETURN
-  ENDIF
+  CALL stop_clock('elphon')
+  !
+  RETURN
+  !
+END SUBROUTINE elphon
+!
+SUBROUTINE rediagonalize_dyn( )
+  !
+  USE kinds, ONLY : DP
+  USE constants, ONLY : amu_ry, RY_TO_THZ, RY_TO_CMM1
+  USE cell_base, ONLY : celldm, omega, ibrav, at, bg
+  USE ions_base, ONLY : nat, ntyp => nsp, ityp, tau, amass
+  USE io_global, ONLY : stdout, ionode, ionode_id
+  USE noncollin_module, ONLY : nspin_mag, m_loc
+  !
+  USE control_ph,ONLY : xmldyn
+  USE dynmat,    ONLY : dyn, w2
+  USE io_dyn_mat,ONLY : read_dyn_mat_param, read_dyn_mat_header, &
+                         read_dyn_mat, read_dyn_mat_tail
+  USE output,    ONLY : fildyn
+  USE units_ph,  ONLY : iudyn
+  USE qpoint,    ONLY : xq
+  !
+  IMPLICIT NONE
+  !
+  INTEGER :: i,j, na, nb
+  INTEGER :: ntyp_, nat_, ibrav_, nspin_mag_, mu, nu, nta, ntb, nqs_
+  REAL(DP) :: celldm_(6), w1
+  CHARACTER(LEN=3) :: atm(ntyp)
+  COMPLEX(DP), allocatable :: phip (:, :, :, :)
   !
   ! now read the eigenvalues and eigenvectors of the dynamical matrix
   ! calculated in a previous run
   !
-  IF (.NOT.trans) THEN
      IF (.NOT. xmldyn) THEN
         WRITE (6, '(5x,a)') "Reading dynamics matrix from file "//trim(fildyn)
         CALL readmat (iudyn, ibrav, celldm, nat, ntyp, &
@@ -161,8 +173,6 @@ SUBROUTINE elphon()
         !
         !  Diagonalize the dynamical matrix
         !
-
-
         DO i=1,3
            do na=1,nat
               nta = ityp (na)
@@ -193,7 +203,8 @@ SUBROUTINE elphon()
         CALL read_dyn_mat_tail(nat)
 
         deallocate( phip )
-     ENDIF
+        !
+     END IF
      !
      ! Write phonon frequency to stdout
      !
@@ -207,16 +218,12 @@ SUBROUTINE elphon()
      !
      WRITE( stdout, '(1x,74("*"))')
      !
-  ENDIF ! .NOT. trans
-  !
-  CALL stop_clock ('elphon')
   !
 8000 FORMAT(/,5x,'Diagonalizing the dynamical matrix', &
        &       //,5x,'q = ( ',3f14.9,' ) ',//,1x,74('*'))
 8010 FORMAT   (5x,'freq (',i5,') =',f15.6,' [THz] =',f15.6,' [cm-1]')
-  !
-  RETURN
-END SUBROUTINE elphon
+!
+END SUBROUTINE rediagonalize_dyn
 !
 !-----------------------------------------------------------------------
 SUBROUTINE readmat (iudyn, ibrav, celldm, nat, ntyp, ityp, omega, &
@@ -1425,14 +1432,20 @@ SUBROUTINE elph_prt()
   REAL(DP), PARAMETER :: ryd2mev  = rytoev * 1.0E3_DP
   REAL(DP), PARAMETER :: eps = 0.01/ryd2mev
   REAL(DP) :: gamma, g2, w, w_1, w_2
+  COMPLEX(DP) :: gamma_cmplx
   REAL(DP) :: kpoint(3)
   REAL(DP) :: epc(nbnd, nbnd, 3 * nat)
   REAL(DP) :: epc_sym(nbnd, nbnd, 3 * nat)
+  REAL(DP) :: epc_unsym(nbnd, nbnd, 3 * nat)
+  REAL(DP) :: epc_real(nbnd, nbnd, 3 * nat)
+  REAL(DP) :: epc_imag(nbnd, nbnd, 3 * nat)
   REAL(DP), ALLOCATABLE :: et2(:, :)
   !
   COMPLEX(DP) :: el_ph_sum(3 * nat, 3 * nat)
   COMPLEX(DP) :: el_ph_sum_aux(3 * nat, 3 * nat)
   COMPLEX(DP), ALLOCATABLE :: el_ph_mat2(:, :, :, :)
+  COMPLEX(DP) :: el_ph_sum_cmplx(3 * nat, 1)
+  COMPLEX(DP) :: el_ph_sum_cmplx_aux(3 * nat, 1)
   !
   CALL start_clock('elphsum2')
   !
@@ -1535,20 +1548,27 @@ SUBROUTINE elph_prt()
             el_ph_sum(ipert, jpert) = CONJG(el_ph_mat2(jbnd, ibnd, ik2, ipert)) * &
                                             el_ph_mat2(jbnd, ibnd, ik2, jpert)
           ENDDO
+          el_ph_sum_cmplx(jpert, 1) = el_ph_mat2(jbnd, ibnd, ik2, jpert)
         ENDDO
         !
         ! from pert to cart
         !
         CALL dyn_pattern_to_cart(nat, u, el_ph_sum, el_ph_sum_aux)
         CALL compact_dyn(nat, el_ph_sum, el_ph_sum_aux)
+        CALL epf_pattern_to_cart(nat, u, el_ph_sum_cmplx, el_ph_sum_cmplx_aux)
+        CALL compact_epf(nat, el_ph_sum_cmplx, el_ph_sum_cmplx_aux)
         !
         DO nu = 1, nmodes
           gamma = 0.d0
+          gamma_cmplx = 0.d0
           DO vu = 1, 3 * nat
             DO mu = 1, 3 * nat
               gamma = gamma + REAL(CONJG(dyn(mu, nu)) * el_ph_sum(mu, vu) &
                       * dyn(vu, nu))
             ENDDO
+          ENDDO
+          DO mu = 1, 3 * nat
+            gamma_cmplx = gamma_cmplx + CONJG(dyn(mu, nu)) * el_ph_sum_cmplx(mu, 1)
           ENDDO
           gamma = gamma / 2.d0
           !
@@ -1561,9 +1581,13 @@ SUBROUTINE elph_prt()
           IF (w2(nu) .GT. 0.d0) THEN
             w = DSQRT(w2(nu))
             gamma = gamma / w
+            epc_real(ibnd, jbnd, nu) = REAL(gamma_cmplx) / (DSQRT(2.d0) * w)
+            epc_imag(ibnd, jbnd, nu) = IMAG(gamma_cmplx) / (DSQRT(2.d0) * w)
           ELSE
-            w = DSQRT(-w2(nu))
+            w = -DSQRT(-w2(nu))
             gamma = 0.d0
+            epc_real(ibnd, jbnd, nu) = 0.d0 
+            epc_imag(ibnd, jbnd, nu) = 0.d0
           ENDIF
           !
           IF (gamma .LT. 0.d0) gamma = 0.d0
@@ -1573,6 +1597,7 @@ SUBROUTINE elph_prt()
           ! gamma = |g| [Ry]
           !
           epc(ibnd, jbnd, nu) = gamma
+          epc_unsym(ibnd, jbnd, nu) = gamma
           !
         ENDDO
         !
@@ -1678,7 +1703,9 @@ SUBROUTINE elph_prt()
     WRITE(stdout, '(5x, a)') ' Electron-phonon vertex |g| (meV)'
     WRITE(stdout, '(/5x, "q coord.: ", 3f12.7)') xq
     WRITE(stdout, '(5x, "k coord.: ", 3f12.7)') kpoint
-    WRITE(stdout, '(5x, a)') ' ibnd     jbnd     imode   enk[eV]    enk+q[eV]  omega(q)[meV]   |g|[meV]'
+    !WRITE(stdout, '(5x, a)') ' ibnd     jbnd     imode   enk[eV]    enk+q[eV]  omega(q)[meV]   |g|[meV]'
+    WRITE(stdout, '(5x, a)') ' ibnd     jbnd     imode   enk[eV]    enk+q[eV]  omega(q)[meV]   &
+                               |g_sym|[meV]   |g|[meV]   Re(g)[meV]   Im(g)[meV]'
     WRITE(stdout, '(5x, a)') REPEAT('-', 78)
     !
     DO ibnd = 1, nbnd
@@ -1688,12 +1715,15 @@ SUBROUTINE elph_prt()
           IF (w2(nu) .GT. 0.d0) THEN
             w = DSQRT(w2(nu))
           ELSE
-            w = DSQRT(-w2(nu))
+            w = -DSQRT(-w2(nu))
           ENDIF
           !
-          WRITE(stdout, '(3i9, 2f12.4, 1f20.10, 1e20.10)') ibnd, jbnd, nu, &
+          WRITE(stdout, '(3i9, 2f12.4, 1f20.10, 1e20.10, 3e20.10)') ibnd, jbnd, nu, &
                 rytoev * et2(ibnd, ikk2), rytoev * et2(jbnd, ikq2), &
-                ryd2mev * w, ryd2mev * epc(ibnd, jbnd, nu)
+                ryd2mev * w, ryd2mev * epc(ibnd, jbnd, nu), &
+                ryd2mev * epc_unsym(ibnd, jbnd, nu), &  
+                ryd2mev * epc_real(ibnd, jbnd, nu), &
+                ryd2mev * epc_imag(ibnd, jbnd, nu)
           !
         ENDDO
       ENDDO

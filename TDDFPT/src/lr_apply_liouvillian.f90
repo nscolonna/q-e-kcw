@@ -38,7 +38,7 @@ SUBROUTINE lr_apply_liouvillian( evc1, evc1_new, interaction )
   USE gvect,                ONLY : ngm, gstart, g, gg
   USE io_global,            ONLY : stdout
   USE klist,                ONLY : nks, xk, ngk, igk_k
-  USE lr_variables,         ONLY : evc0, sevc0, revc0, rho_1, rho_1c, &
+  USE lr_variables,         ONLY : evc0, sevc0, rho_1, rho_1c, &
                                  & ltammd, size_evc, no_hxc, lr_exx, &
                                  & scissor, davidson, lr_verbosity
   USE lsda_mod,             ONLY : nspin
@@ -102,7 +102,7 @@ SUBROUTINE lr_apply_liouvillian( evc1, evc1_new, interaction )
   ALLOCATE( sevc1_new(npwx*npol,nbnd,nks))
   !
   nnr_siz= dffts%nnr
-!$acc data present_or_copyin(evc1(1:npwx*npol,1:nbnd,1:nks)) present_or_copyout(evc1_new(1:npwx*npol,1:nbnd,1:nks)) create(sevc1_new(1:npwx*npol,1:nbnd,1:nks), spsi1(1:npwx, 1:nbnd)) present_or_copyin(revc0(1:nnr_siz,1:nbnd,1))
+!$acc data present_or_copyin(evc1(1:npwx*npol,1:nbnd,1:nks), evc0(1:npwx*npol,1:nbnd,1:nks)) present_or_copyout(evc1_new(1:npwx*npol,1:nbnd,1:nks)) create(sevc1_new(1:npwx*npol,1:nbnd,1:nks), spsi1(1:npwx, 1:nbnd)) 
   !
   d_deeq(:,:,:,:)=0.0d0
   !$acc kernels
@@ -303,7 +303,6 @@ SUBROUTINE lr_apply_liouvillian( evc1, evc1_new, interaction )
   ! [H(k) - E(k)] * evc1(k). Keep this in mind if you want to
   ! generalize this subroutine to metals. 
   !
-  !$acc data copyin(evc0)
   DO ik = 1, nks
      !
 
@@ -314,7 +313,6 @@ SUBROUTINE lr_apply_liouvillian( evc1, evc1_new, interaction )
      !$acc end kernels
      !
   ENDDO 
-  !$acc end data
   !
   !
   ! Here we apply the S^{-1} operator.
@@ -349,7 +347,7 @@ CONTAINS
     !
     ! Gamma only case 
     !
-    USE lr_variables,             ONLY : becp_1, tg_revc0
+    USE lr_variables,             ONLY : becp_1
     USE realus,                   ONLY : tg_psic
     USE mp_global,                ONLY : me_bgrp
     USE mp_global,                ONLY : ibnd_start, ibnd_end, inter_bgrp_comm
@@ -458,21 +456,22 @@ CONTAINS
           ! Product with the potential vrs = (vltot+vr)
           ! revc0 is on smooth grid. psic is used up to smooth grid
           !
+          CALL invfft_orbital_gamma(evc0(:,:,1),ibnd,nbnd)
+          !
           IF (dffts%has_task_groups) THEN
              !
              DO ir=1, dffts%nr1x*dffts%nr2x*dffts%my_nr3p
                 !
-                tg_psic(ir) = tg_revc0(ir,ibnd,1)*CMPLX(tg_dvrss(ir),0.0d0,DP)
+                tg_psic(ir) = tg_psic(ir)*CMPLX(tg_dvrss(ir),0.0d0,DP)
                 !
              ENDDO
              !
           ELSE
              !
-             !DO ir = 1,dffts%nnr
              !$acc parallel loop
              DO ir = 1, nnr_siz
                 !
-                psic(ir) = revc0(ir,ibnd,1)*CMPLX(dvrss(ir),0.0d0,DP)
+                psic(ir) = psic(ir)*CMPLX(dvrss(ir),0.0d0,DP)
                 !
              ENDDO
              !
@@ -575,19 +574,9 @@ CONTAINS
     ! The kinetic energy g2kin was already computed when
     ! calling the routine lr_solve_e.
     !
-    ! vexx is already computed in lr_exx_kernel
-    !
-    IF (lr_exx) CALL stop_exx()
-    !
     ! Compute sevc1_new = H*evc1
     !
-#if defined(__CUDA)
-    CALL h_psi_gpu (npwx,ngk(1),nbnd,evc1(1,1,1),sevc1_new(1,1,1))
-#else
     CALL h_psi(npwx,ngk(1),nbnd,evc1(1,1,1),sevc1_new(1,1,1))
-#endif
-    !
-    IF (lr_exx) CALL start_exx()
     !
     ! Compute spsi1 = S*evc1 
     !
@@ -598,11 +587,7 @@ CONTAINS
            CALL fwfft_orbital_gamma(spsi1,ibnd,nbnd)
         ENDDO
     ELSE
-#if defined(__CUDA)
-       CALL s_psi_acc (npwx,ngk(1),nbnd,evc1(1,1,1),spsi1)
-#else            
-       CALL s_psi(npwx,ngk(1),nbnd,evc1(1,1,1),spsi1)
-#endif
+    CALL s_psi(npwx,ngk(1),nbnd,evc1(1,1,1),spsi1)
     ENDIF
     !
     !   Subtract the eigenvalues
@@ -661,9 +646,16 @@ SUBROUTINE lr_apply_liouvillian_k()
              !
              !   Product with the potential vrs = (vltot+vr)
              !
+             psic(:) = (0.0d0,0.0d0)
+             !
+             DO ig = 1, ngk(ik)
+                psic(dffts%nl(igk_k(ig,ik)))=evc0(ig,ibnd,ik)
+             ENDDO
+             CALL invfft ('Wave', psic, dffts)
+             !
              DO ir = 1,dffts%nnr
                 !
-                psic(ir) = revc0(ir,ibnd,ik)*dvrssc(ir)
+                psic(ir) = psic(ir)*dvrssc(ir)
                 !
              ENDDO
              !

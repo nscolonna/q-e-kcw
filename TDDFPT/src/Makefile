@@ -62,10 +62,8 @@ lr_dav_variables.o\
 lr_dav_routines.o\
 lr_us.o\
 lr_test_restart.o\
-lr_dav_debug.o\
 plugin_tddfpt_potential.o\
 linear_solvers.o\
-orthogonalize_omega.o\
 lr_sternheimer.o\
 lr_apply_liouvillian_magnons.o\
 lr_dvpsi_magnons.o\

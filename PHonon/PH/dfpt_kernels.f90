@@ -144,7 +144,7 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
    REAL(DP), INTENT(INOUT) :: dr2
    ! self-consistency error. Input is used for restart.
    COMPLEX(DP), INTENT(INOUT) :: drhos(dffts%nnr, nspin_mag, npert)
-   !! change of the charge density (smooth part only, but allocated with dfftp)
+   !! change of the charge density (smooth part only)
    COMPLEX(DP), INTENT(INOUT) :: drhop(dfftp%nnr, nspin_mag, npert)
    !! change of the charge density (smooth and hard parts, dfftp)
    COMPLEX(DP), POINTER, INTENT(INOUT) :: dvscfs(:, :, :)
@@ -405,24 +405,20 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
       !
       !   compute the corresponding change in scf potential : drhop -> dvscftmp
       !
-      DO ipert = 1, npert
-         !
-         CALL zcopy(dfftp%nnr*nspin_mag, drhop(1,1,ipert), 1, dvscftmp(1,1,ipert), 1)
-         !
+      IF (lnoloc) THEN
+         ! No local field effect: set dvscf to 0
+         dvscftmp(:, :, :) = (0.d0, 0.d0)
+      ELSE
          ! Compute the response HXC potential
-         !
-         IF (lnoloc) THEN
-            ! No local field effect: set dvscf to 0
-            dvscftmp(:, :, ipert) = (0.d0, 0.d0)
-         ELSE
+         DO ipert = 1, npert
+            CALL zcopy(dfftp%nnr*nspin_mag, drhop(1,1,ipert), 1, dvscftmp(1,1,ipert), 1)
             IF (PRESENT(drhoc) .AND. .NOT. lmultipole) THEN
                CALL dv_of_drho(dvscftmp(1, 1, ipert), drhoc = drhoc(:, ipert))
             ELSE !FM: as the case of solve_e
                CALL dv_of_drho(dvscftmp(1, 1, ipert))
             ENDIF
-         ENDIF
-         !
-      ENDDO
+         ENDDO
+      ENDIF
       !
       !   And we mix with the old potential: dvscftmp -> dvscfp
       !

@@ -67,7 +67,7 @@ SUBROUTINE init_run()
   USE io_global,                ONLY : ionode, stdout
   USE wave_types,               ONLY : wave_descriptor_info
   USE orthogonalize_base,       ONLY : mesure_diag_perf, mesure_mmul_perf
-  USE ions_base,                ONLY : ions_reference_positions, cdmi
+  USE ions_base,                ONLY : ions_reference_positions
   USE mp_bands,                 ONLY : nbgrp
   USE mp,                       ONLY : mp_barrier
   USE clib_wrappers

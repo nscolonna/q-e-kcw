@@ -90,7 +90,7 @@ SUBROUTINE ks_hamiltonian (evc, ik, h_dim)
   !
   check = 0.D0
   DO iband = 1, h_dim
-    check = check + (eigvl(iband)-et(iband,ik))/h_dim
+    check = check + (eigvl(iband)-et(iband+iband_start-1,ik))/h_dim
   ENDDO 
   !
   IF ( check_ks ) THEN 
