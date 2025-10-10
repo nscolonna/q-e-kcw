@@ -47,8 +47,8 @@ END subroutine read_wannier
   !
   USE kinds,                ONLY : DP
   USE control_kcw,          ONLY : unimatrx, seedname, has_disentangle, &
-                                   unimatrx_opt, num_wann, kcw_iverbosity
-  USE mp_global,            ONLY : intra_image_comm, iband_start
+                                   unimatrx_opt, num_wann, kcw_iverbosity, iband_start
+  USE mp_global,            ONLY : intra_image_comm
   USE mp,                   ONLY : mp_bcast
   USE io_global,            ONLY : ionode, ionode_id
   USE klist,                ONLY : nkstot, xk
