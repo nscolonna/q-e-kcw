@@ -58,11 +58,7 @@ SUBROUTINE ks_hamiltonian (evc, ik, h_dim)
   hpsi(:,:) = (0.D0, 0.D0)
   !$acc end kernels
   !
-  #if defined(_OPENACC)
-  CALL h_psi_gpu( npwx, npw, h_dim, evc, hpsi )
-  #else
   CALL h_psi( npwx, npw, h_dim, evc, hpsi )
-  #endif
   !
   ! ##### Build up the KI Hamiltonian 
   !
