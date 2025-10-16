@@ -312,19 +312,6 @@ SUBROUTINE koopmans_ham ()
     COMPLEX(DP) :: struct_fact,int_rho,int_wann, zpom
    !!JA  COMPLEX(DP) :: phase(dffts%nnr)
     REAL(DP) :: xq_(3)
-#if defined(__CUDA)
-  INTEGER, POINTER, DEVICE :: nls_d(:)
-#else
-  INTEGER, ALLOCATABLE :: nls_d(:)
-#endif
-
-
-#if defined(__CUDA)
-  nls_d  => dffts%nl_d
-#else
-  ALLOCATE( nls_d(dffts%ngm) )
-  nls_d  = dffts%nl
-#endif
     !
     WRITE( stdout, '(/,5X, "INFO: KC SCALAR TERM CALCULATION ... START")')
     !
@@ -506,19 +493,6 @@ SUBROUTINE koopmans_ham ()
     ! compute Off-diagonal elements. NsC: not sure off_diag=.false. here makes sense: DO NOT CHANGE!!!!
     INTEGER :: ip, is, iss, ii
     COMPLEX(dp) :: zpom
-#if defined(__CUDA)
-  INTEGER, POINTER, DEVICE :: nls_d(:)
-#else
-  INTEGER, ALLOCATABLE :: nls_d(:)
-#endif
-
-
-#if defined(__CUDA)
-  nls_d  => dffts%nl_d
-#else
-  ALLOCATE( nls_d(dffts%ngm) )
-  nls_d  = dffts%nl
-#endif
     !
     IF (nspin_mag==2 .AND. debug_nc) &
       WRITE (stdout, '(/,5X,"INFO: debug_nc = ", L2, " Note: the k-q formula will be used.")') debug_nc
@@ -691,9 +665,9 @@ SUBROUTINE koopmans_ham ()
                 !$acc host_data use_device(aux)
                 CALL fwfft ('Rho', aux, dffts)
                 !$acc end host_data
-                !$acc kernels present(rho_g_nm, aux) deviceptr(nls_d)
+                !$acc kernels present(rho_g_nm, aux, dffts, dffts%nl) 
                !! rho_g_nm(:,is) = aux(dffts%nl(:))
-                rho_g_nm(:,is) = aux(nls_d(:))
+                rho_g_nm(:,is) = aux(dffts%nl(:))
                 !$acc end kernels
             END DO
             ! generalized density in G-spage
