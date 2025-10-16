@@ -108,19 +108,6 @@ SUBROUTINE ham_koopmans_k (ik)
   LOGICAL :: corr_done=.FALSE.
   COMPLEX(dp) :: zpom, zpomSH
   ! whether the correction to the current wannier was already done 
-#if defined(__CUDA)
-  INTEGER, POINTER, DEVICE :: nls_d(:)
-#else
-  INTEGER, ALLOCATABLE :: nls_d(:)
-#endif
-
-
-#if defined(__CUDA)
-  nls_d  => dffts%nl_d
-#else
-  ALLOCATE( nls_d(dffts%ngm) )
-  nls_d  = dffts%nl
-#endif
   !
   if (nspin_mag == 4) &
      CALL errore ('hamilt', ' ham_koopmans_k not implemented for non-collinear magnetic calculations ', 1)
@@ -313,9 +300,9 @@ SUBROUTINE ham_koopmans_k (ik)
           !$acc host_data use_device(aux)
           CALL fwfft ('Rho', aux, dffts)
           !$acc end host_data
-          !$acc kernels present(rho_g_nm, aux) deviceptr(nls_d)
+          !$acc kernels present(rho_g_nm, aux, dffts, dffts%nl) 
             !!rho_g_nm(:) = aux(dffts%nl(:))
-            rho_g_nm(:) = aux(nls_d(:))
+            rho_g_nm(:) = aux(dffts%nl(:))
           !$acc end kernels
           ! generalized density in G-spage
 !          IF (jwann == iwann) THEN

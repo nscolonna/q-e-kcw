@@ -16,7 +16,7 @@ SUBROUTINE bare_pot ( rhor, rhog, vh_rhog, delta_vr, delta_vg, iq, delta_vr_, de
   !! charge density. V^{0n}_{Hxc}(r) = \int dr' f_Hxc(r,r') w^{0n}(r')
   !  
   USE kinds,                ONLY : DP
-  USE fft_base,             ONLY : dffts, dfftp
+  USE fft_base,             ONLY : dffts
   USE fft_interfaces,       ONLY : fwfft, invfft
   USE gvecs,                ONLY : ngms
   USE lsda_mod,             ONLY : nspin
@@ -94,19 +94,6 @@ SUBROUTINE bare_pot ( rhor, rhog, vh_rhog, delta_vr, delta_vg, iq, delta_vr_, de
   ! ... The hartree potential with th q+g=0 component set to zero
   !
   COMPLEX(DP), ALLOCATABLE :: rhor_(:,:)
-#if defined(__CUDA)
-  INTEGER, POINTER, DEVICE :: nls_d(:)
-#else
-  INTEGER, ALLOCATABLE :: nls_d(:)
-#endif
-
-
-#if defined(__CUDA)
-  nls_d  => dffts%nl_d
-#else
-  ALLOCATE( nls_d(dffts%ngm) )
-  nls_d  = dffts%nl
-#endif
   !
   ALLOCATE(aux(dffts%nnr))
   !$acc enter data create(aux)
@@ -119,8 +106,8 @@ SUBROUTINE bare_pot ( rhor, rhog, vh_rhog, delta_vr, delta_vg, iq, delta_vr_, de
       !$acc host_data use_device(aux)
       CALL fwfft ('Rho', aux, dffts) 
       !$acc end host_data
-      !$acc kernels present(aux) deviceptr(nls_d)
-      rhog(:,ip) = aux(nls_d(:))
+      !$acc kernels present(aux, dffts, dffts%nl) 
+      rhog(:,ip) = aux(dffts%nl(:))
       !$acc end kernels
   END DO
   !
@@ -224,9 +211,9 @@ SUBROUTINE bare_pot ( rhor, rhog, vh_rhog, delta_vr, delta_vg, iq, delta_vr_, de
   aux=(0.d0,0.d0)
   aux_=(0.d0,0.d0)
   !$acc end kernels
-  !$acc kernels present(aux, aux_) deviceptr(nls_d)
-  aux(nls_d(:))  = vh_rhog(:)                    ! G-space components of the Hartree potential
-  aux_(nls_d(:)) = vh_rhog_g0eq0(:)
+  !$acc kernels present(aux, aux_, dffts, dffts%nl) 
+  aux(dffts%nl(:))  = vh_rhog(:)                    ! G-space components of the Hartree potential
+  aux_(dffts%nl(:)) = vh_rhog_g0eq0(:)
   !$acc end kernels
   !$acc exit data delete(vh_rhog_g0eq0)
   DEALLOCATE(vh_rhog_g0eq0)
@@ -270,9 +257,9 @@ SUBROUTINE bare_pot ( rhor, rhog, vh_rhog, delta_vr, delta_vg, iq, delta_vr_, de
     CALL fwfft ('Rho', aux_, dffts)
     !$acc end host_data
     !
-    !$acc kernels present(aux, aux_) deviceptr(nls_d)
-    delta_vg(:,is)  = aux(nls_d(:))
-    delta_vg_(:,is) = aux_(nls_d(:))
+    !$acc kernels present(aux, aux_, dffts, dffts%nl) 
+    delta_vg(:,is)  = aux(dffts%nl(:))
+    delta_vg_(:,is) = aux_(dffts%nl(:))
     !$acc end kernels
     !
   ENDDO

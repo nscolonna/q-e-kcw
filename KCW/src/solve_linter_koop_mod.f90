@@ -119,12 +119,6 @@ subroutine solve_linter_koop ( spin_ref, i_ref, delta_vr, drhog_scf, delta_vg, d
 !!JA   COMPLEX(DP) :: drhok(dffts%nnr) !<---- WHAT IS THIS? (A.M.)
   COMPLEX(DP) :: delta_vg(ngms,nspin_mag)
   INTEGER:: norb
-  !!## DEBUG 
-#if defined(__CUDA)
-  INTEGER, POINTER, DEVICE :: nls_d(:)
-#else
-  INTEGER, ALLOCATABLE :: nls_d(:)
-#endif
   !
   LOGICAL :: new
   COMPLEX(DP)    ::   imag
@@ -433,12 +427,6 @@ subroutine solve_linter_koop ( spin_ref, i_ref, delta_vr, drhog_scf, delta_vg, d
   !
   ! The density variation in G-space
   !
-#if defined(__CUDA)
-  nls_d  => dffts%nl_d
-#else
-  ALLOCATE( nls_d(dffts%ngm) )
-  nls_d  = dffts%nl
-#endif
   !$acc enter data create(drhog_scf, aux)
   DO is = 1, nspin_mag
      aux(:) = drhoscfh(:,is)
@@ -446,8 +434,8 @@ subroutine solve_linter_koop ( spin_ref, i_ref, delta_vr, drhog_scf, delta_vg, d
      !$acc host_data use_device(aux)
      CALL fwfft ('Rho', aux, dffts)
      !$acc end host_data
-     !$acc kernels present(drhog_scf, aux) deviceptr(nls_d)
-     drhog_scf(:,is) = aux(nls_d(:))
+     !$acc kernels present(drhog_scf, aux, dffts, dffts%nl) 
+     drhog_scf(:,is) = aux(dffts%nl(:))
      !$acc end kernels
   ENDDO
   !$acc exit data delete(aux)
