@@ -1,27 +1,20 @@
 MODULE coulomb
   !
   USE kinds,                ONLY : DP
-  USE exx_base,             ONLY : exxdiv
+  USE exx_base,             ONLY : exxdiv, nq1, nq2, nq3, nqs, &
+                                   exxdiv_treatment, use_regularization,  &
+                                   x_gamma_extrapolation, on_double_grid, &
+                                   grid_factor, yukawa, erfc_scrlen,      & 
+                                   erf_scrlen, gau_scrlen, exx_divergence
+  USE mp_exx,               ONLY : intra_egrp_comm
   !
   IMPLICIT NONE
   !
   SAVE
   !
-  INTEGER       :: nq1=1, nq2=1, nq3=1
-  REAL(DP)      :: eps  = 1.d-6
   REAL(DP)      :: exxdiv_eps = 0._dp
-  CHARACTER(32) :: exxdiv_treatment  = ' '
-  LOGICAL       :: use_regularization = .FALSE.
-  ! ... x_gamma_extrapolation
-  LOGICAL       :: x_gamma_extrapolation =.FALSE.
-  LOGICAl       :: on_double_grid =.FALSE.
-  REAL(DP)      :: grid_factor = 1.d0 !8.d0/7.d0
-  !
-  REAL(DP)      :: yukawa = 0._dp
-  REAL(DP)      :: erfc_scrlen = 0._dp
-  REAL(DP)      :: erf_scrlen = 0._dp
-  REAL(DP)      :: gau_scrlen = 0.d0
   REAL(DP)      :: eps_mat(3,3)
+  REAL(DP)      :: eps
   !
   CONTAINS
   !
@@ -44,14 +37,27 @@ MODULE coulomb
     USE control_kcw,          ONLY : mp1, mp2, mp3, l_vcut, eps_inf, calculation
     USE martyna_tuckerman,    ONLY : do_comp_mt
     USE cell_base,            ONLY : omega
+    USE mp_global,            ONLY : intra_pool_comm
     !
     IMPLICIT NONE 
     !
     LOGICAL :: exst, skip_eps
-    INTEGER :: nqs
     !
     CALL start_clock( 'Coulomb setup' )
     !
+    eps  = 1.d-6
+    exxdiv_eps = 0._dp
+    exxdiv_treatment  = ' '
+    use_regularization = .FALSE.
+    x_gamma_extrapolation =.FALSE.
+    on_double_grid =.FALSE.
+    grid_factor = 1.d0 !8.d0/7.d0
+    
+    yukawa = 0._dp
+    erfc_scrlen = 0._dp
+    erf_scrlen = 0._dp
+    gau_scrlen = 0.d0
+
     nq1=mp1; nq2=mp2; nq3=mp3
     nqs=nq1*nq2*nq3
     !
@@ -98,7 +104,13 @@ MODULE coulomb
       !
     ENDIF
     !
-    CALL divergence ()
+    ! This is needed as exx_divergence uses it (possibly). But It's exx specific 
+    ! and I do not need here. FIXME: Is better integration possible? 
+    intra_egrp_comm = intra_pool_comm
+    !
+    exxdiv = 0.0
+    exxdiv  = exx_divergence()
+    CALL divergence_eps ()
     IF (skip_eps) exxdiv_eps = 0.D0
     ! Compute the divergence and set the q+G=0 term (exxdiv and exxdiv_eps, 
     ! to be used to correct the bare and screened coulomb. USed in bare_pot
@@ -157,7 +169,7 @@ MODULE coulomb
   END SUBROUTINE setup_coulomb
   !
   !-----------------------------------------------------------------------
-  SUBROUTINE divergence()
+  SUBROUTINE divergence_eps()
       !-----------------------------------------------------------------------
     !
     ! ...  This function calculates the G=0 term of the Coulomb potential
@@ -187,10 +199,9 @@ MODULE coulomb
     REAL(DP) :: q_eps_q
     REAL(DP) :: aa_eps, div_eps, det_eps, alpha_eps, dq_eps
     !
-    CALL start_clock( 'exx_div' )
+    CALL start_clock( 'divergence_eps' )
     !
     IF ( .NOT. use_regularization ) THEN
-       exxdiv     = 0._DP
        exxdiv_eps = 0._DP
        RETURN
     ENDIF
@@ -204,7 +215,6 @@ MODULE coulomb
     dq2= 1.d0/DBLE(nq2) 
     dq3= 1.d0/DBLE(nq3)
     !
-    div = 0.d0
     div_eps = 0.d0
     !
     DO iq1 = 1, nq1
@@ -237,8 +247,6 @@ MODULE coulomb
             !
             IF ( .NOT. on_double_grid ) THEN
               IF ( qq > 1.d-8 ) THEN
-                div = div + EXP( - alpha * qq ) / ( qq + yukawa / tpiba2 ) &
-                                                    * grid_factor
                 div_eps = div_eps + EXP( - alpha_eps * q_eps_q ) / ( q_eps_q + yukawa / tpiba2 ) &
                                                     * grid_factor
               ENDIF
@@ -249,39 +257,28 @@ MODULE coulomb
       ENDDO
     ENDDO
     !
-    CALL mp_sum( div, intra_pool_comm )
     CALL mp_sum( div_eps, intra_pool_comm )
     !
-    IF ( gamma_only ) div = 2.d0 * div
     IF ( gamma_only ) div_eps = 2.d0 * div_eps
     !
     IF ( .NOT. x_gamma_extrapolation ) THEN
       IF ( yukawa < 1.d-8) THEN
-        div = div - alpha
         div_eps = div_eps - alpha_eps
       ELSE
-        div = div + tpiba2 / yukawa
         div_eps = div_eps + tpiba2 / yukawa
       ENDIF
     ENDIF
     !
-    div = div * e2 * fpi / tpiba2 / nqs
     div_eps = div_eps * e2 * fpi / tpiba2 / nqs
     !
-    alpha = alpha / tpiba2
     alpha_eps = alpha_eps / tpiba2
     !
     nqq = 100000
-    dq = 5.0d0 / SQRT( alpha ) / nqq
     dq_eps = 5.0d0 / SQRT( alpha_eps ) / nqq
-    aa = 0.d0
     aa_eps = 0.d0
     !
     DO iq = 0, nqq
       !
-      q_ = dq * ( iq + 0.5d0 )
-      qq = q_ * q_
-      aa = aa - EXP( - alpha * qq ) * yukawa / ( qq + yukawa ) * dq
       q_ = dq_eps * ( iq + 0.5d0 )
       qq = q_ * q_
       aa_eps = aa_eps - EXP( - alpha_eps * q_eps_q ) * yukawa / ( q_eps_q + yukawa ) * dq_eps
@@ -292,22 +289,18 @@ MODULE coulomb
              -eps_mat(2,2)*(eps_mat(2,1)*eps_mat(3,3)-eps_mat(2,3)*eps_mat(3,1)) &
              +eps_mat(3,3)*(eps_mat(2,1)*eps_mat(3,2)-eps_mat(2,2)*eps_mat(3,1)) 
     !
-    aa = aa * 8.d0 / fpi
     aa_eps = aa_eps * 8.d0 / fpi
-    aa = aa + 1.d0 / SQRT( alpha * 0.25d0 * fpi )
     aa_eps = aa_eps + 1.d0 / SQRT( alpha_eps * 0.25d0 * fpi * det_eps)
     !  
-    div = div - e2 * omega * aa
     div_eps = div_eps - e2 * omega * aa_eps
     !
-    exxdiv = div * nqs
     exxdiv_eps = div_eps * nqs
     !
-    CALL stop_clock( 'exx_div' )
+    CALL stop_clock( 'divergence_eps' )
     !
     RETURN
     !
-  END SUBROUTINE divergence 
+  END SUBROUTINE divergence_eps
   !
   !---------------------------------------------------------------------
   SUBROUTINE read_eps (eps_mat) 
