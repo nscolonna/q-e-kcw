@@ -60,6 +60,7 @@ SUBROUTINE ham_koopmans_k (ik)
  !! COMPLEX(DP) :: rhowann(dffts%nnr, num_wann), rhor(dffts%nnr), sh(num_wann)
  !! COMPLEX(DP) :: delta_vr(dffts%nnr,nspin_mag), delta_vr_(dffts%nnr,nspin_mag)
   COMPLEX(DP), ALLOCATABLE :: rhowann(:, :), rhor(:), delta_vr(:,:), delta_vr_(:,:)
+  COMPLEX(DP), ALLOCATABLE :: sh(:)
   ! The periodic part of the wannier orbital density in r space
   ! The self-hartree 
   ! The perturbig potential in real space
@@ -142,6 +143,7 @@ SUBROUTINE ham_koopmans_k (ik)
   !
   ALLOCATE ( rhog (ngms) , delta_vg(ngms,nspin_mag), vh_rhog(ngms), delta_vg_(ngms,nspin_mag) )
   ALLOCATE( rhowann(dffts%nnr, num_wann), rhor(dffts%nnr), delta_vr(dffts%nnr,nspin_mag), delta_vr_(dffts%nnr,nspin_mag) )
+  ALLOCATE (sh(num_wann))
   !$acc enter data create(rhor, rhog, vh_rhog, delta_vr, delta_vr_, delta_vg, delta_vg_)
   DO iq = 1, nqs
     !! Sum over the BZ 
