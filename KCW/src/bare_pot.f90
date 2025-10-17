@@ -28,15 +28,14 @@ SUBROUTINE bare_pot ( rhor, rhog, vh_rhog, delta_vr, delta_vg, iq, delta_vr_, de
   USE control_lr,           ONLY : lrpa
   USE martyna_tuckerman,    ONLY : wg_corr_h, do_comp_mt
   USE io_global,            ONLY : stdout
-  !USE exx_base,             ONLY : g2_convolution
-  USE coulomb,             ONLY : g2_convolution
-  USE noncollin_module,  ONLY : domag, noncolin, m_loc, angle1, angle2, ux, nspin_lsda, nspin_gga, nspin_mag, npol
+  USE exx_base,             ONLY : g2_convolution
+  USE noncollin_module,     ONLY : domag, noncolin, m_loc, angle1, angle2, ux, nspin_lsda, nspin_gga, nspin_mag, npol
   ! GC LR suff
-  USE xc_lib,            ONLY : xclib_dft_is
-  USE scf,               ONLY : rho, rho_core
-  USE uspp,              ONLY : nlcc_any
-  USE gc_lr,             ONLY : grho, dvxc_rr, dvxc_sr, dvxc_ss, dvxc_s
-  USE dv_of_drho_lr,     ONLY : dv_of_drho_xc
+  USE xc_lib,               ONLY : xclib_dft_is
+  USE scf,                  ONLY : rho, rho_core
+  USE uspp,                 ONLY : nlcc_any
+  USE gc_lr,                ONLY : grho, dvxc_rr, dvxc_sr, dvxc_ss, dvxc_s
+  USE dv_of_drho_lr,        ONLY : dv_of_drho_xc
 
 
   !
