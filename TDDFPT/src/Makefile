@@ -2,6 +2,8 @@
 
 include ../../make.inc
 
+VPATH = @srcdir@
+
 # location of needed modules
 MODFLAGS= $(BASEMOD_FLAGS) \
           $(MOD_FLAG)../../PW/src \
@@ -117,5 +119,3 @@ clean :
 		../bin/turbo_magnons.x ../bin/turbo_spectrum.x *.x *.o *~ *.d *.mod *.i work.pc *.a *_tmp.f90
 
 include make.depend
-
-# DO NOT DELETE

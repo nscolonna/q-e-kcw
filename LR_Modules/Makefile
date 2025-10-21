@@ -2,8 +2,10 @@
 
 include ../make.inc
 
+VPATH = @srcdir@
+
 # location of needed modules and included files (if any)
-MODFLAGS=$(BASEMOD_FLAGS) $(MOD_FLAG)$(TOPDIR)/PW/src
+MODFLAGS=$(BASEMOD_FLAGS) $(MOD_FLAG)$(BUILDDIR)/PW/src
 
 LR_MODULES = \
 adddvscf.o \
@@ -97,4 +99,7 @@ tldeps :
 clean :
 	- /bin/rm -f *.o *.a *.d *.i *~ *_tmp.f90 *.mod *.L
 
+
 include make.depend
+
+

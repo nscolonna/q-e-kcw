@@ -219,7 +219,7 @@ clean:
 	@rm -f zg_conf/equil_pos.txt zg_conf/ZG-*_0.020.dat
 
 # Cleaning TDDFPT final files
-	@rm -rf tddfpt_*/*.plot_chi.dat tddfpt_*/*.plot_eps.dat tddfpt_*/out/ tddfpt_*/turbo_spectrum.out tddfpt_*/*.save tddfpt_*/tmp_eels tddfpt_*/*.wfc* tddfpt_*/*.xml
+	@rm -rf tddfpt_*/*.plot_chi.dat tddfpt_*/*.plot_eps.dat tddfpt_*/out/ tddfpt_*/turbo_spectrum.out
 # Cleaning OS-CDFT final files
 	@rm -rf oscdft_*/*.out oscdft_*/*.save oscdft_*/*.xml oscdft_*/test* oscdft_*/*.md oscdft_*/*.bfgs oscdft_*/*.mix* oscdft_*/*.wfc* oscdft_*/oscdft.in oscdft_*/*.tmp
 # all_currents files

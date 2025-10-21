@@ -2,6 +2,8 @@
 
 include ../../make.inc
 
+VPATH = @srcdir@
+
 # location of needed modules and included files (if any)
 MODFLAGS= $(BASEMOD_FLAGS) \
           $(MOD_FLAG)../../PW/src \
@@ -277,4 +279,3 @@ clean :
 	../../bin/alpha2f.x ../../disp_width.x
 
 include make.depend
-# DO NOT DELETE
