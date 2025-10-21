@@ -359,6 +359,7 @@ SUBROUTINE screen_coeff ()
     !
     IF (.NOT. irr_bz) CALL clean_pw_kcw( )
     !$acc exit data delete(rhor, rhog , delta_vg, vh_rhog, delta_vg_ )
+    !$acc exit data delete(delta_vr, delta_vr_ )
 
     DEALLOCATE ( rhog , delta_vg, vh_rhog, drhog_scf, delta_vg_ )
     !
