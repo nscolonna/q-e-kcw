@@ -387,10 +387,9 @@ SUBROUTINE koopmans_ham ()
 
     WRITE( stdout, '(/,5X, "INFO: KC SCALAR TERM CALCULATION ... END")')
     !
+    !$acc exit data delete(rhor, rhog, vh_rhog, delta_vr, delta_vr_, delta_vg, delta_vg_)
     DEALLOCATE ( rhog , delta_vg, vh_rhog, delta_vg_ )
     DEALLOCATE(rhowann, rhor, delta_vr, delta_vr_)
-
-
     !
     CALL mp_sum (deltah_scal, intra_bgrp_comm)
     CALL mp_sum (sh, intra_bgrp_comm)
