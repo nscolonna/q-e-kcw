@@ -106,18 +106,20 @@ SUBROUTINE alpha_corr ( iwann, delta)
       !
       !
       IMPLICIT NONE 
-      !  
+      !
+      REAL(DP), ALLOCATABLE :: vxc(:,:)
       INTEGER, INTENT (IN) :: iwann
       INTEGER :: ik, npw, lrrho, iq, ir, is, ip, iss
       REAL(DP), INTENT (OUT) :: en, eig, krnl 
-      REAL(DP) ::  vtxc, etxc, vxc(dffts%nnr,nspin_mag), eig_k, krnl_q
+      REAL(DP) ::  vtxc, etxc, eig_k, krnl_q
       INTEGER :: lrwfc
       COMPLEX(DP) :: evc_g (npwx*npol), evc_r (dffts%nnr,npol)
       COMPLEX(DP) :: rhowann(dffts%nnr, num_wann, nrho), rhor(dffts%nnr,nrho), delta_vr(dffts%nnr,nspin_mag)
       COMPLEX(DP), ALLOCATABLE  :: rho_wann_g(:,:), delta_vg(:,:), aux(:)
       INTEGER :: ik_eff
       COMPLEX(DP), ALLOCATABLE :: rhor_(:,:)
-      
+      !
+      ALLOCATE (vxc(dffts%nnr,nspin_mag))
       !
       ALLOCATE ( rho_wann_g (ngms,nrho) , delta_vg(ngms,nspin_mag), aux (dffts%nnr) )
       ! 
@@ -237,6 +239,7 @@ SUBROUTINE alpha_corr ( iwann, delta)
       !$acc exit data delete(dmuxc)
       !
       DEALLOCATE ( rho_wann_g , delta_vg, aux )
+      DEALLOCATE ( vxc )
       RETURN
       !
     END SUBROUTINE xc_energy_n
