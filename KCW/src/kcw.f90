@@ -35,18 +35,11 @@ PROGRAM kcw
   USE mp_global,         ONLY : mp_startup
   USE check_stop,        ONLY : check_stop_init
   USE coulomb,           ONLY : setup_coulomb
-  USE control_flags,     ONLY : use_gpu
   !
   IMPLICIT NONE
   !
   CHARACTER(LEN=9) :: code='KCW'
-  LOGICAL,EXTERNAL :: check_gpu_support 
   !
-  use_gpu = check_gpu_support()
-  IF(use_gpu) THEN
-      print*,'    !!!!!!!!!!!!!!!! KCW  Janusz GPU ON !!!!!!!!'
-     !! Call errore('KCW', 'KCW with GPU NYI', 1)
-  END IF   
   !
   ! 1) Initialize MPI, clocks, print initial messages
   CALL mp_startup ( )
@@ -79,8 +72,10 @@ SUBROUTINE header
   !-----------------------------------------------------------------
   !
   USE io_global,         ONLY : stdout, ionode
+  USE control_flags,     ONLY : use_gpu
   IMPLICIT NONE
- 
+  LOGICAL,EXTERNAL :: check_gpu_support 
+
   IF (ionode) THEN 
   WRITE( stdout, '(/5x,"=--------------------------------------------------------------------------------=")')
   WRITE( stdout,*) "                     :::    :::           ::::::::         :::       ::: "
@@ -96,6 +91,13 @@ SUBROUTINE header
   WRITE( stdout, '(/5x,"  If you use the non-collinear mode (with/without spin-orbit coupling) please cite")')
   WRITE( stdout, '(/5x,"   A. Marrazzo and N. Colonna, Phys. Rev. Research 6, 033085 (2024)  ")')
   WRITE( stdout, '( 5x,"=--------------------------------------------------------------------------------=")')  
+  
+  use_gpu = check_gpu_support()
+
+  IF(use_gpu) THEN
+      print*,' GPU acceleration is active'
+     !! Call errore('KCW', 'KCW with GPU NYI', 1)
+  END IF   
   ENDIF
   !
 END SUBROUTINE header
