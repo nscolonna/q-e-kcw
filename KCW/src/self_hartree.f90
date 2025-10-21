@@ -29,8 +29,10 @@ SUBROUTINE self_hartree (iwann, sh)
   INTEGER :: iq, lrrho, ii
   !
   ! The periodic part of the wannier orbital density
-  COMPLEX(DP) :: rhowann(dffts%nnr, num_wann, nrho), rhor(dffts%nnr, nrho)
-  COMPLEX(DP) :: delta_vr(dffts%nnr,nspin_mag), delta_vr_(dffts%nnr,nspin_mag)
+  !COMPLEX(DP) :: rhowann(dffts%nnr, num_wann, nrho), rhor(dffts%nnr, nrho)
+  COMPLEX(DP), ALLOCATABLE :: rhowann(:,:,:), rhor(:,:)
+  !COMPLEX(DP) :: delta_vr(dffts%nnr,nspin_mag), delta_vr_(dffts%nnr,nspin_mag)
+  COMPLEX(DP), ALLOCATABLE :: delta_vr(:,:), delta_vr_(:,:)
   !
   ! The self Hartree
   COMPLEX(DP) :: sh, zpom
@@ -42,6 +44,8 @@ SUBROUTINE self_hartree (iwann, sh)
   REAL(DP) :: weight(nqstot)
   !
   ALLOCATE ( rhog (ngms,nrho) , delta_vg(ngms,nspin_mag), vh_rhog(ngms), delta_vg_(ngms,nspin_mag) )
+  ALLOCATE ( rhowann(dffts%nnr, num_wann, nrho), rhor(dffts%nnr, nrho) )
+  ALLOCATE ( delta_vr(dffts%nnr,nspin_mag), delta_vr_(dffts%nnr,nspin_mag) )
   !
   !$acc enter data create(rhor, rhog, vh_rhog, delta_vr, delta_vr_, delta_vg, delta_vg_)
   DO iq = 1, nqstot
@@ -77,8 +81,11 @@ SUBROUTINE self_hartree (iwann, sh)
     ! 
   ENDDO ! qpoints
   !$acc exit data delete(rhor, rhog , delta_vg, vh_rhog, delta_vg_ )
+  !$acc exit data delete(delta_vr, delta_vr_)
   !
   DEALLOCATE ( rhog , delta_vg, vh_rhog, delta_vg_ )
+  DEALLOCATE ( rhowann, rhor )
+  DEALLOCATE ( delta_vr, delta_vr_ )
   !
   CALL mp_sum (sh, intra_bgrp_comm)
  !
