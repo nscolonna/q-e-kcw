@@ -504,9 +504,6 @@ SUBROUTINE koopmans_ham ()
     ALLOCATE(evc_kq_g (npwx*npol), evc_kq_r (dffts%nnr,npol) )
     ALLOCATE( evc0_kq(npwx*npol, num_wann) )
     !
-    deltaH = CMPLX(0.D0,0.D0,kind=DP)
-    sh     = CMPLX(0.D0,0.D0,kind=DP)
-    rho_r_nm = CMPLX(0.D0,0.D0,kind=DP)
     !
     lrwfc = num_wann*npwx*npol
     CALL get_buffer ( evc0, lrwfc, iuwfc_wann, ik )
@@ -519,10 +516,14 @@ SUBROUTINE koopmans_ham ()
 
     ALLOCATE(rhowann(dffts%nnr, num_wann,nrho), rhor(dffts%nnr,nrho), delta_vr(dffts%nnr,nspin_mag), sh(num_wann), &
                    delta_vr_(dffts%nnr,nspin_mag) )
-
     !
     ALLOCATE ( rhog (ngms,nrho) , delta_vg(ngms,nspin_mag), vh_rhog(ngms), delta_vg_(ngms,nspin_mag) )
     !$acc enter data create(rhor, rhog, vh_rhog, delta_vr, delta_vr_, delta_vg, delta_vg_)
+    !
+    deltaH = CMPLX(0.D0,0.D0,kind=DP)
+    rho_r_nm = CMPLX(0.D0,0.D0,kind=DP)
+    sh     = CMPLX(0.D0,0.D0,kind=DP)
+    !
     DO iq = 1, nqs
       !! Sum over the BZ 
       !
