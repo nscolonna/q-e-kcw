@@ -500,20 +500,9 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
           !
           IF ( use_para_diag ) THEN
              !
-             IF (.not. use_gpu) THEN
-                !
-                ! make sure that all processors have the same wfc
-                CALL pregterg( h_psi, s_psi, okvan, g_psi, &
+             CALL pregterg( h_psi, s_psi, okvan, g_psi, &
                             npw, npwx, nbnd, nbndx, evc, ethr, &
                             et(1,ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
-                !
-             ELSE
-                !
-                CALL pregterg_gpu( h_psi, s_psi, okvan, g_psi, &
-                            npw, npwx, nbnd, nbndx, evc, ethr, &
-                            et(1, ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
-                ! 
-             END IF
              !
           ELSE
              !
@@ -749,7 +738,7 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
              !
              IF (.not. use_gpu ) THEN
                 !
-                CALL pcegterg( h_psi, s_psi, okvan, g_psi, &
+                CALL pcegterg_gpu( h_psi, s_psi, okvan, g_psi, &
                                npw, npwx, nbnd, nbndx, npol, evc, ethr, &
                                et(1,ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
                 !

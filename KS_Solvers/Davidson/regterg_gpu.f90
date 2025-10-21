@@ -9,17 +9,12 @@
 !   cegterg and regterg have been ported to GPU with OpenACC, 
 !   the previous CUF versions (cegterg_gpu and regterg_gpu) have been removed, 
 !   and now cegterg and regterg are used for both CPU and GPU execution.
-!   If you want to see the previous code checkout to commit: df3080b231c5daf52295c23501fbcaa9bfc4bfcc (on Thu Apr 21 06:18:02 2022 +0000)
-!
-#define ZERO ( 0.D0, 0.D0 )
-#define ONE  ( 1.D0, 0.D0 )
-!----------------------------------------------------------------------------
-!
-!  Wrapper for subroutine with distributed matrixes (written by Carlo Cavazzoni)
+!   If you want to see the previous code checkout to commit:
+!   df3080b231c5daf52295c23501fbcaa9bfc4bfcc (on Thu Apr 21 06:18:02 2022 +0000)
 !
 !----------------------------------------------------------------------------
-SUBROUTINE pregterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &  
-                    npw, npwx, nvec, nvecx, evc_d, ethr, &
+SUBROUTINE pregterg(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &  
+                    npw, npwx, nvec, nvecx, evc, ethr, &
                     e, btype, notcnv, lrot, dav_iter, nhpsi )
   !----------------------------------------------------------------------------
   !
@@ -30,6 +25,8 @@ SUBROUTINE pregterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   ! ... where H is an hermitean operator, e is a real scalar,
   ! ... S is an uspp matrix, evc is a complex vector
   ! ... (real wavefunctions with only half plane waves stored)
+  ! ... Parallel diagonalization with distributed matrixes,
+  ! ... written by Carlo Cavazzoni, OpenACC version
   !
   USE util_param,        ONLY : DP, stdout
   USE mp_bands_util,     ONLY : intra_bgrp_comm, inter_bgrp_comm, root_bgrp_id, nbgrp, my_bgrp_id
@@ -46,7 +43,7 @@ SUBROUTINE pregterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
     ! integer number of searched low-lying roots
     ! maximum dimension of the reduced basis set
     !    (the basis set is refreshed when its dimension would exceed nvecx)
-  COMPLEX(DP), INTENT(INOUT) :: evc_d(npwx,nvec)
+  COMPLEX(DP), INTENT(INOUT) :: evc(npwx,nvec)
     !  evc   contains the  refined estimates of the eigenvectors
   REAL(DP), INTENT(IN) :: ethr
     ! energy threshold for convergence: root improvement is stopped,
@@ -70,7 +67,7 @@ SUBROUTINE pregterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   INTEGER, PARAMETER :: maxter = 20
     ! maximum number of iterations
   !
-  INTEGER :: kter, nbase, np, n, m, nb1, i, j, k
+  INTEGER :: kter, nbase, np, n, m, nb1, nbn, i, j, k
     ! counter on iterations
     ! dimension of the reduced basis
     ! counter on the reduced basis vectors
@@ -106,7 +103,8 @@ SUBROUTINE pregterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   INTEGER :: np_ortho(2), ortho_parent_comm
   LOGICAL :: do_distr_diag_inside_bgrp
   !
-  REAL(DP), EXTERNAL :: ddot
+  REAL(DP), EXTERNAL :: MYDDOT_VECTOR_GPU 
+  !$acc routine(MYDDOT_VECTOR_GPU) vector
   !
   EXTERNAL  h_psi_ptr, s_psi_ptr, g_psi_ptr
     ! h_psi_ptr(npwx,npw,nvec,psi,hpsi)
@@ -222,24 +220,20 @@ SUBROUTINE pregterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   conv   = .FALSE.
   !
   !$acc enter data create(psi, hpsi)
-  !$acc update host( evc_d)
   !$acc kernels
-  psi(:,1:nvec) = evc_d(:,1:nvec)
+  psi(:,1:nvec) = evc(:,1:nvec)
   !$acc end kernels
   ! ... set Im[ psi(G=0) ] -  needed for numerical stability
   !$acc kernels
   IF ( gstart == 2 ) psi(1,1:nvec) = CMPLX( DBLE( psi(1,1:nvec) ), 0.D0 ,kind=DP)
   !$acc end kernels
-  !$acc update host( psi)
   !
   ! ... hpsi contains h times the basis vectors
   !
   CALL h_psi_ptr( npwx, npw, nvec, psi, hpsi )  ; nhpsi = nvec
-  !$acc update host(hpsi)
   !
   IF ( uspp ) THEN
      CALL s_psi_ptr( npwx, npw, nvec, psi, spsi )
-     !$acc update host(spsi)
   END IF
   !
   ! ... hl contains the projection of the hamiltonian onto the reduced
@@ -305,15 +299,14 @@ SUBROUTINE pregterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
      !
      ! ... expand the basis set with new basis vectors ( H - e*S )|psi> ...
      !
+     !$acc update device(ew)
      CALL hpsi_dot_v()
      !
      CALL stop_clock( 'regterg:update' )
      !
      ! ... approximate inverse iteration
      !
-     !$acc update device(ew,psi)
      CALL g_psi_ptr( npwx, npw, notcnv, 1, psi(1,nb1), ew(nb1) )
-     !$acc update host(psi)
      !
      ! ... "normalize" correction vectors psi(:,nb1:nbase+notcnv) in 
      ! ... order to improve numerical stability of subspace diagonalization 
@@ -321,33 +314,38 @@ SUBROUTINE pregterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
      !
      ! ...         ew = <psi_i|psi_i>,  i = nbase + 1, nbase + notcnv
      !
+     !$acc parallel vector_length(96) 
+     !$acc loop gang private(nbn) 
      DO n = 1, notcnv
         !
-        ew(n) = 2.D0 * ddot( npw2, psi(1,nbase+n), 1, psi(1,nbase+n), 1 )
-        !
-        IF ( gstart == 2 ) ew(n) = ew(n) - psi(1,nbase+n) * psi(1,nbase+n)
+        nbn = nbase + n
+        ew(n) = 2.D0 * MYDDOT_VECTOR_GPU( npw2, psi(1,nbn), psi(1,nbn) )
+        IF (gstart == 2) ew(n) = ew(n) - DBLE(psi(1,nbn) * psi(1,nbn)) ! psi(1,nbn) * psi(1,nbn)
         !
      END DO
-     !
+     !$acc end parallel
+     !$acc host_data use_device(ew)
      CALL mp_sum( ew( 1:notcnv ), intra_bgrp_comm )
+     !$acc end host_data
      !
+     !$acc parallel vector_length(96) 
+     !$acc loop gang private(nbn) 
      DO n = 1, notcnv
         !
-        psi(:,nbase+n) = psi(:,nbase+n) / SQRT( ew(n) )
+        nbn = nbase + n
+        psi(:,nbn) = psi(:,nbn) / SQRT( ew(n) )
         ! ... set Im[ psi(G=0) ] -  needed for numerical stability
-        IF ( gstart == 2 ) psi(1,nbase+n) = CMPLX( DBLE(psi(1,nbase+n)), 0.D0 ,kind=DP)
+        IF ( gstart == 2 ) psi(1,nbn) = CMPLX( DBLE(psi(1,nbn)), 0.D0 ,kind=DP)
         !
      END DO
+     !$acc end parallel
      !
      ! ... here compute the hpsi and spsi of the new functions
      !
-     !$acc update device(psi)
      CALL h_psi_ptr( npwx, npw, notcnv, psi(1,nb1), hpsi(1,nb1) ) ; nhpsi = nhpsi + notcnv
-     !$acc update host(hpsi)
      !
      IF ( uspp ) THEN
         CALL s_psi_ptr( npwx, npw, notcnv, psi(1,nb1), spsi(1,nb1) )
-        !$acc update host(spsi)
      END IF
      !
      ! ... update the reduced hamiltonian
@@ -388,7 +386,6 @@ SUBROUTINE pregterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
            CALL errore( 'pregterg ',' cannot allocate vl ', ABS(ierr) )
 
      END IF
-     !
      !
      CALL update_distmat( hl, psi, hpsi )
      !
@@ -452,7 +449,6 @@ SUBROUTINE pregterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
         CALL start_clock( 'regterg:last' )
         !
         CALL refresh_evc()
-        !$acc update device(evc_d)
         !
         IF ( notcnv == 0 ) THEN
            !
@@ -477,16 +473,15 @@ SUBROUTINE pregterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
         !
         ! ... refresh psi, H*psi and S*psi
         !
-        psi(:,1:nvec) = evc_d(:,1:nvec)
-        !$acc update device(psi)
+        !$acc kernels
+        psi(:,1:nvec) = evc(:,1:nvec)
+        !$acc end kernels
         !
         IF ( uspp ) THEN
            CALL refresh_spsi()
-           !$acc update device(spsi)
         END IF
         !
         CALL refresh_hpsi()
-        !$acc update device(hpsi)
         !
         ! ... refresh the reduced hamiltonian
         !
@@ -641,6 +636,7 @@ CONTAINS
 
      ALLOCATE( vtmp( nx, nx ) )
      ALLOCATE( ptmp( npwx, nx ) )
+     !$acc data create(vtmp,ptmp) present(psi,hpsi,spsi,ew) copyin(vl)
 
      DO ipc = 1, idesc(LAX_DESC_NPC)
         !
@@ -659,33 +655,40 @@ CONTAINS
               root = rank_ip( ipr, ipc )
 
               IF( ipr-1 == idesc(LAX_DESC_MYR) .AND. ipc-1 == idesc(LAX_DESC_MYC) .AND. la_proc ) THEN
+                 !$acc kernels
                  vtmp(:,1:notcl) = vl(:,1:notcl)
+                 !$acc end kernels
               END IF
-
+              !$acc host_data use_device(vtmp)
               CALL mp_bcast( vtmp(:,1:notcl), root, ortho_parent_comm )
+              !$acc end host_data 
               ! 
               IF ( uspp ) THEN
-                 !
-                 CALL DGEMM( 'N', 'N', npw2, notcl, nr, 1.D0, &
+                 !$acc host_data use_device(vtmp,spsi,psi)
+                 CALL MYDGEMM( 'N', 'N', npw2, notcl, nr, 1.D0, &
                     spsi( 1, ir ), npwx2, vtmp, nx, beta, psi(1,nb1+ic-1), npwx2 )
+                 !$acc end host_data 
                  !
               ELSE
-                 !
-                 CALL DGEMM( 'N', 'N', npw2, notcl, nr, 1.D0, &
+                 !$acc host_data use_device(vtmp,psi)
+                 CALL MYDGEMM( 'N', 'N', npw2, notcl, nr, 1.D0, &
                     psi( 1, ir ), npwx2, vtmp, nx, beta, psi(1,nb1+ic-1), npwx2 )
+                 !$acc end host_data 
                  !
               END IF
-              !
-              CALL DGEMM( 'N', 'N', npw2, notcl, nr, 1.D0, &
+              !$acc host_data use_device(vtmp,hpsi,ptmp)
+              CALL MYDGEMM( 'N', 'N', npw2, notcl, nr, 1.D0, &
                       hpsi( 1, ir ), npwx2, vtmp, nx, beta, ptmp, npwx2 )
+              !$acc end host_data 
 
               beta = 1.0d0
 
            END DO
 
            DO np = 1, notcl
-              !
+              !$acc kernels
               psi(1:npw,nbase+np+ic-1) = ptmp(1:npw,np) - ew(nbase+np+ic-1) * psi(1:npw,nbase+np+ic-1)
+              !$acc end kernels
               !
            END DO
            !
@@ -693,7 +696,7 @@ CONTAINS
         !
      END DO
 
-     
+     !$acc end data
      DEALLOCATE( vtmp )
      DEALLOCATE( ptmp )
 
@@ -709,7 +712,7 @@ CONTAINS
      REAL(DP) :: beta
 
      ALLOCATE( vtmp( nx, nx ) )
-     !
+     !$acc data create (vtmp) present(evc,psi) copyin(vl)
      DO ipc = 1, idesc(LAX_DESC_NPC)
         !
         nc = nrc_ip( ipc )
@@ -731,17 +734,21 @@ CONTAINS
               IF( ipr-1 == idesc(LAX_DESC_MYR) .AND. ipc-1 == idesc(LAX_DESC_MYC) .AND. la_proc ) THEN
                  !
                  !  this proc sends his block
-                 ! 
+                 !
+                 !$acc host_data use_device(psi,vl,evc)
                  CALL mp_bcast( vl(:,1:nc), root, ortho_parent_comm )
-                 CALL DGEMM( 'N', 'N', npw2, nc, nr, 1.D0, &
-                          psi(1,ir), npwx2, vl, nx, beta, evc_d(1,ic), npwx2 )
+                 CALL MYDGEMM( 'N', 'N', npw2, nc, nr, 1.D0, &
+                          psi(1,ir), npwx2, vl, nx, beta, evc(1,ic), npwx2 )
+                 !$acc end host_data
               ELSE
                  !
                  !  all other procs receive
                  ! 
+                 !$acc host_data use_device(psi,vtmp,evc)
                  CALL mp_bcast( vtmp(:,1:nc), root, ortho_parent_comm )
-                 CALL DGEMM( 'N', 'N', npw2, nc, nr, 1.D0, &
-                          psi(1,ir), npwx2, vtmp, nx, beta, evc_d(1,ic), npwx2 )
+                 CALL MYDGEMM( 'N', 'N', npw2, nc, nr, 1.D0, &
+                          psi(1,ir), npwx2, vtmp, nx, beta, evc(1,ic), npwx2 )
+                 !$acc end host_data
               END IF
               ! 
 
@@ -752,7 +759,7 @@ CONTAINS
         END IF
         !
      END DO
-     !
+     !$acc end data
      DEALLOCATE( vtmp )
 
      RETURN
@@ -767,6 +774,7 @@ CONTAINS
      REAL(DP) :: beta
 
      ALLOCATE( vtmp( nx, nx ) )
+     !$acc data create (vtmp) present(hpsi,psi) copyin(vl)
      !
      DO ipc = 1, idesc(LAX_DESC_NPC)
         !
@@ -790,16 +798,20 @@ CONTAINS
                  !
                  !  this proc sends his block
                  ! 
+                 !$acc host_data use_device(vl,spsi,psi)
                  CALL mp_bcast( vl(:,1:nc), root, ortho_parent_comm )
-                 CALL DGEMM( 'N', 'N', npw2, nc, nr, 1.D0, &
+                 CALL MYDGEMM( 'N', 'N', npw2, nc, nr, 1.D0, &
                           spsi(1,ir), npwx2, vl, nx, beta, psi(1,nvec+ic), npwx2 )
+                 !$acc end host_data
               ELSE
                  !
                  !  all other procs receive
                  ! 
+                 !$acc host_data use_device(vtmp,spsi,psi)
                  CALL mp_bcast( vtmp(:,1:nc), root, ortho_parent_comm )
-                 CALL DGEMM( 'N', 'N', npw2, nc, nr, 1.D0, &
+                 CALL MYDGEMM( 'N', 'N', npw2, nc, nr, 1.D0, &
                           spsi(1,ir), npwx2, vtmp, nx, beta, psi(1,nvec+ic), npwx2 )
+                 !$acc end host_data
               END IF
               ! 
               beta = 1_DP
@@ -809,14 +821,14 @@ CONTAINS
         END IF
         !
      END DO
-     !
+     !$acc kernels
      spsi(:,1:nvec) = psi(:,nvec+1:nvec+nvec)
-     !
+     !$acc end kernels
+     !$acc end data
      DEALLOCATE( vtmp )
 
      RETURN
   END SUBROUTINE refresh_spsi
-  !
   !
   !
   SUBROUTINE refresh_hpsi( )
@@ -827,7 +839,7 @@ CONTAINS
      REAL(DP) :: beta
 
      ALLOCATE( vtmp( nx, nx ) )
-     !
+     !$acc data create (vtmp) present(hpsi,psi) copyin(vl)
      DO ipc = 1, idesc(LAX_DESC_NPC)
         !
         nc = nrc_ip( ipc )
@@ -849,17 +861,21 @@ CONTAINS
               IF( ipr-1 == idesc(LAX_DESC_MYR) .AND. ipc-1 == idesc(LAX_DESC_MYC) .AND. la_proc ) THEN
                  !
                  !  this proc sends his block
-                 ! 
+                 !
+                 !$acc host_data use_device(vl,hpsi,psi)
                  CALL mp_bcast( vl(:,1:nc), root, ortho_parent_comm )
-                 CALL DGEMM( 'N', 'N', npw2, nc, nr, 1.D0, &
+                 CALL MYDGEMM( 'N', 'N', npw2, nc, nr, 1.D0, &
                           hpsi(1,ir), npwx2, vl, nx, beta, psi(1,nvec+ic), npwx2 )
+                 !$acc end host_data
               ELSE
                  !
                  !  all other procs receive
                  ! 
+                 !$acc host_data use_device(vtmp,hpsi,psi)
                  CALL mp_bcast( vtmp(:,1:nc), root, ortho_parent_comm )
-                 CALL DGEMM( 'N', 'N', npw2, nc, nr, 1.D0, &
+                 CALL MYDGEMM( 'N', 'N', npw2, nc, nr, 1.D0, &
                           hpsi(1,ir), npwx2, vtmp, nx, beta, psi(1,nvec+ic), npwx2 )
+                 !$acc end host_data
               END IF
               ! 
               beta = 1.0d0
@@ -869,16 +885,15 @@ CONTAINS
         END IF
         !
      END DO
-     !
-     DEALLOCATE( vtmp )
-
+     !$acc kernels
      hpsi(:,1:nvec) = psi(:,nvec+1:nvec+nvec)
-
+     !$acc end kernels
+     !$acc end data
+     DEALLOCATE( vtmp )
+     !
      RETURN
   END SUBROUTINE refresh_hpsi
   !
-  !
-
   SUBROUTINE compute_distmat( dm, v, w )
      !
      !  This subroutine compute <vi|wj> and store the
@@ -892,8 +907,10 @@ CONTAINS
      !
      ALLOCATE( work( nx, nx ) )
      !
-     work = 0.0d0
-     !
+     !$acc data create(work) present(v,w) copyout(dm)
+     !$acc kernels
+     work(:,:) = 0.0_dp
+     !$acc end kernels
      DO ipc = 1, idesc(LAX_DESC_NPC) !  loop on column procs 
         !
         nc = nrc_ip( ipc )
@@ -909,20 +926,23 @@ CONTAINS
            root = rank_ip( ipr, ipc )
 
            ! use blas subs. on the matrix block
-
-           CALL DGEMM( 'T', 'N', nr, nc, npw2, 2.D0 , &
+           !$acc host_data use_device(work,v,w)
+           CALL MYDGEMM( 'T', 'N', nr, nc, npw2, 2.D0 , &
                        v(1,ir), npwx2, w(1,ic), npwx2, 0.D0, work, nx )
-
-           IF ( gstart == 2 ) &
-              CALL DGER( nr, nc, -1.D0, v(1,ir), npwx2, w(1,ic), npwx2, work, nx )
-
+           !$acc end host_data
+           IF ( gstart == 2 ) THEN
+              !$acc host_data use_device(work,v,w)
+              CALL MYDGER( nr, nc, -1.D0, v(1,ir), npwx2, w(1,ic), npwx2, work, nx )
+              !$acc end host_data
+           END IF
            ! accumulate result on dm of root proc.
-
+           !$acc host_data use_device(work,dm)
            CALL mp_root_sum( work, dm, root, ortho_parent_comm )
-
+           !$acc end host_data
         END DO
         !
      END DO
+     !$acc end data
      IF (ortho_parent_comm.ne.intra_bgrp_comm .and. nbgrp > 1) dm = dm/nbgrp
      !
      CALL laxlib_dsqmsym( nbase, dm, nx, idesc )
@@ -942,8 +962,10 @@ CONTAINS
      REAL(DP), ALLOCATABLE :: vtmp( :, : )
 
      ALLOCATE( vtmp( nx, nx ) )
-     !
+     !$acc data create(vtmp) copy(dm) present(v,w)
+     !$acc kernels
      vtmp = 0.0d0
+     !$acc end kernels
      !
      DO ipc = 1, idesc(LAX_DESC_NPC)
         !
@@ -967,31 +989,41 @@ CONTAINS
               ir = irc_ip( ipr )
               !
               root = rank_ip( ipr, ipc )
-
-              CALL DGEMM( 'T', 'N', nr, nc, npw2, 2.D0, v( 1, ir ), &
+              !$acc host_data use_device(v,w,vtmp)
+              CALL MYDGEMM( 'T', 'N', nr, nc, npw2, 2.D0, v( 1, ir ), &
                           npwx2, w(1,ii), npwx2, 0.D0, vtmp, nx )
+              !$acc end host_data
               !
-              IF ( gstart == 2 ) &
-                 CALL DGER( nr, nc, -1.D0, v( 1, ir ), npwx2, w(1,ii), npwx2, vtmp, nx )
+              IF ( gstart == 2 ) THEN
+                 !$acc host_data use_device(v,w,vtmp)
+                 CALL MYDGER( nr, nc, -1.D0, v( 1, ir ), npwx2, w(1,ii), npwx2, vtmp, nx )
+                 !$acc end host_data
+              END IF
+              !$acc kernels
               IF (ortho_parent_comm.ne.intra_bgrp_comm .and. nbgrp > 1) vtmp = vtmp/nbgrp
+              !$acc end kernels
 
               IF(  (idesc(LAX_DESC_ACTIVE_NODE) > 0) .AND. &
                    (ipr-1 == idesc(LAX_DESC_MYR)) .AND. (ipc-1 == idesc(LAX_DESC_MYC)) ) THEN
+                 !$acc host_data use_device(vtmp,dm)
                  CALL mp_root_sum( vtmp(:,1:nc), dm(:,icc:icc+nc-1), root, ortho_parent_comm )
+                 !$acc end host_data
               ELSE
+                 !$acc host_data use_device(vtmp,dm)
                  CALL mp_root_sum( vtmp(:,1:nc), dm, root, ortho_parent_comm )
+                 !$acc end host_data
               END IF
-
 
            END DO
            !
         END IF
         !
      END DO
+     !$acc end data
+     DEALLOCATE( vtmp )
      !
      CALL laxlib_dsqmsym( nbase+notcnv, dm, nx, idesc )
      !
-     DEALLOCATE( vtmp )
      RETURN
   END SUBROUTINE update_distmat
   !
@@ -1026,4 +1058,4 @@ CONTAINS
      RETURN
   END SUBROUTINE set_h_from_e
   !
-END SUBROUTINE pregterg_gpu
+END SUBROUTINE pregterg
