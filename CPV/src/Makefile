@@ -2,6 +2,8 @@
 
 include	../../make.inc
 
+VPATH = @srcdir@
+
 # location of needed modules and included files (if any)
 MODFLAGS= $(BASEMOD_FLAGS) 
 
@@ -149,4 +151,7 @@ clean :
 		*.cpp *.d *.L *.a *.s cp.x manycp.x wfdd.x
 	-/bin/rm -rf ../../bin/manycp.x ../../bin/cppp.x ../../bin/cp.x ../../bin/wfdd.x
 
+
 include make.depend
+
+

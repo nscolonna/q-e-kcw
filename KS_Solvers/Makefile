@@ -1,6 +1,8 @@
 # Makefile for  KS_Solvers
 include ../make.inc
 
+VPATH = @srcdir@
+
 # the following directive prevents execution of this makefile in parallel
 # Problem is, libks_solvers.a depends upon all libdavid libcg etc, but if
 # those dependencies are added explicitly to libks_solvers.a, the library
@@ -96,4 +98,3 @@ clean :
 	rm -f *.fh 
 	rm -f libks_solvers.a
 
- 
