@@ -134,12 +134,14 @@ subroutine solve_linter_koop ( spin_ref, i_ref, delta_vr, drhog_scf, delta_vg, d
     !$acc kernels present(dvscfins)
     dvscfins(:,:,:) = (0.D0, 0.D0)
     !$acc end kernels
+    !$acc update host(dvscfins)
   ELSE
     ALLOCATE (dvscfin (dfftp%nnr, nspin_mag, 1)) 
     !$acc enter data create(dvscfin)
     !$acc kernels present(dvscfin)
     dvscfin(:,:,:) = (0.D0, 0.D0)
     !$acc end kernels
+    !$acc update host(dvscfin)
   ENDIF
   !
   ALLOCATE (drhoscf  (dffts%nnr, nspin_mag)) 
@@ -333,17 +335,11 @@ subroutine solve_linter_koop ( spin_ref, i_ref, delta_vr, drhog_scf, delta_vg, d
      !
      ! ... On output in dvscfin we have the mixed potential
      !
-     !HERE BELOW CHECK WHY FACTOR OF 2 IS THERE (A.M.)
-     !Not sure but it seems because dvscfin/dvscfout are complex(DP) here, real(DP) in mix_potential (N.C.)
-
-!GPU   !$acc enter data copyin(dvscfin)
      !$acc update host(dvscfin)
      CALL mix_potential (2*dfftp%nnr*nspin_mag, dvscfout, dvscfin, &   
                          alpha_mix(iter), dr2, tr2/npol, iter, &
                          nmix, flmixDPot, convt)
      !$acc update device(dvscfin) 
-!GPU  !$acc exit data copyout(dvscfout)
-
      !WRITE(mpime+1000, '(1i5,es10.3,1l1,1i5)') my_pool_id, dr2, convt, iter
      !
      ! check that convergent have been reached on ALL processors in this image
