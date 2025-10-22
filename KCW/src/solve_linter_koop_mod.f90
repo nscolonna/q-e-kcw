@@ -90,15 +90,11 @@ subroutine solve_linter_koop ( spin_ref, i_ref, delta_vr, drhog_scf, delta_vg, d
               dvscfout (:,:),   & !
               dbecsum(:,:,:,:), & !
               dbecsum_nc (:,:,:,:,:,:), & !
-              aux(:)           !& !
-           !!   drhoc(:)  
+              aux(:)           !
   INTEGER :: nrec
   !
- !! COMPLEX(DP), ALLOCATABLE, target :: dvscfin(:,:,:), dvscfins (:,:,:)
   COMPLEX(DP), POINTER ::  dvscfin(:,:,:), dvscfins (:,:,:)
-  ! change of the scf potential 
-!!  COMPLEX(DP), pointer :: dvscfins (:,:,:)
-!!  ! change of the scf potential (smooth part only)
+  ! change of the scf potential,  change of the scf potential (smooth part only)
   REAL(DP), ALLOCATABLE :: becsum1(:,:,:)
   !
   LOGICAL :: lmetq0,     & ! true if xq=(0,0,0) in a metal
@@ -117,8 +113,6 @@ subroutine solve_linter_koop ( spin_ref, i_ref, delta_vr, drhog_scf, delta_vg, d
   EXTERNAL ch_psi_all,  cg_psi
   CHARACTER(LEN=256) :: flmixDPot = 'mixd'
   !
-  !!## DEBUG
-!!JA   COMPLEX(DP) :: drhok(dffts%nnr) !<---- WHAT IS THIS? (A.M.)
   COMPLEX(DP) :: delta_vg(ngms,nspin_mag)
   INTEGER:: norb
   !
@@ -136,7 +130,6 @@ subroutine solve_linter_koop ( spin_ref, i_ref, delta_vr, drhog_scf, delta_vg, d
   IF (noncolin.AND.domag) nsolv=2
   !
   !
-  !JA Only dvscfin or dvscfins is necessery
   IF (doublegrid) THEN
      ALLOCATE (dvscfins (dffts%nnr , nspin_mag , 1))
     !$acc enter data create(dvscfins)
@@ -144,16 +137,14 @@ subroutine solve_linter_koop ( spin_ref, i_ref, delta_vr, drhog_scf, delta_vg, d
     dvscfins(:,:,:) = (0.D0, 0.D0)
     !$acc end kernels
   ELSE
-    ALLOCATE (dvscfin (dfftp%nnr, nspin, 1)) 
+    ALLOCATE (dvscfin (dfftp%nnr, nspin_mag, 1)) 
     !$acc enter data create(dvscfin)
     !$acc kernels present(dvscfin)
     dvscfin(:,:,:) = (0.D0, 0.D0)
     !$acc end kernels
-    !!JA  dvscfins(1:dffts%nnr, 1:nspin_mag, 1:1) => dvscfin
   ENDIF
   !
-  !ALLOCATE (drhoscf  (dfftp%nnr, nspin, 1) )
-  ALLOCATE (drhoscf  (dffts%nnr, nspin_mag) ) !! NsC
+  ALLOCATE (drhoscf  (dffts%nnr, nspin_mag)) 
   ALLOCATE (drhoscfh (dfftp%nnr, nspin_mag))
   ALLOCATE (dvscfout (dfftp%nnr, nspin_mag))    
   ALLOCATE (dbecsum ( (nhm * (nhm + 1))/2 , nat , nspin_mag , 1)) 
@@ -173,9 +164,8 @@ subroutine solve_linter_koop ( spin_ref, i_ref, delta_vr, drhog_scf, delta_vg, d
      upert_mq(1, 1) = (1.d0, 0.d0)
   ENDIF ! minus_q
   ! 
-  IF (noncolin) allocate (dbecsum_nc (nhm,nhm, nat , nspin , 1, nsolv))
+  IF (noncolin) allocate (dbecsum_nc (nhm,nhm, nat , nspin_mag , 1, nsolv))
   ALLOCATE (aux ( dffts%nnr ))    
-!!  ALLOCATE (drhoc(dfftp%nnr))
   !
   drhoscf  = CMPLX(0.D0, 0.D0, kind =DP)
   drhoscfh = CMPLX(0.D0, 0.D0, kind =DP)
@@ -256,61 +246,36 @@ subroutine solve_linter_koop ( spin_ref, i_ref, delta_vr, drhog_scf, delta_vg, d
      IF (noncolin) dbecsum_nc = (0.d0, 0.d0)
      !
      IF (doublegrid) THEN
-      !!  !$acc data copy(dvscfins)
         DO isolv = 1, nsolv
           !
           IF (iter == 1 ) THEN
              thresh = 1.d-6
           ELSE
-            !thresh = min (1.d-1 * sqrt (dr2), 1.d-2)
             thresh = min (1.d-2 * sqrt (dr2), 1.d-6)
           ENDIF
           ! 
-          IF ( new ) THEN 
-            !
-        !!    !$acc enter data copyin(drhoscf)
-            CALL sternheimer_kernel(iter==1, isolv==2, 1, lrdvwfc, iudvwfc, &
+          !
+          CALL sternheimer_kernel(iter==1, isolv==2, 1, lrdvwfc, iudvwfc, &
             thresh, dvscfins, all_conv, averlt, drhoscf, dbecsum, &
             dbecsum_nc(:,:,:,:,:,isolv))
-        !!    !$acc exit data copyout(drhoscf)
-            !
-          ELSE
-            STOP 234
-            ! NsC: NOT UPDATED to NC case. Anyway not used anymore
-            CALL sternheimer_kernel_old(iter==1, 1, i_ref, lrdvwfc, iudvwfc, &
-                thresh, dvscfins, all_conv, averlt, drhoscf, dbecsum ,delta_vg)
-          ENDIF
           !
         ENDDO
-    !!    !$acc end data
      ELSE
-     !!   !$acc data copy(dvscfin)
         DO isolv = 1, nsolv
           !
           IF (iter == 1 ) THEN
-             thresh = 1.d-6
+            thresh = 1.d-6
           ELSE
-            !thresh = min (1.d-1 * sqrt (dr2), 1.d-2)
             thresh = min (1.d-2 * sqrt (dr2), 1.d-6)
           ENDIF
           ! 
-          IF ( new ) THEN 
-            !
-         !!   !$acc enter data copyin(drhoscf)
-            CALL sternheimer_kernel(iter==1, isolv==2, 1, lrdvwfc, iudvwfc, &
+          !
+          CALL sternheimer_kernel(iter==1, isolv==2, 1, lrdvwfc, iudvwfc, &
             thresh, dvscfin, all_conv, averlt, drhoscf, dbecsum, &
             dbecsum_nc(:,:,:,:,:,isolv))
-         !!   !$acc exit data copyout(drhoscf)
-            !
-          ELSE
-            STOP 234
-            ! NsC: NOT UPDATED to NC case. Anyway not used anymore
-            CALL sternheimer_kernel_old(iter==1, 1, i_ref, lrdvwfc, iudvwfc, &
-                thresh, dvscfin, all_conv, averlt, drhoscf, dbecsum ,delta_vg)
-          ENDIF
+          !
           !
         ENDDO
-     !!   !$acc end data
      END IF
      !
      IF (nsolv==2) THEN
@@ -340,21 +305,11 @@ subroutine solve_linter_koop ( spin_ref, i_ref, delta_vr, drhog_scf, delta_vg, d
         CALL zcopy (nspin_mag*dfftp%nnr, drhoscf, 1, drhoscfh, 1)
      ENDIF
      !
-     ! if q=0, make sure that charge conservation is guaranteed
-     !
-     !IF ( lgamma ) THEN  !NOT UPDATED TO NC - I do not fully understand it! A.M.
-     !   psic(:) = drhoscfh(:, nspin)
-     !   CALL fwfft ('Rho', psic, dfftp)
-     !   IF ( gstart==2) psic(dfftp%nl(1)) = (0.d0, 0.d0)
-     !   CALL invfft ('Rho', psic, dfftp)
-     !   drhoscfh(:, nspin) = psic(:)
-     !ENDIF
      !
      ! Symmetrization of the response charge density.
      !
      IF (irr_bz) CALL psymdvscf (drhoscfh, dfftp)
      !
-
      !
      !    Now we compute for all perturbations the total charge and potential
      !
@@ -375,17 +330,16 @@ subroutine solve_linter_koop ( spin_ref, i_ref, delta_vr, drhog_scf, delta_vg, d
      ! NB: always CALL with imode=0 to avoid CALL to addcore in dv_of_drho for 
      !     nlcc pseudo. The CALL is not needed since we are not moving atoms!!
      !
-!GPU  !$acc enter data copyin(dvscfout)
-     CALL dv_of_drho (dvscfout)  !!JA ON GPU
+     CALL dv_of_drho (dvscfout)  
      !
-!
      ! ... On output in dvscfin we have the mixed potential
      !
      !HERE BELOW CHECK WHY FACTOR OF 2 IS THERE (A.M.)
      !Not sure but it seems because dvscfin/dvscfout are complex(DP) here, real(DP) in mix_potential (N.C.)
 
 !GPU   !$acc enter data copyin(dvscfin)
-     CALL mix_potential (2*dfftp%nnr*nspin_mag, dvscfout, dvscfin, &   !!JA ON GPU
+     !$acc update host(dvscfin)
+     CALL mix_potential (2*dfftp%nnr*nspin_mag, dvscfout, dvscfin, &   
                          alpha_mix(iter), dr2, tr2/npol, iter, &
                          nmix, flmixDPot, convt)
      !$acc update device(dvscfin) 
@@ -445,7 +399,6 @@ subroutine solve_linter_koop ( spin_ref, i_ref, delta_vr, drhog_scf, delta_vg, d
   !
   if (lmetq0) CALL deallocate_dfpt_ldos(ldos_data)
   DEALLOCATE (aux)
-!!  DEALLOCATE (drhoc)
   DEALLOCATE (dbecsum)
   IF (noncolin) DEALLOCATE (dbecsum_nc)
   DEALLOCATE (drhoscf )
