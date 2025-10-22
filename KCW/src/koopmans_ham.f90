@@ -724,6 +724,15 @@ SUBROUTINE koopmans_ham ()
       !    
     ENDDO ! qpoints
     !$acc exit data delete(rhor, rhog, delta_vg, vh_rhog, delta_vg_, delta_vr, delta_vr_)
+
+    !WRITE( stdout, '(5X,"INFO: KC HAMILTONIAN CALCULATION ik= ", i4, " ... DONE")') ik
+    !
+    deltaH = nqstot*deltaH
+    write(stdout,*) 'BEFORE MP SUM'
+    CALL mp_sum (deltaH, intra_bgrp_comm)
+    CALL mp_sum (sh, intra_bgrp_comm)
+    ! Sum over different processes (G vectors) 
+    !
     DEALLOCATE ( rhog , delta_vg, vh_rhog, delta_vg_ )
     DEALLOCATE(rhowann, rhor, delta_vr, sh, delta_vr_ )
 
@@ -731,13 +740,6 @@ SUBROUTINE koopmans_ham ()
     DEALLOCATE(evc_k_g, evc_k_r, phase)
     DEALLOCATE(evc_kq_g , evc_kq_r, evc0_kq )
 
-    !WRITE( stdout, '(5X,"INFO: KC HAMILTONIAN CALCULATION ik= ", i4, " ... DONE")') ik
-    !
-    deltaH = nqstot*deltaH
-    CALL mp_sum (deltaH, intra_bgrp_comm)
-    CALL mp_sum (sh, intra_bgrp_comm)
-    ! Sum over different processes (G vectors) 
-    !
     RETURN 
     !
   END subroutine 
