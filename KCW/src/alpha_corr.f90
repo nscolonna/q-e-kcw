@@ -107,19 +107,20 @@ SUBROUTINE alpha_corr ( iwann, delta)
       !
       IMPLICIT NONE 
       !
-      REAL(DP), ALLOCATABLE :: vxc(:,:)
       INTEGER, INTENT (IN) :: iwann
       INTEGER :: ik, npw, lrrho, iq, ir, is, ip, iss
       REAL(DP), INTENT (OUT) :: en, eig, krnl 
       REAL(DP) ::  vtxc, etxc, eig_k, krnl_q
       INTEGER :: lrwfc
-      COMPLEX(DP) :: evc_g (npwx*npol), evc_r (dffts%nnr,npol)
-      COMPLEX(DP) :: rhowann(dffts%nnr, num_wann, nrho), rhor(dffts%nnr,nrho), delta_vr(dffts%nnr,nspin_mag)
+      COMPLEX(DP), ALLOCATABLE :: evc_g(:), evc_r (:,:), rhowann(:,:,:),rhor(:,:),delta_vr(:,:)
       COMPLEX(DP), ALLOCATABLE  :: rho_wann_g(:,:), delta_vg(:,:), aux(:)
       INTEGER :: ik_eff
       COMPLEX(DP), ALLOCATABLE :: rhor_(:,:)
+      REAL(DP), ALLOCATABLE :: vxc(:,:)
       !
       ALLOCATE (vxc(dffts%nnr,nspin_mag))
+      ALLOCATE (evc_g (npwx*npol), evc_r (dffts%nnr,npol))
+      ALLOCATE (rhowann(dffts%nnr, num_wann, nrho), rhor(dffts%nnr,nrho), delta_vr(dffts%nnr,nspin_mag))
       !
       ALLOCATE ( rho_wann_g (ngms,nrho) , delta_vg(ngms,nspin_mag), aux (dffts%nnr) )
       ! 
@@ -240,6 +241,8 @@ SUBROUTINE alpha_corr ( iwann, delta)
       !
       DEALLOCATE ( rho_wann_g , delta_vg, aux )
       DEALLOCATE ( vxc )
+      DEALLOCATE ( evc_g, evc_r )
+      DEALLOCATE ( rhowann, rhor, delta_vr) 
       RETURN
       !
     END SUBROUTINE xc_energy_n
@@ -272,18 +275,22 @@ SUBROUTINE alpha_corr ( iwann, delta)
       !
       INTEGER :: ir, iq, nspin_aux, segno
       TYPE (scf_type) :: rho_minus1
-      COMPLEX (DP) :: rho_wann_ir(dffts%nnr,nrho), rho_wann(dffts%nnr,nrho)
+      COMPLEX (DP), ALLOCATABLE :: rho_wann_ir(:,:), rho_wann(:,:)
       REAL(DP) :: xq(3), xq_(3)
-      COMPLEX(DP) :: rhowann(dffts%nnr, num_wann,nrho)
-      COMPLEX(DP) :: phase_sc, phase_pc(dffts%nnr) 
+      COMPLEX(DP), ALLOCATABLE  :: rhowann(:,:,:)
+      COMPLEX(DP), ALLOCATABLE  :: phase_pc(:)
       COMPLEX(DP), ALLOCATABLE :: nq_r(:,:), aux(:)
       INTEGER :: lrrho
       LOGICAL :: lgamma
-      REAL(DP) ::  vtxc, etxc, vxc(dffts%nnr,nspin_mag)
+      REAL(DP) ::  vtxc, etxc
       !
-      COMPLEX(DP) :: imag = (0.D0,1.D0)
+      COMPLEX(DP) :: imag = (0.D0,1.D0), phase_sc
+      COMPLEX(DP), ALLOCATABLE :: vxc(:,:)
       !
       ALLOCATE ( nq_r (dffts%nnr,nrho), aux(dfftp%nnr)  )
+      ALLOCATE ( rho_wann_ir (dffts%nnr,nrho), rho_wann( dffts%nnr,nrho))
+      ALLOCATE ( rhowann(dffts%nnr, num_wann, nrho), phase_pc(dffts%nnr))
+      ALLOCATE ( vxc(dffts%nnr,nspin_mag) )
       segno=-1
       IF ( is_emp ) segno=+1
       !
