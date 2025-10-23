@@ -119,7 +119,7 @@ subroutine solve_linter_koop ( spin_ref, i_ref, delta_vr, drhog_scf, delta_vg, d
   LOGICAL :: new
   COMPLEX(DP)    ::   imag
   REAL(DP)       ::   xq_cryst(3)
-  INTEGER        ::   isym
+  INTEGER        ::   isym,nnr
 
   ! Set to false to revert to the previous implementation of the Linear solver (consistent with QE7.1)
   new = .true.
@@ -130,6 +130,7 @@ subroutine solve_linter_koop ( spin_ref, i_ref, delta_vr, drhog_scf, delta_vg, d
   IF (noncolin.AND.domag) nsolv=2
   !
   !
+  nnr = dfftp%nnr
   IF (doublegrid) THEN
      ALLOCATE (dvscfins (dffts%nnr , nspin_mag , 1))
     !$acc enter data create(dvscfins)
@@ -139,7 +140,7 @@ subroutine solve_linter_koop ( spin_ref, i_ref, delta_vr, drhog_scf, delta_vg, d
     !$acc update host(dvscfins)
   ELSE
     ALLOCATE (dvscfin (dfftp%nnr, nspin_mag, 1)) 
-    !$acc enter data create(dvscfin)
+    !$acc enter data create(dvscfin(1:nnr, 1:nspin_mag, 1))
     !$acc kernels present(dvscfin)
     dvscfin(:,:,:) = (0.D0, 0.D0)
     !$acc end kernels

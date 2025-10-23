@@ -58,7 +58,9 @@ SUBROUTINE lr_apply_time_reversal(first_iter, ind, dvscfins)
    ! Flip the sign of the magnetic field
    !
    IF (.NOT. first_iter) THEN
+      !$acc kernels
       dvscfins(:, 2:4, :) = -dvscfins(:, 2:4, :)
+      !$acc end kernels
       IF (okvan) int3_nc(:,:,:,:,:) = int3_nc_save(:,:,:,:,:,ind)
    ENDIF
    !
