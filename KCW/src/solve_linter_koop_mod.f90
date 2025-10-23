@@ -337,7 +337,7 @@ subroutine solve_linter_koop ( spin_ref, i_ref, delta_vr, drhog_scf, delta_vg, d
      !
      ! ... On output in dvscfin we have the mixed potential
      !
-     !$acc update host(dvscfin)
+     !! TMP REMOVED $acc update host(dvscfin)
      CALL mix_potential (2*dfftp%nnr*nspin_mag, dvscfout, dvscfin, &   
                          alpha_mix(iter), dr2, tr2/npol, iter, &
                          nmix, flmixDPot, convt)
