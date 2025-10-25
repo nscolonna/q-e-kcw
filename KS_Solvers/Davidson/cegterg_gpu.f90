@@ -15,12 +15,8 @@
 #define ONE  ( 1.D0, 0.D0 )
 !
 !----------------------------------------------------------------------------
-!
-!  Wrapper for subroutine with distributed matrixes (written by Carlo Cavazzoni)
-!
-!----------------------------------------------------------------------------
-SUBROUTINE pcegterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &  
-                    npw, npwx, nvec, nvecx, npol, evc_d, ethr, &
+SUBROUTINE pcegterg(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &  
+                    npw, npwx, nvec, nvecx, npol, evc, ethr, &
                     e, btype, notcnv, lrot, dav_iter , nhpsi )
   !----------------------------------------------------------------------------
   !
@@ -30,11 +26,13 @@ SUBROUTINE pcegterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   !
   ! ... where H is an hermitean operator, e is a real scalar,
   ! ... S is an uspp matrix, evc is a complex vector
+  ! ... Parallel diagonalization with distributed matrices,
+  ! ... written by Carlo Cavazzoni, OpenACC version
   !
-  USE util_param,       ONLY : DP, stdout
-  USE mp_bands_util,    ONLY : intra_bgrp_comm, inter_bgrp_comm, root_bgrp_id, nbgrp, my_bgrp_id
-  USE mp,               ONLY : mp_bcast, mp_root_sum, mp_sum, mp_barrier, &
-                               mp_size, mp_type_free, mp_allgather
+  USE util_param,        ONLY : DP, stdout
+  USE mp_bands_util,     ONLY : intra_bgrp_comm, inter_bgrp_comm, root_bgrp_id, nbgrp, my_bgrp_id
+  USE mp_bands_util,     ONLY : gstart
+  USE mp,                ONLY : mp_bcast, mp_root_sum, mp_sum
   !
   IMPLICIT NONE
   !
@@ -47,10 +45,7 @@ SUBROUTINE pcegterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
     ! maximum dimension of the reduced basis set
     !    (the basis set is refreshed when its dimension would exceed nvecx)
     ! number of spin polarizations
-  INTEGER, PARAMETER :: blocksize = 256
-  INTEGER :: numblock
-    ! chunking parameters
-  COMPLEX(DP), INTENT(INOUT) :: evc_d(npwx*npol,nvec)
+  COMPLEX(DP), INTENT(INOUT) :: evc(npwx*npol,nvec)
     !  evc   contains the  refined estimates of the eigenvectors
   REAL(DP), INTENT(IN) :: ethr
     ! energy threshold for convergence: root improvement is stopped,
@@ -67,7 +62,7 @@ SUBROUTINE pcegterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
     ! integer  number of iterations performed
     ! number of unconverged roots
   INTEGER, INTENT(OUT) :: nhpsi
-    ! total number of indivitual hpsi
+    ! total number of individual hpsi
   !
   ! ... LOCAL variables
   !
@@ -109,7 +104,8 @@ SUBROUTINE pcegterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   INTEGER :: np_ortho(2), ortho_parent_comm
   LOGICAL :: do_distr_diag_inside_bgrp
   !
-  REAL(DP), EXTERNAL :: ddot
+  REAL(DP), EXTERNAL :: MYDDOT_VECTOR_GPU 
+  !$acc routine(MYDDOT_VECTOR_GPU) vector
   !
   EXTERNAL  h_psi_ptr, s_psi_ptr, g_psi_ptr
     ! h_psi_ptr(npwx,npw,nvec,psi,hpsi)
@@ -145,9 +141,6 @@ SUBROUTINE pcegterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
      !
   END IF
   !
-  ! compute the number of chuncks
-  numblock  = (npw+blocksize-1)/blocksize
-  !
   ALLOCATE(  psi( npwx*npol, nvecx ), STAT=ierr )
   IF( ierr /= 0 ) &
      CALL errore( ' pcegterg ',' cannot allocate psi ', ABS(ierr) )
@@ -156,6 +149,7 @@ SUBROUTINE pcegterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   IF( ierr /= 0 ) &
      CALL errore( ' pcegterg ',' cannot allocate hpsi ', ABS(ierr) )
   !
+  !$acc enter data create(psi, hpsi)
   IF ( uspp ) THEN
      ALLOCATE( spsi( npwx*npol, nvecx ), STAT=ierr )
      IF( ierr /= 0 ) &
@@ -233,21 +227,16 @@ SUBROUTINE pcegterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   nbase  = nvec
   conv   = .FALSE.
   !
-  !$acc enter data create(psi, hpsi)
-  !$acc update host( evc_d)
   !$acc kernels
-  psi(:,1:nvec) = evc_d(:,1:nvec)
+  psi(:,1:nvec) = evc(:,1:nvec)
   !$acc end kernels
-  !$acc update host( psi)
   !
   ! ... hpsi contains h times the basis vectors
   !
   CALL h_psi_ptr( npwx, npw, nvec, psi, hpsi ) ; nhpsi = nhpsi + nvec
-  !$acc update host(hpsi)
   !
   IF ( uspp ) THEN
      CALL s_psi_ptr( npwx, npw, nvec, psi, spsi )
-     !$acc update host(spsi)
   END IF
   !
   ! ... hl contains the projection of the hamiltonian onto the reduced
@@ -295,7 +284,6 @@ SUBROUTINE pcegterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
      CALL stop_clock( 'cegterg:diag' )
      !
      e(1:nvec) = ew(1:nvec)
-     !$acc update device(e)
      !
   END IF
   !
@@ -313,15 +301,14 @@ SUBROUTINE pcegterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
      !
      ! ... expand the basis set with new basis vectors ( H - e*S )|psi> ...
      !
+     !$acc update device(ew)
      CALL hpsi_dot_v()
      !
      CALL stop_clock( 'cegterg:update' )
      !
      ! ... approximate inverse iteration
      !
-     !$acc update device(psi, ew)
      CALL g_psi_ptr( npwx, npw, notcnv, npol, psi(1,nb1), ew(nb1) )
-     !$acc update host(psi)
      !
      ! ... "normalize" correction vectors psi(:,nb1:nbase+notcnv) in 
      ! ... order to improve numerical stability of subspace diagonalization 
@@ -329,48 +316,45 @@ SUBROUTINE pcegterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
      !
      ! ...         ew = <psi_i|psi_i>,  i = nbase + 1, nbase + notcnv
      !
+     !$acc parallel vector_length(96) 
+     !$acc loop gang private(nbn) 
      DO n = 1, notcnv
         !
         nbn = nbase + n
-        !
-        IF ( npol == 1 ) THEN
-           !
-           ew(n) = ddot( 2*npw, psi(1,nbn), 1, psi(1,nbn), 1 )
-           !
-        ELSE
-           !
-           ew(n) = ddot( 2*npw, psi(1,nbn), 1, psi(1,nbn), 1 ) + &
-                   ddot( 2*npw, psi(npwx+1,nbn), 1, psi(npwx+1,nbn), 1 )
-           !
-        END IF
+        ew(n) = MYDDOT_VECTOR_GPU( 2*npw, psi(1,nbn), psi(1,nbn) )
         !
      END DO
+     IF ( npol == 2 ) THEN
+        !$acc loop gang private(nbn) 
+        DO n = 1, notcnv
+           !
+           nbn = nbase + n
+           ew(n) = ew(n) + MYDDOT_VECTOR_GPU( 2*npw, psi(npwx+1,nbn), psi(npwx+1,nbn) )
+           !
+        END DO
+     END IF
+     !$acc end parallel
      !
+     !$acc host_data use_device(ew)
      CALL mp_sum( ew( 1:notcnv ), intra_bgrp_comm )
+     !$acc end host_data
      !
-     !$omp parallel do collapse(3)
-     DO n = 1, notcnv
+     !$acc parallel loop collapse(3) 
+     DO n = 1,notcnv
         DO ipol = 1, npol
-           DO m = 1, numblock
-              psi( (m-1)*blocksize+(ipol-1)*npwx+1: &
-                    MIN(npw, m*blocksize)+(ipol-1)*npwx,nbase+n) = &
-              psi( (m-1)*blocksize+(ipol-1)*npwx+1: &
-                    MIN(npw, m*blocksize)+(ipol-1)*npwx,nbase+n) / &
-                    SQRT( ew(n) )
+           DO k = 1, npw
+             psi(k + (ipol-1)*npwx,nbase+n) = psi(k + (ipol-1)*npwx,nbase+n) &
+                                              / SQRT( ew(n) )
            END DO
         END DO
      END DO
-     !$omp end parallel do
      !
      ! ... here compute the hpsi and spsi of the new functions
      !
-     !$acc update device(psi)
      CALL h_psi_ptr( npwx, npw, notcnv, psi(1,nb1), hpsi(1,nb1) ) ; nhpsi = nhpsi + notcnv
-     !$acc update host(hpsi)
      !
      IF ( uspp ) THEN
         CALL s_psi_ptr( npwx, npw, notcnv, psi(1,nb1), spsi(1,nb1) )
-        !$acc update host(spsi)
      END IF
      !
      ! ... update the reduced hamiltonian
@@ -462,7 +446,6 @@ SUBROUTINE pcegterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
      notcnv = COUNT( .NOT. conv(:) )
      !
      e(1:nvec) = ew(1:nvec)
-     !$acc update device(e)
      !
      ! ... if overall convergence has been achieved, or the dimension of
      ! ... the reduced basis set is becoming too large, or in any case if
@@ -475,7 +458,6 @@ SUBROUTINE pcegterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
         CALL start_clock( 'cegterg:last' )
         !
         CALL refresh_evc()
-        !$acc update device(evc_d)
         !
         IF ( notcnv == 0 ) THEN
            !
@@ -500,16 +482,15 @@ SUBROUTINE pcegterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
         !
         ! ... refresh psi, H*psi and S*psi
         !
-        CALL threaded_memcpy(psi, evc_d, nvec*npol*npwx*2)
-        !$acc update device(psi)
+        !$acc kernels
+        psi(:,1:nvec) = evc(:,1:nvec)
+        !$acc end kernels
         !
         IF ( uspp ) THEN
            CALL refresh_spsi()
-           !$acc update device(spsi)
         END IF
         !
         CALL refresh_hpsi()
-        !$acc update device(hpsi)
         !
         ! ... refresh the reduced hamiltonian
         !
@@ -545,6 +526,7 @@ SUBROUTINE pcegterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
      END IF
      !
   END DO iterate
+  !$acc update device(e)
   !
   DEALLOCATE( vl, hl, sl )
   !
@@ -661,6 +643,7 @@ CONTAINS
 
      ALLOCATE( vtmp( nx, nx ) )
      ALLOCATE( ptmp( npwx*npol, nx ) )
+     !$acc data create(vtmp,ptmp) present(psi,hpsi,spsi,ew) copyin(vl)
 
      DO ipc = 1, idesc(LAX_DESC_NPC)
         !
@@ -679,55 +662,61 @@ CONTAINS
               root = rank_ip( ipr, ipc )
 
               IF( ipr-1 == idesc(LAX_DESC_MYR) .AND. ipc-1 == idesc(LAX_DESC_MYC) .AND. la_proc ) THEN
+                 !$acc kernels
                  vtmp(:,1:notcl) = vl(:,1:notcl)
+                 !$acc end kernels
               END IF
-
+              !$acc host_data use_device(vtmp)
               CALL mp_bcast( vtmp(:,1:notcl), root, ortho_parent_comm )
+              !$acc end host_data
               !
               IF ( uspp ) THEN
                  !
-                 CALL ZGEMM( 'N', 'N', kdim, notcl, nr, ONE, &
+                 !$acc host_data use_device(vtmp,spsi,psi)
+                 CALL MYZGEMM( 'N', 'N', kdim, notcl, nr, ONE, &
                     spsi(1, ir), kdmx, vtmp, nx, beta, psi(1,nb1+ic-1), kdmx )
+                 !$acc end host_data 
                  !
               ELSE
                  !
-                 CALL ZGEMM( 'N', 'N', kdim, notcl, nr, ONE, &
+                 !$acc host_data use_device(vtmp,psi)
+                 CALL MYZGEMM( 'N', 'N', kdim, notcl, nr, ONE, &
                     psi(1, ir), kdmx, vtmp, nx, beta, psi(1,nb1+ic-1), kdmx )
+                 !$acc end host_data 
                  !
               END IF
               !
-              CALL ZGEMM( 'N', 'N', kdim, notcl, nr, ONE, &
+              !$acc host_data use_device(vtmp,hpsi,ptmp)
+              CALL MYZGEMM( 'N', 'N', kdim, notcl, nr, ONE, &
                       hpsi(1, ir), kdmx, vtmp, nx, beta, ptmp, kdmx )
-
+              !$acc end host_data 
               beta = ONE
 
            END DO
 
-           !$omp parallel do collapse(3)
+           !$acc parallel loop collapse(3) 
            DO np = 1, notcl
               DO ipol = 1, npol
-                 DO ib = 1, numblock
-                    !
-                    psi( (ib-1)*blocksize+(ipol-1)*npwx+1: &
-                         MIN(npw, ib*blocksize)+(ipol-1)*npwx,nbase+np+ic-1) = &
-                    ptmp((ib-1)*blocksize+(ipol-1)*npwx+1: &
-                         MIN(npw, ib*blocksize)+(ipol-1)*npwx,np) - &
-                    ew(nbase+np+ic-1) * psi((ib-1)*blocksize+(ipol-1)*npwx+1:&
-                       MIN(npw, ib*blocksize)+(ipol-1)*npwx,nbase+np+ic-1)
-                    !
+                 DO k = 1, npw
+                    psi(k + (ipol-1)*npwx,nbase+np+ic-1) = &
+                         ptmp(k + (ipol-1)*npwx, np) - ew(nbase+np+ic-1) * &
+                         psi(k + (ipol-1)*npwx,nbase+np+ic-1)
                  END DO
               END DO
            END DO
-           !$omp end parallel do
            !
            ! clean up garbage if there is any
+           !$acc kernels
            IF (npw < npwx) psi(npw+1:npwx,nbase+ic:nbase+notcl+ic-1) = ZERO
+           !$acc end kernels
+           !$acc kernels
            IF (npol == 2)  psi(npwx+npw+1:2*npwx,nbase+ic:nbase+notcl+ic-1) = ZERO
+           !$acc end kernels
            !
         END IF
         !
      END DO
-
+     !$acc end data
      DEALLOCATE( vtmp )
      DEALLOCATE( ptmp )
 
@@ -743,6 +732,7 @@ CONTAINS
      COMPLEX(DP) :: beta
 
      ALLOCATE( vtmp( nx, nx ) )
+     !$acc data create (vtmp) present(evc,psi) copyin(vl)
      !
      DO ipc = 1, idesc(LAX_DESC_NPC)
         !
@@ -766,19 +756,22 @@ CONTAINS
                  !
                  !  this proc sends his block
                  ! 
+                 !$acc host_data use_device(psi,vl,evc)
                  CALL mp_bcast( vl(:,1:nc), root, ortho_parent_comm )
-                 CALL ZGEMM( 'N', 'N', kdim, nc, nr, ONE, &
-                          psi(1,ir), kdmx, vl, nx, beta, evc_d(1,ic), kdmx )
+                 CALL MYZGEMM( 'N', 'N', kdim, nc, nr, ONE, &
+                          psi(1,ir), kdmx, vl, nx, beta, evc(1,ic), kdmx )
+                 !$acc end host_data
               ELSE
                  !
                  !  all other procs receive
                  ! 
+                 !$acc host_data use_device(psi,vtmp,evc)
                  CALL mp_bcast( vtmp(:,1:nc), root, ortho_parent_comm )
-                 CALL ZGEMM( 'N', 'N', kdim, nc, nr, ONE, &
-                          psi(1,ir), kdmx, vtmp, nx, beta, evc_d(1,ic), kdmx )
+                 CALL MYZGEMM( 'N', 'N', kdim, nc, nr, ONE, &
+                          psi(1,ir), kdmx, vtmp, nx, beta, evc(1,ic), kdmx )
+                 !$acc end host_data
               END IF
               ! 
-
               beta = ONE
 
            END DO
@@ -786,7 +779,7 @@ CONTAINS
         END IF
         !
      END DO
-     !
+     !$acc end data
      DEALLOCATE( vtmp )
 
      RETURN
@@ -801,6 +794,7 @@ CONTAINS
      COMPLEX(DP) :: beta
 
      ALLOCATE( vtmp( nx, nx ) )
+     !$acc data create (vtmp) present(hpsi,psi) copyin(vl)
      !
      DO ipc = 1, idesc(LAX_DESC_NPC)
         !
@@ -824,16 +818,20 @@ CONTAINS
                  !
                  !  this proc sends his block
                  ! 
+                 !$acc host_data use_device(vl,spsi,psi)
                  CALL mp_bcast( vl(:,1:nc), root, ortho_parent_comm )
-                 CALL ZGEMM( 'N', 'N', kdim, nc, nr, ONE, &
+                 CALL MYZGEMM( 'N', 'N', kdim, nc, nr, ONE, &
                           spsi(1,ir), kdmx, vl, nx, beta, psi(1,nvec+ic), kdmx )
-              ELSE
+                 !$acc end host_data
+               ELSE
                  !
                  !  all other procs receive
                  ! 
+                 !$acc host_data use_device(vtmp,spsi,psi)
                  CALL mp_bcast( vtmp(:,1:nc), root, ortho_parent_comm )
-                 CALL ZGEMM( 'N', 'N', kdim, nc, nr, ONE, &
+                 CALL MYZGEMM( 'N', 'N', kdim, nc, nr, ONE, &
                           spsi(1,ir), kdmx, vtmp, nx, beta, psi(1,nvec+ic), kdmx )
+                  !$acc end host_data
               END IF
               ! 
               beta = ONE
@@ -843,14 +841,14 @@ CONTAINS
         END IF
         !
      END DO
-     !
-     CALL threaded_memcpy(spsi, psi(1,nvec+1), nvec*npol*npwx*2)
-     !
+     !$acc kernels
+     spsi(:,1:nvec) = psi(:,nvec+1:nvec+nvec)
+     !$acc end kernels
+     !$acc end data
      DEALLOCATE( vtmp )
 
      RETURN
   END SUBROUTINE refresh_spsi
-  !
   !
   !
   SUBROUTINE refresh_hpsi( )
@@ -861,7 +859,7 @@ CONTAINS
      COMPLEX(DP) :: beta
 
      ALLOCATE( vtmp( nx, nx ) )
-     !
+     !$acc data create (vtmp) present(hpsi,psi) copyin(vl)
      DO ipc = 1, idesc(LAX_DESC_NPC)
         !
         nc = nrc_ip( ipc )
@@ -884,16 +882,20 @@ CONTAINS
                  !
                  !  this proc sends his block
                  ! 
+                 !$acc host_data use_device(vl,hpsi,psi)
                  CALL mp_bcast( vl(:,1:nc), root, ortho_parent_comm )
-                 CALL ZGEMM( 'N', 'N', kdim, nc, nr, ONE, &
-                          hpsi(1,ir), kdmx, vl, nx, beta, psi(1,nvec+ic), kdmx )
+                 CALL MYZGEMM( 'N', 'N', kdim, nc, nr, ONE, &
+                      hpsi(1,ir), kdmx, vl, nx, beta, psi(1,nvec+ic), kdmx )
+                 !$acc end host_data
               ELSE
                  !
                  !  all other procs receive
                  ! 
+                 !$acc host_data use_device(vtmp,hpsi,psi)
                  CALL mp_bcast( vtmp(:,1:nc), root, ortho_parent_comm )
-                 CALL ZGEMM( 'N', 'N', kdim, nc, nr, ONE, &
-                          hpsi(1,ir), kdmx, vtmp, nx, beta, psi(1,nvec+ic), kdmx )
+                 CALL MYZGEMM( 'N', 'N', kdim, nc, nr, ONE, &
+                      hpsi(1,ir), kdmx, vtmp, nx, beta, psi(1,nvec+ic), kdmx )
+                 !$acc end host_data
               END IF
               ! 
               beta = ONE
@@ -903,10 +905,11 @@ CONTAINS
         END IF
         !
      END DO
-     !
+     !$acc kernels
+     hpsi(:,1:nvec) = psi(:,nvec+1:nvec+nvec)
+     !$acc end kernels
+     !$acc end data
      DEALLOCATE( vtmp )
-     !
-     CALL threaded_memcpy(hpsi, psi(1,nvec+1), nvec*npol*npwx*2)
      !
      RETURN
   END SUBROUTINE refresh_hpsi
@@ -924,8 +927,10 @@ CONTAINS
      COMPLEX(DP), ALLOCATABLE :: work( :, : )
      !
      ALLOCATE( work( nx, nx ) )
-     !
-     work = ZERO
+     !$acc data create(work) present(v,w) copyout(dm)
+     !$acc kernels
+     work(:,:) = ZERO
+     !$acc end kernels
      !
      !  Only upper triangle is computed, then the matrix is hermitianized
      !
@@ -944,17 +949,18 @@ CONTAINS
            root = rank_ip( ipr, ipc )
 
            ! use blas subs. on the matrix block
-
-           CALL ZGEMM( 'C', 'N', nr, nc, kdim, ONE , &
+           !$acc host_data use_device(work,v,w)
+           CALL MYZGEMM( 'C', 'N', nr, nc, kdim, ONE , &
                        v(1,ir), kdmx, w(1,ic), kdmx, ZERO, work, nx )
-
+           !$acc end host_data
            ! accumulate result on dm of root proc.
-
+           !$acc host_data use_device(work,dm)
            CALL mp_root_sum( work, dm, root, ortho_parent_comm )
-
+           !$acc end host_data
         END DO
         !
      END DO
+     !$acc end data
      if (ortho_parent_comm.ne.intra_bgrp_comm .and. nbgrp > 1) dm = dm/nbgrp
      !
      !  The matrix is hermitianized using upper triangle
@@ -976,8 +982,10 @@ CONTAINS
      COMPLEX(DP), ALLOCATABLE :: vtmp( :, : )
 
      ALLOCATE( vtmp( nx, nx ) )
-     !
+     !$acc data create(vtmp) copy(dm) present(v,w)
+     !$acc kernels
      vtmp = ZERO
+     !$acc end kernels
      !
      DO ipc = 1, idesc(LAX_DESC_NPC)
         !
@@ -1005,15 +1013,23 @@ CONTAINS
               !
               root = rank_ip( ipr, ipc )
 
-              CALL ZGEMM( 'C', 'N', nr, nc, kdim, ONE, v(1, ir), &
+              !$acc host_data use_device(v,w,vtmp)
+              CALL MYZGEMM( 'C', 'N', nr, nc, kdim, ONE, v(1, ir), &
                           kdmx, w(1,ii), kdmx, ZERO, vtmp, nx )
+              !$acc end host_data
+              !$acc kernels
               IF (ortho_parent_comm.ne.intra_bgrp_comm .and. nbgrp > 1) vtmp = vtmp/nbgrp
+              !$acc end kernels
               !
               IF(  (idesc(LAX_DESC_ACTIVE_NODE) > 0) .AND. &
                    (ipr-1 == idesc(LAX_DESC_MYR)) .AND. (ipc-1 == idesc(LAX_DESC_MYC)) ) THEN
+                 !$acc host_data use_device(vtmp,dm)
                  CALL mp_root_sum( vtmp(:,1:nc), dm(:,icc:icc+nc-1), root, ortho_parent_comm )
+                 !$acc end host_data
               ELSE
+                 !$acc host_data use_device(vtmp,dm)
                  CALL mp_root_sum( vtmp(:,1:nc), dm, root, ortho_parent_comm )
+                 !$acc end host_data
               END IF
 
            END DO
@@ -1021,10 +1037,11 @@ CONTAINS
         END IF
         !
      END DO
+     !$acc end data
+     DEALLOCATE( vtmp )
      !
      CALL laxlib_zsqmher( nbase+notcnv, dm, nx, idesc )
      !
-     DEALLOCATE( vtmp )
      RETURN
   END SUBROUTINE update_distmat
   !
@@ -1058,4 +1075,4 @@ CONTAINS
      RETURN
   END SUBROUTINE set_h_from_e
   !
-END SUBROUTINE pcegterg_gpu
+END SUBROUTINE pcegterg
