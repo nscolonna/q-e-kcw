@@ -281,7 +281,6 @@ SUBROUTINE pregterg(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
      CALL stop_clock( 'regterg:diag' )
      !
      e(1:nvec) = ew(1:nvec)
-     !$acc update device(e)
      !
   END IF
   !
@@ -436,7 +435,6 @@ SUBROUTINE pregterg(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
      notcnv = COUNT( .NOT. conv(:) )
      !
      e(1:nvec) = ew(1:nvec)
-     !$acc update device(e)
      !
      ! ... if overall convergence has been achieved, or the dimension of
      ! ... the reduced basis set is becoming too large, or in any case if
@@ -517,6 +515,7 @@ SUBROUTINE pregterg(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
      END IF
      !
   END DO iterate
+  !$acc update device(e)
   !
   DEALLOCATE( vl, hl, sl )
   !
@@ -544,7 +543,6 @@ SUBROUTINE pregterg(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   !call print_clock( 'regterg:update' )
   !call print_clock( 'regterg:overlap' )
   !call print_clock( 'regterg:last' )
-
   !
   RETURN
   !

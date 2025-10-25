@@ -19,8 +19,8 @@
 !  Wrapper for subroutine with distributed matrixes (written by Carlo Cavazzoni)
 !
 !----------------------------------------------------------------------------
-SUBROUTINE pcegterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &  
-                    npw, npwx, nvec, nvecx, npol, evc_d, ethr, &
+SUBROUTINE pcegterg(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &  
+                    npw, npwx, nvec, nvecx, npol, evc, ethr, &
                     e, btype, notcnv, lrot, dav_iter , nhpsi )
   !----------------------------------------------------------------------------
   !
@@ -50,7 +50,7 @@ SUBROUTINE pcegterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   INTEGER, PARAMETER :: blocksize = 256
   INTEGER :: numblock
     ! chunking parameters
-  COMPLEX(DP), INTENT(INOUT) :: evc_d(npwx*npol,nvec)
+  COMPLEX(DP), INTENT(INOUT) :: evc(npwx*npol,nvec)
     !  evc   contains the  refined estimates of the eigenvectors
   REAL(DP), INTENT(IN) :: ethr
     ! energy threshold for convergence: root improvement is stopped,
@@ -109,7 +109,8 @@ SUBROUTINE pcegterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   INTEGER :: np_ortho(2), ortho_parent_comm
   LOGICAL :: do_distr_diag_inside_bgrp
   !
-  REAL(DP), EXTERNAL :: ddot
+  REAL(DP), EXTERNAL :: MYDDOT_VECTOR_GPU 
+  !$acc routine(MYDDOT_VECTOR_GPU) vector
   !
   EXTERNAL  h_psi_ptr, s_psi_ptr, g_psi_ptr
     ! h_psi_ptr(npwx,npw,nvec,psi,hpsi)
@@ -234,9 +235,9 @@ SUBROUTINE pcegterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   conv   = .FALSE.
   !
   !$acc enter data create(psi, hpsi)
-  !$acc update host( evc_d)
+  !$acc update host( evc)
   !$acc kernels
-  psi(:,1:nvec) = evc_d(:,1:nvec)
+  psi(:,1:nvec) = evc(:,1:nvec)
   !$acc end kernels
   !$acc update host( psi)
   !
@@ -321,7 +322,6 @@ SUBROUTINE pcegterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
      !
      !$acc update device(psi, ew)
      CALL g_psi_ptr( npwx, npw, notcnv, npol, psi(1,nb1), ew(nb1) )
-     !$acc update host(psi)
      !
      ! ... "normalize" correction vectors psi(:,nb1:nbase+notcnv) in 
      ! ... order to improve numerical stability of subspace diagonalization 
@@ -329,26 +329,30 @@ SUBROUTINE pcegterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
      !
      ! ...         ew = <psi_i|psi_i>,  i = nbase + 1, nbase + notcnv
      !
+     !$acc parallel vector_length(96) 
+     !$acc loop gang private(nbn) 
      DO n = 1, notcnv
         !
         nbn = nbase + n
-        !
-        IF ( npol == 1 ) THEN
-           !
-           ew(n) = ddot( 2*npw, psi(1,nbn), 1, psi(1,nbn), 1 )
-           !
-        ELSE
-           !
-           ew(n) = ddot( 2*npw, psi(1,nbn), 1, psi(1,nbn), 1 ) + &
-                   ddot( 2*npw, psi(npwx+1,nbn), 1, psi(npwx+1,nbn), 1 )
-           !
-        END IF
+        ew(n) = MYDDOT_VECTOR_GPU( 2*npw, psi(1,nbn), psi(1,nbn) )
         !
      END DO
+     IF ( npol == 2 ) THEN
+        !$acc loop gang private(nbn) 
+        DO n = 1, notcnv
+           !
+           nbn = nbase + n
+           ew(n) = ew(n) + MYDDOT_VECTOR_GPU( 2*npw, psi(npwx+1,nbn), psi(npwx+1,nbn) )
+           !
+        END DO
+     END IF
+     !$acc end parallel
      !
+     !$acc host_data use_device(ew)
      CALL mp_sum( ew( 1:notcnv ), intra_bgrp_comm )
+     !$acc end host_data
      !
-     !$omp parallel do collapse(3)
+     !$acc parallel loop collapse(3)
      DO n = 1, notcnv
         DO ipol = 1, npol
            DO m = 1, numblock
@@ -360,11 +364,9 @@ SUBROUTINE pcegterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
            END DO
         END DO
      END DO
-     !$omp end parallel do
      !
      ! ... here compute the hpsi and spsi of the new functions
      !
-     !$acc update device(psi)
      CALL h_psi_ptr( npwx, npw, notcnv, psi(1,nb1), hpsi(1,nb1) ) ; nhpsi = nhpsi + notcnv
      !$acc update host(hpsi)
      !
@@ -412,6 +414,8 @@ SUBROUTINE pcegterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
 
      END IF
      !
+     !$acc update host(ew)
+     !$acc update host(psi)
      !
      CALL update_distmat( hl, psi, hpsi )
      !
@@ -475,7 +479,7 @@ SUBROUTINE pcegterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
         CALL start_clock( 'cegterg:last' )
         !
         CALL refresh_evc()
-        !$acc update device(evc_d)
+        !$acc update device(evc)
         !
         IF ( notcnv == 0 ) THEN
            !
@@ -500,7 +504,7 @@ SUBROUTINE pcegterg_gpu(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
         !
         ! ... refresh psi, H*psi and S*psi
         !
-        CALL threaded_memcpy(psi, evc_d, nvec*npol*npwx*2)
+        CALL threaded_memcpy(psi, evc, nvec*npol*npwx*2)
         !$acc update device(psi)
         !
         IF ( uspp ) THEN
@@ -768,14 +772,14 @@ CONTAINS
                  ! 
                  CALL mp_bcast( vl(:,1:nc), root, ortho_parent_comm )
                  CALL ZGEMM( 'N', 'N', kdim, nc, nr, ONE, &
-                          psi(1,ir), kdmx, vl, nx, beta, evc_d(1,ic), kdmx )
+                          psi(1,ir), kdmx, vl, nx, beta, evc(1,ic), kdmx )
               ELSE
                  !
                  !  all other procs receive
                  ! 
                  CALL mp_bcast( vtmp(:,1:nc), root, ortho_parent_comm )
                  CALL ZGEMM( 'N', 'N', kdim, nc, nr, ONE, &
-                          psi(1,ir), kdmx, vtmp, nx, beta, evc_d(1,ic), kdmx )
+                          psi(1,ir), kdmx, vtmp, nx, beta, evc(1,ic), kdmx )
               END IF
               ! 
 
@@ -1058,4 +1062,4 @@ CONTAINS
      RETURN
   END SUBROUTINE set_h_from_e
   !
-END SUBROUTINE pcegterg_gpu
+END SUBROUTINE pcegterg

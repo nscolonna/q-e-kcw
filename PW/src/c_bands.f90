@@ -736,19 +736,9 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
           !
           IF ( use_para_diag ) then
              !
-             IF (.not. use_gpu ) THEN
-                !
-                CALL pcegterg( h_psi, s_psi, okvan, g_psi, &
-                               npw, npwx, nbnd, nbndx, npol, evc, ethr, &
-                               et(1,ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
-                !
-             ELSE
-                !
-                CALL pcegterg_gpu( h_psi, s_psi, okvan, g_psi, &
-                               npw, npwx, nbnd, nbndx, npol, evc, ethr, &
-                               et(1, ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
-                !
-             END IF
+             CALL pcegterg ( h_psi, s_psi, okvan, g_psi, &
+                  npw, npwx, nbnd, nbndx, npol, evc, ethr, &
+                  et(1, ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
              !
           ELSE
              !
