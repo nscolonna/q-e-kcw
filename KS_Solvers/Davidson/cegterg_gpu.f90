@@ -157,6 +157,7 @@ SUBROUTINE pcegterg(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   IF( ierr /= 0 ) &
      CALL errore( ' pcegterg ',' cannot allocate hpsi ', ABS(ierr) )
   !
+  !$acc enter data create(psi, hpsi)
   IF ( uspp ) THEN
      ALLOCATE( spsi( npwx*npol, nvecx ), STAT=ierr )
      IF( ierr /= 0 ) &
@@ -234,21 +235,16 @@ SUBROUTINE pcegterg(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   nbase  = nvec
   conv   = .FALSE.
   !
-  !$acc enter data create(psi, hpsi)
-  !$acc update host( evc)
   !$acc kernels
   psi(:,1:nvec) = evc(:,1:nvec)
   !$acc end kernels
-  !$acc update host( psi)
   !
   ! ... hpsi contains h times the basis vectors
   !
   CALL h_psi_ptr( npwx, npw, nvec, psi, hpsi ) ; nhpsi = nhpsi + nvec
-  !$acc update host(hpsi)
   !
   IF ( uspp ) THEN
      CALL s_psi_ptr( npwx, npw, nvec, psi, spsi )
-     !$acc update host(spsi)
   END IF
   !
   ! ... hl contains the projection of the hamiltonian onto the reduced
@@ -302,6 +298,12 @@ SUBROUTINE pcegterg(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   !
   ! ... iterate
   !
+  !$acc update host( evc)
+  !$acc update host( psi)
+  !$acc update host(hpsi)
+  IF(uspp) THEN
+     !$acc update host(spsi)
+  END IF
   iterate: DO kter = 1, maxter
      !
      dav_iter = kter
@@ -928,8 +930,10 @@ CONTAINS
      COMPLEX(DP), ALLOCATABLE :: work( :, : )
      !
      ALLOCATE( work( nx, nx ) )
-     !
+     !$acc data create(work) present(v,w) copyout(dm)
+     !$acc kernels
      work = ZERO
+     !$acc end kernels
      !
      !  Only upper triangle is computed, then the matrix is hermitianized
      !
@@ -948,17 +952,18 @@ CONTAINS
            root = rank_ip( ipr, ipc )
 
            ! use blas subs. on the matrix block
-
-           CALL ZGEMM( 'C', 'N', nr, nc, kdim, ONE , &
+           !$acc host_data use_device(work,v,w)
+           CALL MYZGEMM( 'C', 'N', nr, nc, kdim, ONE , &
                        v(1,ir), kdmx, w(1,ic), kdmx, ZERO, work, nx )
-
+           !$acc end host_data
            ! accumulate result on dm of root proc.
-
+           !$acc host_data use_device(work,dm)
            CALL mp_root_sum( work, dm, root, ortho_parent_comm )
-
+           !$acc end host_data
         END DO
         !
      END DO
+     !$acc end data
      if (ortho_parent_comm.ne.intra_bgrp_comm .and. nbgrp > 1) dm = dm/nbgrp
      !
      !  The matrix is hermitianized using upper triangle
