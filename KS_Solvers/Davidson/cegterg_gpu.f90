@@ -370,11 +370,9 @@ SUBROUTINE pcegterg(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
      ! ... here compute the hpsi and spsi of the new functions
      !
      CALL h_psi_ptr( npwx, npw, notcnv, psi(1,nb1), hpsi(1,nb1) ) ; nhpsi = nhpsi + notcnv
-     !$acc update host(hpsi)
      !
      IF ( uspp ) THEN
         CALL s_psi_ptr( npwx, npw, notcnv, psi(1,nb1), spsi(1,nb1) )
-        !$acc update host(spsi)
      END IF
      !
      ! ... update the reduced hamiltonian
@@ -415,9 +413,6 @@ SUBROUTINE pcegterg(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
            CALL errore( ' pcegterg ',' cannot allocate vl ', ABS(ierr) )
 
      END IF
-     !
-     !$acc update host(ew)
-     !$acc update host(psi)
      !
      CALL update_distmat( hl, psi, hpsi )
      !
@@ -475,6 +470,13 @@ SUBROUTINE pcegterg(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
      ! ... we are at the last iteration refresh the basis set. i.e. replace
      ! ... the first nvec elements with the current estimate of the
      ! ... eigenvectors;  set the basis dimension to nvec.
+     !
+     !$acc update host(ew)
+     !$acc update host(psi)
+     !$acc update host(hpsi)
+     IF(uspp) THEN
+        !$acc update host(spsi)
+     END IF
      !
      IF ( notcnv == 0 .OR. nbase+notcnv > nvecx .OR. dav_iter == maxter ) THEN
         !
@@ -985,8 +987,10 @@ CONTAINS
      COMPLEX(DP), ALLOCATABLE :: vtmp( :, : )
 
      ALLOCATE( vtmp( nx, nx ) )
-     !
+     !$acc data create(vtmp) copy(dm) present(v,w)
+     !$acc kernels
      vtmp = ZERO
+     !$acc end kernels
      !
      DO ipc = 1, idesc(LAX_DESC_NPC)
         !
@@ -1013,16 +1017,22 @@ CONTAINS
               ir = irc_ip( ipr )
               !
               root = rank_ip( ipr, ipc )
-
-              CALL ZGEMM( 'C', 'N', nr, nc, kdim, ONE, v(1, ir), &
+              !$acc host_data use_device(v,w,vtmp)
+              CALL MYZGEMM( 'C', 'N', nr, nc, kdim, ONE, v(1, ir), &
                           kdmx, w(1,ii), kdmx, ZERO, vtmp, nx )
+              !$acc end host_data
+              !$acc kernels
               IF (ortho_parent_comm.ne.intra_bgrp_comm .and. nbgrp > 1) vtmp = vtmp/nbgrp
-              !
+              !$acc end kernels
               IF(  (idesc(LAX_DESC_ACTIVE_NODE) > 0) .AND. &
                    (ipr-1 == idesc(LAX_DESC_MYR)) .AND. (ipc-1 == idesc(LAX_DESC_MYC)) ) THEN
+                 !$acc host_data use_device(vtmp,dm)
                  CALL mp_root_sum( vtmp(:,1:nc), dm(:,icc:icc+nc-1), root, ortho_parent_comm )
+                 !$acc end host_data
               ELSE
+                 !$acc host_data use_device(vtmp,dm)
                  CALL mp_root_sum( vtmp(:,1:nc), dm, root, ortho_parent_comm )
+                 !$acc end host_data
               END IF
 
            END DO
@@ -1030,7 +1040,7 @@ CONTAINS
         END IF
         !
      END DO
-     !
+     !$acc end data
      CALL laxlib_zsqmher( nbase+notcnv, dm, nx, idesc )
      !
      DEALLOCATE( vtmp )
