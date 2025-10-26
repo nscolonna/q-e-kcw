@@ -10,8 +10,8 @@ MODFLAGS= $(MOD_FLAG) ../../LAXlib $(MOD_FLAG) ../../UtilXlib $(MOD_FLAG).
 DAVID = \
 cegterg.o \
 regterg.o \
-cegterg_gpu.o \
-regterg_gpu.o
+pcegterg.o \
+pregterg.o
 
 ifdef PGI_POWER_WORKAROUND
 # Circumvents bug in the Power implementation of PGI compilers
