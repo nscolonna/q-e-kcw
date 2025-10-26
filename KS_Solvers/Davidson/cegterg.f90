@@ -565,7 +565,7 @@ SUBROUTINE cegterg( h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
      !
      notcnv = COUNT( .NOT. conv(:) )
      !
-     !$acc host_data use_device(ew)
+     !$acc host_data use_device(ew,e)
      CALL dev_memcpy (e, ew, (/ 1, nvec /) )
      !$acc end host_data
      !
