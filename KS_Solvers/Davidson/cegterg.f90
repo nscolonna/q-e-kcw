@@ -275,14 +275,14 @@ SUBROUTINE cegterg( h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
         vc(n,n) = ONE
         !
      END DO
-     !
+     !$acc host_data use_device(e)
      CALL mp_bcast( e, root_bgrp_id, inter_bgrp_comm )
-     !
+     !$acc end host_data
   ELSE
      !
      ! ... diagonalize the reduced hamiltonian
      !
-     !$acc host_data use_device(hc, sc, vc, ew)
+     !$acc host_data use_device(hc, sc, vc, ew, e)
      CALL start_clock( 'cegterg:diag' )
      IF( my_bgrp_id == root_bgrp_id ) THEN
         CALL diaghg( nbase, nvec, hc, sc, nvecx, ew, vc, me_bgrp, root_bgrp, intra_bgrp_comm )
