@@ -506,14 +506,11 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
              !
           ELSE
              !
-             !$acc host_data use_device(et)
              CALL regterg (  h_psi, s_psi, okvan, g_psi, &
                       npw, npwx, nbnd, nbndx, evc, ethr, &
                       et(1, ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
-             !$acc end host_data
              !
           END IF
-          !$acc update self(et)
           !
           avg_iter = avg_iter + dav_iter
           !
@@ -742,14 +739,11 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
              !
           ELSE
              !
-             !$acc host_data use_device(et)
              CALL cegterg ( h_psi, s_psi, okvan, g_psi, &
                             npw, npwx, nbnd, nbndx, npol, evc, ethr, &
                             et(1, ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
-             !$acc end host_data 
              !
           END IF
-          !$acc update self(et)
           !
           avg_iter = avg_iter + dav_iter
           !

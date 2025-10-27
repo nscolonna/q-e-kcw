@@ -111,8 +111,6 @@ SUBROUTINE regterg(  h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   !
   CALL start_clock( 'regterg' ) !; write(6,*) 'enter regterg' ; FLUSH(6)
   ! 
-  !$acc data deviceptr(e)
-  !
   IF ( nvec > nvecx / 2 ) CALL errore( 'regter', 'nvecx is too small', 1 )
   !
   IF ( gstart == -1 ) CALL errore( 'regter', 'gstart variable not initialized', 1 )
@@ -622,7 +620,7 @@ SUBROUTINE regterg(  h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   DEALLOCATE( hpsi )
   DEALLOCATE( psi )  
   !
-  !$acc end data
+  !$acc update host(e)
   !
   CALL stop_clock( 'regterg' )
   !call print_clock( 'regterg' )

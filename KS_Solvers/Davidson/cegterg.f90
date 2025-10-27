@@ -120,8 +120,6 @@ SUBROUTINE cegterg( h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   nhpsi = 0
   CALL start_clock( 'cegterg' ); !write(*,*) 'start cegterg' ; FLUSH(6)
   !
-  !$acc data deviceptr(e)
-  !
   IF ( nvec > nvecx / 2 ) CALL errore( 'cegterg', 'nvecx is too small', 1 )
   !
   ! ... threshold for empty bands
@@ -277,14 +275,14 @@ SUBROUTINE cegterg( h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
         vc(n,n) = ONE
         !
      END DO
-     !
+     !$acc host_data use_device(e)
      CALL mp_bcast( e, root_bgrp_id, inter_bgrp_comm )
-     !
+     !$acc end host_data
   ELSE
      !
      ! ... diagonalize the reduced hamiltonian
      !
-     !$acc host_data use_device(hc, sc, vc, ew)
+     !$acc host_data use_device(hc, sc, vc, ew, e)
      CALL start_clock( 'cegterg:diag' )
      IF( my_bgrp_id == root_bgrp_id ) THEN
         CALL diaghg( nbase, nvec, hc, sc, nvecx, ew, vc, me_bgrp, root_bgrp, intra_bgrp_comm )
@@ -567,7 +565,7 @@ SUBROUTINE cegterg( h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
      !
      notcnv = COUNT( .NOT. conv(:) )
      !
-     !$acc host_data use_device(ew)
+     !$acc host_data use_device(ew,e)
      CALL dev_memcpy (e, ew, (/ 1, nvec /) )
      !$acc end host_data
      !
@@ -686,7 +684,7 @@ SUBROUTINE cegterg( h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   DEALLOCATE( hpsi )
   DEALLOCATE( psi )
   !
-  !$acc end data 
+  !$acc update host(e)
   !
   CALL stop_clock( 'cegterg' ); !write(*,*) 'stop cegterg' ; FLUSH(6)
   !call print_clock( 'cegterg' )
