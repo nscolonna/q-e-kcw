@@ -110,15 +110,15 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
    USE dv_of_drho_lr,        ONLY : dv_of_drho
    USE lr_nc_mag,            ONLY : int3_nc_save
    USE apply_dpot_mod,       ONLY : apply_dpot_allocate, apply_dpot_deallocate
-   USE dfpt_type,            ONLY : dfpt_data_type, dfpt_dvscfp_to_dvscfs
+   USE dfpt_type,            ONLY : dfpt_data_type, dfpt_dvscfp_to_dvscfs, &
+                                    dfpt_ldos_type, allocate_dfpt_ldos, deallocate_dfpt_ldos
    USE response_kernels,     ONLY : sternheimer_kernel, sternheimer_kernel_freq, &
                                     sternheimer_postprocess
    USE two_chem,             ONLY : twochem
    USE lr_restart,           ONLY : write_rec_interface
    USE lr_two_chem,          ONLY : allocate_twochem, deallocate_twochem, &
                                     sternheimer_kernel_twochem, dbecsum_cond, &
-                                    dbecsum_cond_nc, drhos_cond, ldoss_cond, &
-                                    ef_shift_wfc_twochem
+                                    dbecsum_cond_nc, drhos_cond, ef_shift_wfc_twochem
    !
    IMPLICIT NONE
    !
@@ -153,17 +153,14 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
    REAL(DP) :: thresh, averlt
    ! thresh: convergence threshold
    ! averlt: average number of iterations
-   REAL(DP) :: dos_ef
-   !! dos_ef: density of states at Ef
+   TYPE(dfpt_ldos_type) :: ldos_data
+   !! Local density of states at Ef (encapsulates ldos, ldoss, becsum_dos, dos_ef)
    COMPLEX(DP), ALLOCATABLE :: dvscftmp(:, :, :)
    !! change of scf potential (output before mixing)
-   COMPLEX(DP), ALLOCATABLE :: ldos (:,:), ldoss (:,:), mixin(:), mixout(:)
+   COMPLEX(DP), ALLOCATABLE :: mixin(:), mixout(:)
    ! Misc work space
-   ! ldos : local density of states af Ef
-   ! ldoss: as above, without augmentation charges
    COMPLEX(DP), ALLOCATABLE :: dbecsum_nc(:,:,:,:,:), dbecsum_nc_trev(:,:,:,:,:)
    ! dbecsum: the derivative of becsum
-   REAL(DP), ALLOCATABLE :: becsum1(:,:,:)
    !
    LOGICAL :: all_conv
    !! True if sternheimer_kernel is converged at all k points and perturbations
@@ -231,11 +228,8 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
    !
    lmetq0 = (lgauss .OR. ltetra) .AND. lgamma
    IF (lmetq0) THEN
-      ALLOCATE(ldos(dfftp%nnr, nspin_mag))
-      ALLOCATE(ldoss(dffts%nnr, nspin_mag))
-      ALLOCATE(becsum1((nhm * (nhm + 1))/2 , nat , nspin_mag))
-      CALL localdos(ldos, ldoss, becsum1, dos_ef)
-      IF (.NOT. okpaw) DEALLOCATE(becsum1)
+      CALL allocate_dfpt_ldos(ldos_data)
+      CALL localdos_wrapper(ldos_data)
    endif
    !
    IF (twochem) CALL allocate_twochem(npert, nsolv)
@@ -353,23 +347,13 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
       ! response HXC potential) and to the response occupation matrices.
       !
       IF (lmetq0 .AND. (.NOT. twochem)) THEN
-         IF (okpaw) THEN
-            CALL ef_shift_new(dos_ef, ldos, ldoss, dfpt_data, becsum1)
-         ELSE
-            CALL ef_shift_new(dos_ef, ldos, ldoss, dfpt_data)
-         ENDIF
+         CALL ef_shift_new(ldos_data, dfpt_data)
       ENDIF
       !
       ! Post processing for the case of two chemical potentials
       !
       IF (twochem) THEN
-         IF (okpaw) THEN
-            CALL twochem_postproc_dfpt(npert, nsolv, imode0, lmetq0, &
-                  dos_ef, ldos, ldoss, dfpt_data, becsum1)
-         ELSE
-            CALL twochem_postproc_dfpt(npert, nsolv, imode0, lmetq0, &
-                  dos_ef, ldos, ldoss, dfpt_data)
-         ENDIF
+         CALL twochem_postproc_dfpt(npert, nsolv, imode0, lmetq0, ldos_data, dfpt_data)
       ENDIF
       !
       !   After the loop over the perturbations we have the linear change
@@ -517,7 +501,7 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
       IF (.NOT. twochem) THEN
          CALL ef_shift_wfc_new(dfpt_data)
       ELSE
-         CALL ef_shift_wfc_twochem(npert, ldoss, ldoss_cond, dfpt_data%drhos)
+         CALL ef_shift_wfc_twochem(npert, ldos_data, dfpt_data%drhos)
       ENDIF
       !
    ENDIF ! lmetq0
@@ -534,9 +518,7 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
    DEALLOCATE(mixout)
    !
    IF (lmetq0) THEN
-      DEALLOCATE(ldoss)
-      DEALLOCATE(ldos)
-      IF (okpaw) DEALLOCATE(becsum1)
+      CALL deallocate_dfpt_ldos(ldos_data)
    ENDIF
    !
    IF (twochem) CALL deallocate_twochem()

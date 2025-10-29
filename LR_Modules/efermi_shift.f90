@@ -218,43 +218,35 @@ SUBROUTINE ef_shift_wfc(npert, ldoss, drhoscf)
 END SUBROUTINE ef_shift_wfc
 !-------------------------------------------------------------------------
 !-----------------------------------------------------------------------
-SUBROUTINE ef_shift_new(dos_ef, ldos, ldoss, dfpt_data, becsum1)
+SUBROUTINE ef_shift_new(ldos_data, dfpt_data)
   !-----------------------------------------------------------------------
   !! This routine takes care of the effects of a shift of Ef, due to the
   !! perturbation, that can take place in a metal at q=0
-  !! Optionally, update dbecsum using becsum1.
+  !! Optionally, update dbecsum using becsum_dos from ldos_data.
   !
   USE kinds,                ONLY : DP
   USE mp_bands,             ONLY : intra_bgrp_comm
   USE mp,                   ONLY : mp_sum
   USE io_global,            ONLY : stdout
-  USE ions_base,            ONLY : nat
   USE cell_base,            ONLY : omega
   USE fft_base,             ONLY : dffts, dfftp
   USE fft_interfaces,       ONLY : fwfft, invfft
   USE gvect,                ONLY : gg
-  USE uspp_param,           ONLY : nhm
   USE noncollin_module,     ONLY : nspin_mag, nspin_lsda
-  USE dfpt_type,            ONLY : dfpt_data_type
+  USE dfpt_type,            ONLY : dfpt_data_type, dfpt_ldos_type
   !
   IMPLICIT NONE
   !
   ! input/output variables
   !
-  REAL(DP), INTENT(IN) :: dos_ef
-  !! density of states at Ef
-  COMPLEX(DP), INTENT(IN) :: ldos(dfftp%nnr, nspin_mag)
-  !! local DOS at Ef (with augmentation)
-  COMPLEX(DP), INTENT(IN) :: ldoss(dffts%nnr, nspin_mag)
-  !! local DOS at Ef without augmentation
+  TYPE(dfpt_ldos_type), INTENT(IN) :: ldos_data
+  !! Local density of states at Ef
+  !! Contains: dos_ef, ldos, ldoss, becsum_dos
   TYPE(dfpt_data_type), INTENT(INOUT) :: dfpt_data
   !! Data that describes linear response quantities
-  !! input/output: dfpt_data%drhop += def * ldos
+  !! input/output: dfpt_data%drhop += def * ldos_data%ldos
   !! input:  dfpt_data%dbecsum = 2 <psi|beta> <beta|dpsi>
-  !! output: dfpt_data%dbecsum = 2 <psi|beta> <beta|dpsi> + def * becsum1
-  REAL(DP), INTENT(IN), OPTIONAL :: becsum1((nhm*(nhm+1))/2, nat, nspin_mag)
-  !! becsum1 = wdelta * <psi|beta> <beta|psi>
-  !! (where wdelta is a Dirac-delta-like function)
+  !! output: dfpt_data%dbecsum = 2 <psi|beta> <beta|dpsi> + def * ldos_data%becsum_dos
   !
   INTEGER :: is
   !! counter on spin polarizations
@@ -281,8 +273,8 @@ SUBROUTINE ef_shift_new(dos_ef, ldos, ldoss, dfpt_data, becsum1)
      ! Add first term of Eq.(79) of Baroni et al, RMP 73, 515 (2001)
      delta_n = delta_n + dfpt_data%dn0(ipert)
      !
-     IF ( ABS(dos_ef) > 1.d-18 ) THEN
-        dfpt_data%def (ipert) = - delta_n / dos_ef
+     IF ( ABS(ldos_data%dos_ef) > 1.d-18 ) THEN
+        dfpt_data%def (ipert) = - delta_n / ldos_data%dos_ef
      ELSE
         dfpt_data%def (ipert) = 0.0_dp
      ENDIF
@@ -298,16 +290,16 @@ SUBROUTINE ef_shift_new(dos_ef, ldos, ldoss, dfpt_data, becsum1)
   ! corrects the density response accordingly...
   !
   DO ipert = 1, dfpt_data%npert
-     CALL zaxpy(dffts%nnr*nspin_mag, dfpt_data%def(ipert), ldoss, 1, dfpt_data%drhos(1,1,ipert), 1)
-     CALL zaxpy(dfftp%nnr*nspin_mag, dfpt_data%def(ipert), ldos,  1, dfpt_data%drhop(1,1,ipert), 1)
+     CALL zaxpy(dffts%nnr*nspin_mag, dfpt_data%def(ipert), ldos_data%ldoss, 1, dfpt_data%drhos(1,1,ipert), 1)
+     CALL zaxpy(dfftp%nnr*nspin_mag, dfpt_data%def(ipert), ldos_data%ldos,  1, dfpt_data%drhop(1,1,ipert), 1)
   ENDDO
   !
   ! In the PAW case there is also a metallic term
   !
-  IF (ALLOCATED(dfpt_data%dbecsum) .AND. PRESENT(becsum1)) THEN
+  IF (ALLOCATED(dfpt_data%dbecsum) .AND. ALLOCATED(ldos_data%becsum_dos)) THEN
      DO ipert = 1, dfpt_data%npert
         dfpt_data%dbecsum(:,:,:,ipert) = dfpt_data%dbecsum(:,:,:,ipert) &
-           + dfpt_data%def(ipert) * CMPLX(becsum1(:,:,:), 0.0_DP, KIND=DP)
+           + dfpt_data%def(ipert) * CMPLX(ldos_data%becsum_dos(:,:,:), 0.0_DP, KIND=DP)
      ENDDO
   ENDIF
   !

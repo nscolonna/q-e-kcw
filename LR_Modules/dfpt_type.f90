@@ -54,6 +54,27 @@ MODULE dfpt_type
       !! Size ((nhm * (nhm + 1))/2, nat, nspin_mag, npert)
    END TYPE dfpt_data_type
    !
+   ! Data that describes local density of states at the Fermi level.
+   !
+   TYPE :: dfpt_ldos_type
+      !! Local density of states (LDOS) at Fermi energy
+      REAL(DP) :: dos_ef
+      !! Total (integrated) density of states at Ef
+      COMPLEX(DP), ALLOCATABLE :: ldoss(:, :)
+      !! Local DOS at Ef (smooth part only, dffts)
+      !! Contains only wavefunction contributions, no augmentation
+      COMPLEX(DP), ALLOCATABLE :: ldos(:, :)
+      !! Local DOS at Ef (smooth and hard parts, dfftp)
+      !! Includes augmentation contributions from becsum_dos
+      REAL(DP), ALLOCATABLE :: becsum_dos(:, :, :)
+      !! Augmentation occupancy contribution to LDOS at Ef
+      !! Size: ((nhm * (nhm + 1))/2, nat, nspin_mag)
+      !! Only used for USPP and PAW
+      !! For USPP, only used inside localdos, and then deallocated.
+      !! For PAW, stored and used in dfpt_kernel as well.
+      !! NOTE: Real-valued (unlike dbecsum in dfpt_data_type which is complex)
+   END TYPE dfpt_ldos_type
+   !
    CONTAINS
    !
    !---------------------------------------------------------------------------
@@ -135,6 +156,35 @@ MODULE dfpt_type
    !---------------------------------------------------------------------------
    !
    !---------------------------------------------------------------------------
+   SUBROUTINE allocate_dfpt_ldos(ldos_data)
+      !! Allocate arrays for LDOS calculation
+      !
+      USE fft_base,             ONLY : dfftp, dffts
+      USE noncollin_module,     ONLY : nspin_mag
+      USE uspp_param,           ONLY : nhm
+      USE ions_base,            ONLY : nat
+      !
+      IMPLICIT NONE
+      !
+      TYPE(dfpt_ldos_type), INTENT(OUT) :: ldos_data
+      !
+      ! Initialize scalar
+      ldos_data%dos_ef = 0.d0
+      !
+      ! Allocate grid quantities
+      ALLOCATE(ldos_data%ldoss(dffts%nnr, nspin_mag))
+      ALLOCATE(ldos_data%ldos(dfftp%nnr, nspin_mag))
+      ldos_data%ldoss = (0.d0, 0.d0)
+      ldos_data%ldos = (0.d0, 0.d0)
+      !
+      ! Always allocate becsum_dos for consistency
+      ALLOCATE(ldos_data%becsum_dos((nhm * (nhm + 1))/2, nat, nspin_mag))
+      ldos_data%becsum_dos = 0.d0
+      !
+   END SUBROUTINE allocate_dfpt_ldos
+   !---------------------------------------------------------------------------
+   !
+   !---------------------------------------------------------------------------
    SUBROUTINE deallocate_dfpt_data(dfpt_data)
       !
       TYPE(dfpt_data_type), INTENT(INOUT) :: dfpt_data
@@ -151,5 +201,20 @@ MODULE dfpt_type
       IF (ALLOCATED(dfpt_data%dbecsum_pulay)) DEALLOCATE(dfpt_data%dbecsum_pulay)
       !
    END SUBROUTINE deallocate_dfpt_data
+   !---------------------------------------------------------------------------
+   !
+   !---------------------------------------------------------------------------
+   SUBROUTINE deallocate_dfpt_ldos(ldos_data)
+      !! Deallocate LDOS data structure
+      !
+      IMPLICIT NONE
+      !
+      TYPE(dfpt_ldos_type), INTENT(INOUT) :: ldos_data
+      !
+      IF (ALLOCATED(ldos_data%ldoss)) DEALLOCATE(ldos_data%ldoss)
+      IF (ALLOCATED(ldos_data%ldos)) DEALLOCATE(ldos_data%ldos)
+      IF (ALLOCATED(ldos_data%becsum_dos)) DEALLOCATE(ldos_data%becsum_dos)
+      !
+   END SUBROUTINE deallocate_dfpt_ldos
    !---------------------------------------------------------------------------
 END MODULE dfpt_type
