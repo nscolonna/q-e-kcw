@@ -194,6 +194,13 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
    nsolv = 1
    IF ((noncolin .AND. domag) .OR. finite_freq) nsolv = 2
    !
+   IF (twochem .AND. (noncolin .AND. domag)) CALL errore('dfpt_kernel', &
+      'DFPT with twochem and noncollinear magnetism is not implemented', 1)
+   IF (twochem .AND. finite_freq) CALL errore('dfpt_kernel', &
+      'DFPT with twochem and finite frequency is not implemented', 1)
+   IF ((noncolin .AND. domag) .AND. finite_freq) CALL errore('dfpt_kernel', &
+      'DFPT with noncollinear magnetism and finite frequency is not implemented', 1)
+   !
    CALL apply_dpot_allocate()
    !
    ALLOCATE(dvscftmp(dfftp%nnr, nspin_mag, npert))
@@ -300,13 +307,19 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
                      thresh, dfpt_data%dvscfs, all_conv, averlt, dfpt_data%drhos, dfpt_data%dbecsum, &
                      dbecsum_nc_trev)
                ENDIF
+               !
             ELSE
                !
                ! Sternheimer kernel for the twochem case
                !
                CALL sternheimer_kernel_twochem(first_iter, isolv==2, npert, lrdvpsi, iudvpsi, &
                   thresh, dfpt_data%dvscfs, all_conv, averlt, dfpt_data%drhos, dfpt_data%dbecsum, &
-                  dbecsum_nc(:,:,:,:,:,isolv), drhos_cond, dbecsum_cond, dbecsum_cond_nc)
+                  dbecsum_nc, drhos_cond, dbecsum_cond, dbecsum_cond_nc)
+               !
+               IF (isolv == 2) THEN
+                  CALL errore("dfpt_kernel", "DFPT with twochem and noncollinear magnetism is not implemented", 1)
+               ENDIF
+               !
             ENDIF
             !
          ENDDO ! isolv

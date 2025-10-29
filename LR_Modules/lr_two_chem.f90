@@ -270,6 +270,12 @@ subroutine localdos_cond (ldos, ldoss, becsum1, dos_ef)
   !    Note: this routine use psic as auxiliary variable. it should alread
   !          be defined
   !
+  !    Note: For the twochem case, localdos_cond uses the conduction Fermi level and loops
+  !          only over the conduction bands. In contrast, localdos uses the valence Fermi
+  !          level and loops over all bands (not just the valence bands). This is to
+  !          minimize modification of the ordinary (non-twochem) code, and is fine because
+  !          conduction bands will have negligible occupation with the valence Fermi level.
+  !
   !    NB: this routine works only with gamma
   !
   !

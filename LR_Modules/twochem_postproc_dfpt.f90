@@ -23,7 +23,8 @@ SUBROUTINE twochem_postproc_dfpt(npe, nsolv, imode0, lmetq0, dos_ef, ldos, ldoss
    USE dfpt_type,            ONLY : dfpt_data_type
    !
    USE two_chem,             ONLY : twochem
-   USE lr_two_chem
+   USE lr_two_chem,          ONLY : drhos_cond, drhop_cond, dbecsum_cond, dbecsum_cond_nc, &
+                                    becsum1_cond, dos_ef_cond, ldos_cond, ef_shift_twochem
    !
    IMPLICIT NONE
    !

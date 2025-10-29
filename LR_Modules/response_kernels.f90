@@ -558,6 +558,8 @@ SUBROUTINE sternheimer_kernel_freq(first_iter, time_reversed, npert, lrdvpsi, iu
          ! iterative solution of the linear system (H-e)*dpsi=dvpsi
          ! dvpsi=-P_c+ (dvbare+dvscf)*psi , dvscf fixed.
          !
+         ! First Sternheimer with +omega, input dvpsi1 and h_diag1, output dpsi1
+         !
          conv_root = .TRUE.
          !
          CALL ccgsolve_all(ch_psi_all_complex, ccg_psi, et(1, ikmk), dvpsi1, dpsi1, &
@@ -572,6 +574,8 @@ SUBROUTINE sternheimer_kernel_freq(first_iter, time_reversed, npert, lrdvpsi, iu
             WRITE( stdout, "(5x, 'kpoint', i4, ' sternheimer_kernel: &
                &root not converged, thresh < ', es10.3)") ik, anorm
          ENDIF
+         !
+         ! Second Sternheimer with -omega, input dvpsi2 and h_diag2, output dpsi2
          !
          conv_root = .TRUE.
          !
