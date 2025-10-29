@@ -155,7 +155,7 @@ inputs_args = ('SiC.scf.in', '1'), ('SiC.phG.restart1.in', '2'), ('SiC.phG.resta
 
 [ph_twochem/]
 program = PH
-inputs_args = ('scf_twochem.in', '1'), ('phG_twochem.in','11') 
+inputs_args = ('scf_twochem.in', '1'), ('phG_twochem.in','11'), ('scf2.in', '1'), ('phG2.in','11')
 
 [ph_multipole/]
 program = PH

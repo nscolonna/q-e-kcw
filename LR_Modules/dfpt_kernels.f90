@@ -113,8 +113,11 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
    USE dfpt_type,            ONLY : dfpt_data_type, dfpt_dvscfp_to_dvscfs
    USE response_kernels,     ONLY : sternheimer_kernel
    USE two_chem,             ONLY : twochem
-   USE lr_two_chem,          ONLY : allocate_twochem, deallocate_twochem
    USE lr_restart,           ONLY : write_rec_interface
+   USE lr_two_chem,          ONLY : allocate_twochem, deallocate_twochem, &
+                                    sternheimer_kernel_twochem, dbecsum_cond, &
+                                    dbecsum_cond_nc, drhos_cond, ldoss_cond, &
+                                    ef_shift_wfc_twochem
    !
    IMPLICIT NONE
    !
@@ -235,6 +238,12 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
       dfpt_data%dbecsum = (0.d0, 0.d0)
       IF (noncolin) dbecsum_nc = (0.d0, 0.d0)
       !
+      IF (lmetq0 .AND. twochem) THEN
+         drhos_cond = (0.d0, 0.d0)
+         dbecsum_cond = (0.d0, 0.d0)
+         IF (noncolin) dbecsum_cond_nc = (0.d0, 0.d0)
+      ENDIF
+      !
       ! DFPT+U: at each ph iteration calculate dnsscf,
       ! i.e. the scf variation of the occupation matrix ns.
       !
@@ -254,9 +263,21 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
          !
          ! Compute drhos, the charge density response to the total potential
          !
-         CALL sternheimer_kernel(first_iter, isolv==2, npert, lrdvpsi, iudvpsi, &
-            thresh, dfpt_data%dvscfs, all_conv, averlt, dfpt_data%drhos, dfpt_data%dbecsum, &
-            dbecsum_nc(:,:,:,:,:,isolv))
+         IF (.NOT. (twochem .AND. lmetq0)) then
+            !
+            ! Sternheimer kernel for the normal case
+            !
+            CALL sternheimer_kernel(first_iter, isolv==2, npert, lrdvpsi, iudvpsi, &
+               thresh, dfpt_data%dvscfs, all_conv, averlt, dfpt_data%drhos, dfpt_data%dbecsum, &
+               dbecsum_nc(:,:,:,:,:,isolv))
+         ELSE
+            !
+            ! Sternheimer kernel for the twochem case
+            !
+            CALL sternheimer_kernel_twochem(first_iter, isolv==2, npert, lrdvpsi, iudvpsi, &
+               thresh, dfpt_data%dvscfs, all_conv, averlt, dfpt_data%drhos, dfpt_data%dbecsum, &
+               dbecsum_nc(:,:,:,:,:,isolv), drhos_cond, dbecsum_cond, dbecsum_cond_nc)
+         ENDIF
          !
       ENDDO ! isolv
       !
@@ -335,7 +356,7 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
       ! This term is added to the response charge density (in order to obtain correct
       ! response HXC potential) and to the response occupation matrices.
       !
-      IF (lmetq0) THEN
+      IF (lmetq0 .AND. (.NOT. twochem)) THEN
          IF (okpaw) THEN
             CALL ef_shift_new(dos_ef, ldos, ldoss, dfpt_data, becsum1)
          ELSE
@@ -343,15 +364,15 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
          ENDIF
       ENDIF
       !
-      ! Repeat the above for the case of two chemical potentials
+      ! Post processing for the case of two chemical potentials
       !
       IF (twochem) THEN
          IF (okpaw) THEN
             CALL twochem_postproc_dfpt(npert, nsolv, imode0, lmetq0, &
-                  convt, dos_ef, ldos, ldoss, dfpt_data, becsum1)
+                  dos_ef, ldos, ldoss, dfpt_data, becsum1)
          ELSE
             CALL twochem_postproc_dfpt(npert, nsolv, imode0, lmetq0, &
-                  convt, dos_ef, ldos, ldoss, dfpt_data)
+                  dos_ef, ldos, ldoss, dfpt_data)
          ENDIF
       ENDIF
       !
@@ -493,7 +514,11 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
       ! Update the response wavefunction (dpsi, stored in buffer iudwf).
       ! Also update drhos. (drhop is updated by ef_shift.)
       !
-      CALL ef_shift_wfc_new(dfpt_data)
+      IF (.NOT. twochem) THEN
+         CALL ef_shift_wfc_new(dfpt_data)
+      ELSE
+         CALL ef_shift_wfc_twochem(npert, ldoss, ldoss_cond, dfpt_data%drhos)
+      ENDIF
       !
    ENDIF ! lmetq0
    !

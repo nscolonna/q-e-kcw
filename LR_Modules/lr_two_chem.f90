@@ -1289,7 +1289,7 @@ SUBROUTINE sternheimer_kernel_twochem(first_iter, time_reversed, npert, lrdvpsi,
    !! True if converged at all k points and perturbations
    REAL(DP), INTENT(OUT) :: avg_iter
    !! average number of iterations for the linear equation solver
-   COMPLEX(DP), POINTER, INTENT(IN) :: dvscfins(:, :, :)
+   COMPLEX(DP), INTENT(IN) :: dvscfins(dffts%nnr, nspin_mag, npert)
    !! dV_ind calculated in the previous iteration
    COMPLEX(DP), INTENT(INOUT) :: drhoout(dffts%nnr, nspin_mag, npert)
    !! induced charge density
