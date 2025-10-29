@@ -6,7 +6,7 @@
 ! or http://www.gnu.org/copyleft/gpl.txt .
 !
 !-----------------------------------------------------------------------
-SUBROUTINE twochem_postproc_dfpt(npe, nsolv, imode0, lmetq0, convt, dos_ef, ldos, ldoss, &
+SUBROUTINE twochem_postproc_dfpt(npe, nsolv, imode0, lmetq0, dos_ef, ldos, ldoss, &
                                  drhop, dbecsum, becsum1)
    USE kinds,                ONLY : DP
    USE mp,                   ONLY : mp_sum
@@ -30,7 +30,6 @@ SUBROUTINE twochem_postproc_dfpt(npe, nsolv, imode0, lmetq0, convt, dos_ef, ldos
    INTEGER, INTENT(in) :: nsolv
    INTEGER, INTENT(in) :: imode0
    LOGICAL, INTENT(in) :: lmetq0
-   LOGICAL, INTENT(in) :: convt
    REAL(DP), INTENT(in) :: dos_ef
    COMPLEX(DP), INTENT(in) :: ldos(dfftp%nnr, nspin_mag)
    COMPLEX(DP), INTENT(in) :: ldoss(dffts%nnr, nspin_mag)
@@ -99,7 +98,5 @@ SUBROUTINE twochem_postproc_dfpt(npe, nsolv, imode0, lmetq0, convt, dos_ef, ldos
                                          drhop_cond)
       ENDIF
    ENDIF
-   !
-   IF (lmetq0 .AND. convt) CALL ef_shift_wfc_twochem(npe, ldoss, ldoss_cond, drhop)
    !
 END SUBROUTINE twochem_postproc_dfpt
