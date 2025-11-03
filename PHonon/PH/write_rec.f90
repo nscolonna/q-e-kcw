@@ -91,7 +91,6 @@ CONTAINS
 
     CLOSE (UNIT = iunrec, STATUS = 'keep')
 
-    rec_code = 0
     CALL stop_clock ('write_rec')
 
     RETURN
