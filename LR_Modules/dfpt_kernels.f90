@@ -11,7 +11,7 @@ MODULE dfpt_kernels
 IMPLICIT NONE
 CONTAINS
 SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
-                       irr, imode0, write_rec_callback, w_freq)
+                       irr, imode0, write_rec_callback, stop_callback, w_freq)
    !------------------------------------------------------------------------------
    !! Driver routine for the solution of the linear system that computes the change
    !! of the electron density due to a generic perturbation to the Hamiltonian.
@@ -115,7 +115,7 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
    USE response_kernels,     ONLY : sternheimer_kernel, sternheimer_kernel_freq, &
                                     sternheimer_postprocess
    USE two_chem,             ONLY : twochem
-   USE lr_restart,           ONLY : write_rec_interface
+   USE lr_restart,           ONLY : write_rec_interface, stop_callback_interface
    USE lr_two_chem,          ONLY : allocate_twochem, deallocate_twochem, &
                                     sternheimer_kernel_twochem, dbecsum_cond, &
                                     dbecsum_cond_nc, drhos_cond, ef_shift_wfc_twochem
@@ -138,6 +138,8 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
    !! Data that describes linear response quantities
    PROCEDURE(write_rec_interface), OPTIONAL :: write_rec_callback
    !! Callback subroutine for restart checkpointing
+   PROCEDURE(stop_callback_interface), OPTIONAL :: stop_callback
+   !! Callback subroutine for graceful stop
    COMPLEX(DP), INTENT(IN), OPTIONAL :: w_freq
    !! Frequency for finite-frequency DFPT.
    !
@@ -472,8 +474,7 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
          CALL write_rec_callback(where_rec, irr, dr2, iter, convt, dfpt_data)
       ENDIF
       !
-      ! FIXME: Enable this. (Problem is that stop_smoothly_ph lives in PH/)
-      ! IF (check_stop_now()) CALL stop_smoothly_ph(.FALSE.)
+      IF (check_stop_now() .AND. PRESENT(stop_callback)) CALL stop_callback(.FALSE.)
       !
       IF (convt) EXIT
       !

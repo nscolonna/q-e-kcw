@@ -75,6 +75,8 @@ SUBROUTINE solve_linter (irr, imode0, dfpt_data)
   !
   IMPLICIT NONE
   !
+  EXTERNAL :: stop_smoothly_ph
+  !
   integer :: irr
   !! input: the irreducible representation
   integer :: imode0
@@ -251,7 +253,8 @@ SUBROUTINE solve_linter (irr, imode0, dfpt_data)
   !
   !    Solve DFPT fixed-point equation
   !
-  CALL dfpt_kernel('PHONON', npe, iter0, lrbar, iubar, dr2, dfpt_data, irr, imode0, write_rec_callback = write_rec)
+  CALL dfpt_kernel('PHONON', npe, iter0, lrbar, iubar, dr2, dfpt_data, irr, imode0, &
+                   write_rec_callback = write_rec, stop_callback = stop_smoothly_ph)
   !
 155 CONTINUE
   !

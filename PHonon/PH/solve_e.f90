@@ -55,6 +55,8 @@ subroutine solve_e
   !
   IMPLICIT NONE
   !
+  EXTERNAL :: stop_smoothly_ph
+  !
   LOGICAL :: exst
   !!
   INTEGER :: ikk, npw, iter0, ipol, ik
@@ -128,7 +130,8 @@ subroutine solve_e
   !
   !   Solve DFPT fixed-point equation
   !
-  CALL dfpt_kernel('PHONON', 3, iter0, lrebar, iuebar, dr2, dfpt_data, 1, 0, write_rec_callback = write_rec)
+  CALL dfpt_kernel('PHONON', 3, iter0, lrebar, iuebar, dr2, dfpt_data, 1, 0, &
+                   write_rec_callback = write_rec, stop_callback = stop_smoothly_ph)
   !
   IF (lda_plus_u) CALL dnsq_store(3, 0)
   !

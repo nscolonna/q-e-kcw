@@ -23,5 +23,11 @@ MODULE lr_restart
          TYPE(dfpt_data_type), INTENT(INOUT) :: dfpt_data
       END SUBROUTINE write_rec_interface
       !--------------------------------------------------------------------------
+      SUBROUTINE stop_callback_interface( flag )
+         !! This routine is called to stop the calculation gracefully.
+         IMPLICIT NONE
+         LOGICAL, INTENT(IN) :: flag
+      END SUBROUTINE stop_callback_interface
+      !--------------------------------------------------------------------------
    END INTERFACE
 END MODULE lr_restart
