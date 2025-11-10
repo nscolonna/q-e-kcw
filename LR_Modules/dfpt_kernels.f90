@@ -8,10 +8,10 @@
 !
 !------------------------------------------------------------------------------
 MODULE dfpt_kernels
+IMPLICIT NONE
 CONTAINS
-!
-SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, dvscfs, dvscfp, dbecsum, &
-                       irr, imode0, option, drhoc)
+SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, dfpt_data, &
+                       irr, imode0, write_rec_callback, stop_callback, w_freq)
    !------------------------------------------------------------------------------
    !! Driver routine for the solution of the linear system that computes the change
    !! of the electron density due to a generic perturbation to the Hamiltonian.
@@ -51,10 +51,11 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
    !!    - iter0 : Number of iterations already performed (> 0 for restart, 0 otherwise)
    !!    - lrdvpsi : Record length for the buffer storing dV_bare * psi
    !!    - iudvpsi : Unit for the buffer storing dV_bare * psi
-   !!    - option : Option that tells the type of perturbation. phonon / efield / ...
    !!
    !! Input/Output:
    !!    - drhos : change of the charge density (smooth part only, dffts)
+   !!              (Note that this is different from drhop after fft_interpolate because
+   !!               drhos does not include augmentation charges, while drhop does.)
    !!    - drhop : change of the charge density (smooth and hard parts, dfftp)
    !!    - dvscfs : change of the scf potential (smooth part only, dffts)
    !!    - dvscfp : change of the scf potential (smooth and hard parts, dfftp)
@@ -67,7 +68,7 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
    !!
    !! variable "*s" : real-space quantity defined on the soft grid (dffts)
    !! variable "*h" : real-space quantity defined on the hard grid (dfftp)
-   !! (If doublegrid == false, the two quantities are identical.)
+   !! (If doublegrid == false and using NCPP, the two quantities are identical.)
    !!
    !! A short summary of the workflow:
    !!    dvscfs, dvscfp    -> (sternheimer_kernel)
@@ -79,23 +80,15 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
    !!    - Custom convergence parameter
    !!    - Custom printing
    !!
-   !!
-   !! Currently the code needs branches for phonon / e-field (using variable option)
-   !! in the following places
-   !!    1. addusddens / addusddense : USPP contribution to drho
-   !!    2. becsumort : alphasum contribution to dbecsum
-   !!    3. PAW related stuff. symmetrization, factor of 2, ...
-   !! The plan is to get rid of all these branches by designing a generic subroutine, or
-   !! if that is not feasible, by using callback arguments.
-   !!
    !------------------------------------------------------------------------------
    !
    USE kinds,                ONLY : DP
    USE mp_pools,             ONLY : inter_pool_comm
    USE mp_bands,             ONLY : intra_bgrp_comm
    USE mp,                   ONLY : mp_sum
-   USE fft_interfaces,       ONLY : fft_interpolate
    USE fft_base,             ONLY : dfftp, dffts
+   USE fft_interfaces,       ONLY : fft_interpolate
+   USE buffers,              ONLY : get_buffer
    USE ions_base,            ONLY : nat
    USE io_global,            ONLY : stdout
    USE io_files,             ONLY : diropn
@@ -104,33 +97,28 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
    USE gvecs,                ONLY : doublegrid
    USE lsda_mod,             ONLY : nspin, lsda
    USE scf,                  ONLY : rho
+   USE ldaU,                 ONLY : lda_plus_u
    USE uspp,                 ONLY : okvan
    USE uspp_param,           ONLY : nhm
-   USE uspp_init,            ONLY : init_us_2
    USE noncollin_module,     ONLY : noncolin, domag, npol, nspin_mag
    USE paw_variables,        ONLY : okpaw
    USE paw_onecenter,        ONLY : paw_dpotential
-   USE paw_symmetry,         ONLY : paw_dusymmetrize, paw_dumqsymmetrize, paw_desymmetrize
-   USE phus,                 ONLY : becsumort
-   USE modes,                ONLY : npertx, t, tmq
-   USE recover_mod,          ONLY : write_rec
-   USE efermi_shift,         ONLY : ef_shift, ef_shift_wfc, def
+   USE efermi_shift,         ONLY : ef_shift_new, ef_shift_wfc_new
    USE lrus,                 ONLY : int3_paw, int3_nc
-   USE lr_symm_base,         ONLY : irotmq, minus_q, nsymq, rtau
-   USE qpoint,               ONLY : xq
-   USE control_ph,           ONLY : lnoloc
    USE control_lr,           ONLY : lgamma, niter_ph, nmix_ph, tr2_ph, alpha_mix, convt, &
-                                    lgamma_gamma, flmixdpot, where_rec, lmultipole
+                                    lgamma_gamma, flmixdpot, where_rec, lnoloc
    USE dv_of_drho_lr,        ONLY : dv_of_drho
-   USE ldaU,                 ONLY : lda_plus_u
    USE lr_nc_mag,            ONLY : int3_nc_save
    USE apply_dpot_mod,       ONLY : apply_dpot_allocate, apply_dpot_deallocate
-   USE response_kernels,     ONLY : sternheimer_kernel
+   USE dfpt_type,            ONLY : dfpt_data_type, dfpt_dvscfp_to_dvscfs, &
+                                    dfpt_ldos_type, allocate_dfpt_ldos, deallocate_dfpt_ldos
+   USE response_kernels,     ONLY : sternheimer_kernel, sternheimer_kernel_freq, &
+                                    sternheimer_postprocess
    USE two_chem,             ONLY : twochem
+   USE lr_restart,           ONLY : write_rec_interface, stop_callback_interface
    USE lr_two_chem,          ONLY : allocate_twochem, deallocate_twochem, &
                                     sternheimer_kernel_twochem, dbecsum_cond, &
-                                    dbecsum_cond_nc, drhos_cond, ldoss_cond, &
-                                    ef_shift_wfc_twochem
+                                    dbecsum_cond_nc, drhos_cond, ef_shift_wfc_twochem
    !
    IMPLICIT NONE
    !
@@ -145,19 +133,15 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
    INTEGER, INTENT(IN) :: iudvpsi
    !! unit for the buffer storing dV_bare * psi
    REAL(DP), INTENT(INOUT) :: dr2
-   ! self-consistency error. Input is used for restart.
-   COMPLEX(DP), INTENT(INOUT) :: drhos(dffts%nnr, nspin_mag, npert)
-   !! change of the charge density (smooth part only)
-   COMPLEX(DP), INTENT(INOUT) :: drhop(dfftp%nnr, nspin_mag, npert)
-   !! change of the charge density (smooth and hard parts, dfftp)
-   COMPLEX(DP), POINTER, INTENT(INOUT) :: dvscfs(:, :, :)
-   !! change of the scf potential (smooth part only, dffts)
-   COMPLEX(DP), INTENT(INOUT) :: dvscfp(dfftp%nnr, nspin_mag, npert)
-   !! change of the scf potential (smooth and hard parts, dfftp)
-   COMPLEX(DP), INTENT(INOUT) :: dbecsum((nhm * (nhm + 1))/2, nat, nspin_mag , npert)
-   !! change of becsum
-   COMPLEX(DP), INTENT(IN), OPTIONAL :: drhoc(dfftp%nnr, npert)
-   !! Change in the core charge due to the perturbation.
+   !! self-consistency error. Input is used for restart.
+   TYPE(dfpt_data_type), INTENT(INOUT) :: dfpt_data
+   !! Data that describes linear response quantities
+   PROCEDURE(write_rec_interface), OPTIONAL :: write_rec_callback
+   !! Callback subroutine for restart checkpointing
+   PROCEDURE(stop_callback_interface), OPTIONAL :: stop_callback
+   !! Callback subroutine for graceful stop
+   COMPLEX(DP), INTENT(IN), OPTIONAL :: w_freq
+   !! Frequency for finite-frequency DFPT.
    !
    INTEGER, INTENT(IN) :: irr
    !! input: the irreducible representation (to be removed after moving from PH to LR_Modules)
@@ -165,31 +149,27 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
    INTEGER, INTENT(IN) :: imode0
    !! input: the position of the modes (to be removed after moving from PH to LR_Modules)
    !! Set to 0 if not using phonon perturbation.
-   CHARACTER(LEN=*), INTENT(IN) :: option
-   !! input: Option that tells the type of perturbation.
-   !! Possible options: 'phonon', 'efield'
    !
    ! ... local variables
    !
    REAL(DP) :: thresh, averlt
    ! thresh: convergence threshold
    ! averlt: average number of iterations
-   REAL(DP) :: dos_ef
-   !! dos_ef: density of states at Ef
+   TYPE(dfpt_ldos_type) :: ldos_data
+   !! Local density of states at Ef (encapsulates ldos, ldoss, becsum_dos, dos_ef)
    COMPLEX(DP), ALLOCATABLE :: dvscftmp(:, :, :)
    !! change of scf potential (output before mixing)
-   COMPLEX(DP), ALLOCATABLE :: ldos (:,:), ldoss (:,:), mixin(:), mixout(:), &
-      dbecsum_nc(:,:,:,:,:,:), dbecsum_aux (:,:,:,:)
+   COMPLEX(DP), ALLOCATABLE :: mixin(:), mixout(:)
    ! Misc work space
-   ! ldos : local density of states af Ef
-   ! ldoss: as above, without augmentation charges
+   COMPLEX(DP), ALLOCATABLE :: dbecsum_nc(:,:,:,:,:), dbecsum_nc_trev(:,:,:,:,:)
    ! dbecsum: the derivative of becsum
-   REAL(DP), ALLOCATABLE :: becsum1(:,:,:)
-
+   !
    LOGICAL :: all_conv
    !! True if sternheimer_kernel is converged at all k points and perturbations
    logical :: lmetq0,     & ! true if xq=(0,0,0) in a metal
       first_iter    ! true if first iteration where induced rho is not yet calculated
+   LOGICAL :: finite_freq
+   !! True if solving a finite-frequency DFPT
 
    integer :: kter,       & ! counter on iterations
       ipert,      & ! counter on perturbations
@@ -208,20 +188,25 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
    !
    CALL start_clock('dfpt_kernel')
    !
-   IF (option /= 'phonon' .AND. option /= 'efield') THEN
-      CALL errore('dfpt_kernel', 'Unknown option' // TRIM(option), 1)
-   ENDIF
+   finite_freq = PRESENT(w_freq)
    !
    nsolv = 1
-   IF (noncolin .AND. domag) nsolv=2
+   IF ((noncolin .AND. domag) .OR. finite_freq) nsolv = 2
+   !
+   IF (twochem .AND. (noncolin .AND. domag)) CALL errore('dfpt_kernel', &
+      'DFPT with twochem and noncollinear magnetism is not implemented', 1)
+   IF (twochem .AND. finite_freq) CALL errore('dfpt_kernel', &
+      'DFPT with twochem and finite frequency is not implemented', 1)
+   IF ((noncolin .AND. domag) .AND. finite_freq) CALL errore('dfpt_kernel', &
+      'DFPT with noncollinear magnetism and finite frequency is not implemented', 1)
    !
    CALL apply_dpot_allocate()
    !
    ALLOCATE(dvscftmp(dfftp%nnr, nspin_mag, npert))
-   IF (noncolin) ALLOCATE(dbecsum_nc(nhm, nhm, nat, nspin, npert, nsolv))
+   IF (noncolin) ALLOCATE(dbecsum_nc(nhm, nhm, nat, nspin, npert))
+   IF (noncolin .AND. domag) ALLOCATE(dbecsum_nc_trev(nhm, nhm, nat, nspin, npert))
    IF (noncolin .AND. domag .AND. okvan) THEN
       ALLOCATE(int3_nc_save(nhm, nhm, nat, nspin_mag, npert, 2))
-      ALLOCATE(dbecsum_aux((nhm * (nhm + 1))/2, nat, nspin_mag, npert))
    ENDIF
    !
    ! Allocate temporary variables for mixing
@@ -234,7 +219,7 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
       ALLOCATE(mixout(ndim_pot + ndim_paw))
       !
       ! PAW: Set mixin from the intial dvscfp and dbecsum. Used as the input for mixing.
-      CALL setmixout(ndim_pot, ndim_paw, mixin, dvscfp, dbecsum, ndim, -1)
+      CALL setmixout(ndim_pot, ndim_paw, mixin, dfpt_data%dvscfp, dfpt_data%dbecsum, ndim, -1)
       !
    ELSE
       ALLOCATE(mixin(1))
@@ -245,11 +230,8 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
    !
    lmetq0 = (lgauss .OR. ltetra) .AND. lgamma
    IF (lmetq0) THEN
-      ALLOCATE(ldos(dfftp%nnr, nspin_mag))
-      ALLOCATE(ldoss(dffts%nnr, nspin_mag))
-      ALLOCATE(becsum1((nhm * (nhm + 1))/2 , nat , nspin_mag))
-      CALL localdos(ldos, ldoss, becsum1, dos_ef)
-      IF (.NOT. okpaw) DEALLOCATE(becsum1)
+      CALL allocate_dfpt_ldos(ldos_data)
+      CALL localdos_wrapper(ldos_data)
    endif
    !
    IF (twochem) CALL allocate_twochem(npert, nsolv)
@@ -262,14 +244,24 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
       !
       first_iter = (iter == 1)
       !
-      drhos = (0.d0, 0.d0)
-      dbecsum = (0.d0, 0.d0)
+      dfpt_data%drhos = (0.d0, 0.d0)
+      dfpt_data%dbecsum = (0.d0, 0.d0)
       IF (noncolin) dbecsum_nc = (0.d0, 0.d0)
+      IF (noncolin .AND. domag) dbecsum_nc_trev = (0.d0, 0.d0)
       !
       IF (lmetq0 .AND. twochem) THEN
          drhos_cond = (0.d0, 0.d0)
          dbecsum_cond = (0.d0, 0.d0)
          IF (noncolin) dbecsum_cond_nc = (0.d0, 0.d0)
+      ENDIF
+      !
+      ! Set threshold for iterative solution of the linear system
+      !
+      IF (first_iter .OR. kter == 1) THEN
+         ! If first iteration or first iteration after restart
+         thresh = 1.0d-2
+      ELSE
+         thresh = min(1.d-1 * sqrt(dr2), thresh)
       ENDIF
       !
       ! DFPT+U: at each ph iteration calculate dnsscf,
@@ -279,96 +271,75 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
       !
       ! Start the loop on the two linear systems, one at B and one at -B
       !
-      DO isolv = 1, nsolv
+      IF (finite_freq) THEN
          !
-         ! Set threshold for iterative solution of the linear system
+         ! Finite-frequency Sternheimer equation
+         ! The isolv loop is taken inside sternheimer_kernel_freq
          !
-         IF (first_iter) THEN
-            thresh = 1.0d-2
-         ELSE
-            thresh = min(1.d-1 * sqrt(dr2), 1.d-2)
-         ENDIF
+         ! time_reversed (noncollinear magnetic) case with finite-frequency Sternheimer
+         ! is not implemented. So the second argument is .FALSE.
          !
-         ! Compute drhos, the charge density response to the total potential
-         !
-         IF (.NOT. (twochem .AND. lmetq0)) then
-            !
-            ! Sternheimer kernel for the normal case
-            !
-            CALL sternheimer_kernel(first_iter, isolv==2, npert, lrdvpsi, iudvpsi, &
-               thresh, dvscfs, all_conv, averlt, drhos, dbecsum, &
-               dbecsum_nc(:,:,:,:,:,isolv))
-         ELSE
-            !
-            ! Sternheimer kernel for the twochem case
-            !
-            CALL sternheimer_kernel_twochem(first_iter, isolv==2, npert, lrdvpsi, iudvpsi, &
-               thresh, dvscfs, all_conv, averlt, drhos, dbecsum, &
-               dbecsum_nc(:,:,:,:,:,isolv),drhos_cond,dbecsum_cond,dbecsum_cond_nc)
-         ENDIF
-         !
-      ENDDO ! isolv
-      !
-      IF (nsolv == 2) THEN
-         drhos = drhos / 2.0_DP
-         dbecsum = dbecsum / 2.0_DP
-         dbecsum_nc = dbecsum_nc / 2.0_DP
-      ENDIF
-      !
-      !  The calculation of dbecsum is distributed across processors (see addusdbec)
-      !  Sum over processors the contributions coming from each slice of bands
-      !
-      IF (noncolin) THEN
-         CALL mp_sum(dbecsum_nc, intra_bgrp_comm)
+         CALL sternheimer_kernel_freq(first_iter, .FALSE., npert, lrdvpsi, iudvpsi, &
+             thresh, w_freq, dfpt_data%dvscfs, all_conv, averlt, dfpt_data%drhos, &
+             dfpt_data%dbecsum, dbecsum_nc)
       ELSE
-         CALL mp_sum(dbecsum, intra_bgrp_comm)
+         !
+         ! Zero-frequency Sternheimer equation
+         !
+         DO isolv = 1, nsolv
+            !
+            ! Compute drhos, the charge density response to the total potential
+            !
+            IF (.NOT. (twochem .AND. lmetq0)) then
+               !
+               ! Sternheimer kernel for the normal case
+               !
+               IF (isolv == 1) THEN
+                  CALL sternheimer_kernel(first_iter, isolv==2, npert, lrdvpsi, iudvpsi, &
+                     thresh, dfpt_data%dvscfs, all_conv, averlt, dfpt_data%drhos, dfpt_data%dbecsum, &
+                     dbecsum_nc)
+               ELSE
+                  CALL sternheimer_kernel(first_iter, isolv==2, npert, lrdvpsi, iudvpsi, &
+                     thresh, dfpt_data%dvscfs, all_conv, averlt, dfpt_data%drhos, dfpt_data%dbecsum, &
+                     dbecsum_nc_trev)
+               ENDIF
+               !
+            ELSE
+               !
+               ! Sternheimer kernel for the twochem case
+               !
+               CALL sternheimer_kernel_twochem(first_iter, isolv==2, npert, lrdvpsi, iudvpsi, &
+                  thresh, dfpt_data%dvscfs, all_conv, averlt, dfpt_data%drhos, dfpt_data%dbecsum, &
+                  dbecsum_nc, drhos_cond, dbecsum_cond, dbecsum_cond_nc)
+               !
+               IF (isolv == 2) THEN
+                  CALL errore("dfpt_kernel", "DFPT with twochem and noncollinear magnetism is not implemented", 1)
+               ENDIF
+               !
+            ENDIF
+            !
+         ENDDO ! isolv
       ENDIF
       !
-      IF (doublegrid) THEN
-         DO is = 1, nspin_mag
-            DO ipert = 1, npert
-               CALL fft_interpolate(dffts, drhos(:, is, ipert), dfftp, drhop(:, is, ipert))
-            ENDDO
-         ENDDO
+      IF (noncolin .AND. domag) THEN
+         CALL sternheimer_postprocess(nsolv, dfpt_data, dbecsum_nc, dbecsum_nc_trev)
       ELSE
-         CALL zcopy(npert * nspin_mag * dfftp%nnr, drhos, 1, drhop, 1)
-      ENDIF
-      !
-      !  In the noncolinear, spin-orbit case rotate dbecsum
-      !
-      IF (noncolin .AND. okvan) THEN
-         CALL set_dbecsum_nc(dbecsum_nc, dbecsum, npert)
-         IF (nsolv == 2) THEN
-            dbecsum_aux = (0.0_DP, 0.0_DP)
-            CALL set_dbecsum_nc(dbecsum_nc(1,1,1,1,1,2), dbecsum_aux, npert)
-            dbecsum(:,:,1,:) = dbecsum(:,:,1,:) + dbecsum_aux(:,:,1,:)
-            dbecsum(:,:,2:4,:) = dbecsum(:,:,2:4,:) - dbecsum_aux(:,:,2:4,:)
-         ENDIF
+         CALL sternheimer_postprocess(nsolv, dfpt_data, dbecsum_nc)
       ENDIF
       !
       !    Now we compute for all perturbations the total charge and potential
       !
-      IF (option == 'phonon') THEN
-         CALL addusddens(drhop, dbecsum, imode0, npert, 0)
-      ELSEIF (option == 'efield') THEN
-         call addusddense(drhop, dbecsum)
-      ELSE
-         CALL errore('dfpt_kernel', 'Unknown option' // TRIM(option), 1)
-      ENDIF
-      !
-      !   Reduce the delta rho across pools
-      !
-      CALL mp_sum(drhos, inter_pool_comm)
-      CALL mp_sum(drhop, inter_pool_comm)
-      IF (okpaw) CALL mp_sum(dbecsum, inter_pool_comm)
+      ! If .NOT. okpaw, dbecsum is not used below. So, postprocess dbecsum only if okpaw.
       !
       IF (okpaw) THEN
-         IF (option == 'phonon') THEN
-            ! For efield, factor 2 is multiplied after mixing
-            DO ipert = 1, npert
-               dbecsum(:,:,:,ipert) = 2.0_DP * dbecsum(:,:,:,ipert) &
-                  + becsumort(:,:,:,imode0+ipert)
-            ENDDO
+         !
+         ! The presence of c.c. in the formula gives a factor 2.0
+         !
+         dfpt_data%dbecsum = 2.0_DP * dfpt_data%dbecsum
+         !
+         ! Add Pulay correction to dbecsum
+         IF (ALLOCATED(dfpt_data%dbecsum_pulay)) THEN
+            dfpt_data%dbecsum = dfpt_data%dbecsum + dfpt_data%dbecsum_pulay
          ENDIF
       ENDIF
       !
@@ -378,23 +349,13 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
       ! response HXC potential) and to the response occupation matrices.
       !
       IF (lmetq0 .AND. (.NOT. twochem)) THEN
-         IF (okpaw) THEN
-            CALL ef_shift(npert, dos_ef, ldos, drhop, dbecsum, becsum1)
-         ELSE
-            CALL ef_shift(npert, dos_ef, ldos, drhop)
-         ENDIF
+         CALL ef_shift_new(ldos_data, dfpt_data)
       ENDIF
       !
       ! Post processing for the case of two chemical potentials
       !
       IF (twochem) THEN
-         IF (okpaw) THEN
-            CALL twochem_postproc_dfpt(npert, nsolv, imode0, lmetq0, &
-                   dos_ef, ldos, ldoss, drhop, dbecsum, becsum1)
-         ELSE
-            CALL twochem_postproc_dfpt(npert, nsolv, imode0, lmetq0, &
-                   dos_ef, ldos, ldoss, drhop, dbecsum)
-         ENDIF
+         CALL twochem_postproc_dfpt(npert, nsolv, imode0, lmetq0, ldos_data, dfpt_data)
       ENDIF
       !
       !   After the loop over the perturbations we have the linear change
@@ -402,26 +363,11 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
       !   Here we symmetrize them ...
       !
       IF (.NOT. lgamma_gamma) THEN
-         CALL psymdvscf(drhop)
-         IF (lmultipole) THEN !FM: density computed for the first representation only, needs to be symmetrized
-            IF (doublegrid) then
-               DO is = 1, nspin_mag
-                  DO ipert = 1, npert
-                     CALL fft_interpolate(dfftp, drhop(:, is, ipert), dffts, drhos(:, is, ipert))
-                  ENDDO
-               ENDDO
-            ELSE
-              CALL zcopy(npert * nspin_mag * dfftp%nnr, drhop, 1, drhos, 1)
-            ENDIF
-         ENDIF
-         !
-         IF (okpaw) THEN
-            IF (option == 'phonon') THEN
-               ! For efield, PAW symmetrization is done after mixing
-               IF (minus_q) CALL PAW_dumqsymmetrize(dbecsum,npert,irr, npertx,irotmq,rtau,xq,tmq)
-               CALL PAW_dusymmetrize(dbecsum,npert,irr,npertx,nsymq,rtau,xq,t)
-            ENDIF
-         ENDIF
+         ! FIXME: Improve psymdvscf using idea from psymeq, which saves computation
+         !        by each core computing only its own part.
+         CALL psymdvscf(dfpt_data%drhos, dffts)
+         CALL psymdvscf(dfpt_data%drhop, dfftp)
+         IF (okpaw) CALL PAW_dsymmetrize(dfpt_data%dbecsum)
       ENDIF
       !
       !   compute the corresponding change in scf potential : drhop -> dvscftmp
@@ -432,10 +378,11 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
       ELSE
          ! Compute the response HXC potential
          DO ipert = 1, npert
-            CALL zcopy(dfftp%nnr*nspin_mag, drhop(1,1,ipert), 1, dvscftmp(1,1,ipert), 1)
-            IF (PRESENT(drhoc) .AND. .NOT. lmultipole) THEN
-               CALL dv_of_drho(dvscftmp(1, 1, ipert), drhoc = drhoc(:, ipert))
-            ELSE !FM: as the case of solve_e
+            CALL zcopy(dfftp%nnr*nspin_mag, dfpt_data%drhop(1,1,ipert), 1, dvscftmp(1,1,ipert), 1)
+            IF (ALLOCATED(dfpt_data%drhoc)) THEN
+               ! Consider core charge perturbation if present
+               CALL dv_of_drho(dvscftmp(1, 1, ipert), drhoc = dfpt_data%drhoc(:, ipert))
+            ELSE
                CALL dv_of_drho(dvscftmp(1, 1, ipert))
             ENDIF
          ENDDO
@@ -447,53 +394,34 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
          !
          !  In this case we mix also dbecsum
          !
-         CALL setmixout(ndim_pot, ndim_paw, mixout, dvscftmp, dbecsum, ndim, -1)
+         CALL setmixout(ndim_pot, ndim_paw, mixout, dvscftmp, dfpt_data%dbecsum, ndim, -1)
          CALL mix_potential(2 * (ndim_pot + ndim), mixout, mixin, alpha_mix(kter), dr2, &
                             npert * tr2_ph / npol, iter, nmix_ph, flmixdpot, convt)
-         CALL setmixout(ndim_pot, ndim_paw, mixin, dvscfp, dbecsum, ndim, 1)
+         CALL setmixout(ndim_pot, ndim_paw, mixin, dfpt_data%dvscfp, dfpt_data%dbecsum, ndim, 1)
       ELSE
-         CALL mix_potential(2 * ndim_pot, dvscftmp, dvscfp, alpha_mix(kter), dr2, &
+         CALL mix_potential(2 * ndim_pot, dvscftmp, dfpt_data%dvscfp, alpha_mix(kter), dr2, &
                             npert * tr2_ph / npol, iter, nmix_ph, flmixdpot, convt)
       ENDIF
+      !
+      !   fft_interpolate or copy potential from hard to smooth grid: dvscfp -> dvscfs
+      !
+      CALL dfpt_dvscfp_to_dvscfs(dfpt_data)
       !
       ! Check that convergence have been reached on ALL processors in this image.
       ! If convergence is reached on only some processors, call errore.
       !
       CALL check_all_convt(convt)
       !
-      IF (doublegrid) THEN
-         DO ipert = 1, npert
-            DO is = 1, nspin_mag
-               CALL fft_interpolate(dfftp, dvscfp(:, is, ipert), dffts, dvscfs(:, is, ipert))
-            ENDDO
-         ENDDO
-      ENDIF
-      !
-      IF (option == 'efield') THEN
-         IF (okpaw) THEN
-            IF (noncolin) THEN
-               ! call PAW_dpotential(dbecsum_nc, becsum_nc, int3_paw, npert)
-            ELSE
-               !
-               ! The presence of c.c. in the formula gives a factor 2.0
-               ! For phonons, this factor was multiplied before mixing
-               !
-               dbecsum = 2.0_DP * dbecsum
-               IF (.NOT. lgamma_gamma) CALL PAW_desymmetrize(dbecsum)
-            ENDIF
-         ENDIF
-      ENDIF
-      !
       !   calculate here the change of the D1-~D1 coefficients due to the phonon
       !   perturbation
       !
       IF (okvan) THEN
-         IF (okpaw) CALL PAW_dpotential(dbecsum, rho%bec, int3_paw, npert)
+         IF (okpaw) CALL PAW_dpotential(dfpt_data%dbecsum, rho%bec, int3_paw, npert)
          !
          !     with the new change of the potential we compute the integrals
          !     of the change of potential and Q
          !
-         CALL newdq(dvscfp, npert)
+         CALL newdq(dfpt_data%dvscfp, npert)
          !
          !  In the noncollinear magnetic case computes the int3 coefficients with
          !  the opposite sign of the magnetic field. They are saved in int3_nc_save,
@@ -503,25 +431,25 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
             int3_nc_save(:,:,:,:,:,1) = int3_nc(:,:,:,:,:)
             IF (okpaw) rho%bec(:,:,2:4) = -rho%bec(:,:,2:4)
             DO ipert = 1, npert
-               dvscfp(:, 2:4, ipert) = -dvscfp(:, 2:4, ipert)
-               IF (okpaw) dbecsum(:, :, 2:4, ipert) = -dbecsum(:, :, 2:4, ipert)
+               dfpt_data%dvscfp(:, 2:4, ipert) = -dfpt_data%dvscfp(:, 2:4, ipert)
+               IF (okpaw) dfpt_data%dbecsum(:, :, 2:4, ipert) = -dfpt_data%dbecsum(:, :, 2:4, ipert)
             ENDDO
             !
             !   if needed recompute the paw coeffients with the opposite sign of
             !   the magnetic field
             !
-            IF (okpaw) CALL PAW_dpotential(dbecsum, rho%bec, int3_paw, npert)
+            IF (okpaw) CALL PAW_dpotential(dfpt_data%dbecsum, rho%bec, int3_paw, npert)
             !
             !   here compute the int3 integrals
             !
-            CALL newdq(dvscfp, npert)
+            CALL newdq(dfpt_data%dvscfp, npert)
             int3_nc_save(:,:,:,:,:,2) = int3_nc(:,:,:,:,:)
             !
             !  restore the correct sign of the magnetic field.
             !
             DO ipert = 1, npert
-               dvscfp(:, 2:4, ipert) = -dvscfp(:, 2:4, ipert)
-               IF (okpaw) dbecsum(:, :, 2:4, ipert) = -dbecsum(:, :, 2:4, ipert)
+               dfpt_data%dvscfp(:, 2:4, ipert) = -dfpt_data%dvscfp(:, 2:4, ipert)
+               IF (okpaw) dfpt_data%dbecsum(:, :, 2:4, ipert) = -dfpt_data%dbecsum(:, :, 2:4, ipert)
             ENDDO
             IF (okpaw) rho%bec(:, :, 2:4) = -rho%bec(:, :, 2:4)
             !
@@ -540,15 +468,13 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
       &      " |ddv_scf|^2 = ",es10.3 )') thresh, alpha_mix(kter) , dr2
       FLUSH(stdout)
       !
-      !    Here we save the information for recovering the run from this poin
+      !    Here we save the information for recovering the run from this point
       !
-      IF (okpaw) THEN
-         CALL write_rec(where_rec, irr, dr2, iter, convt, npert, dvscfp, drhop, dbecsum)
-      ELSE
-         CALL write_rec(where_rec, irr, dr2, iter, convt, npert, dvscfp, drhop)
+      IF (PRESENT(write_rec_callback)) THEN
+         CALL write_rec_callback(where_rec, irr, dr2, iter, convt, dfpt_data)
       ENDIF
       !
-      IF (check_stop_now()) CALL stop_smoothly_ph(.FALSE.)
+      IF (check_stop_now() .AND. PRESENT(stop_callback)) CALL stop_callback(.FALSE.)
       !
       IF (convt) EXIT
       !
@@ -561,12 +487,12 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
       ! Update the response potential.
       !
       DO ipert = 1, npert
-         dvscfp(:, 1, ipert) = dvscfp(:, 1, ipert) - def(ipert)
-         IF (doublegrid) dvscfs(:, 1, ipert) = dvscfs(:, 1, ipert) - def(ipert)
+         dfpt_data%dvscfp(:, 1, ipert) = dfpt_data%dvscfp(:, 1, ipert) - dfpt_data%def(ipert)
+         dfpt_data%dvscfs(:, 1, ipert) = dfpt_data%dvscfs(:, 1, ipert) - dfpt_data%def(ipert)
          !
          IF (lsda) THEN
-            dvscfp(:, 2, ipert) = dvscfp(:, 2, ipert) - def(ipert)
-            IF (doublegrid) dvscfs(:, 2, ipert) = dvscfs(:, 2, ipert) - def(ipert)
+            dfpt_data%dvscfp(:, 2, ipert) = dfpt_data%dvscfp(:, 2, ipert) - dfpt_data%def(ipert)
+            dfpt_data%dvscfs(:, 2, ipert) = dfpt_data%dvscfs(:, 2, ipert) - dfpt_data%def(ipert)
          ENDIF
       ENDDO
       !
@@ -574,9 +500,9 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
       ! Also update drhos. (drhop is updated by ef_shift.)
       !
       IF (.NOT. twochem) THEN
-         CALL ef_shift_wfc(npert, ldoss, drhos)
+         CALL ef_shift_wfc_new(dfpt_data)
       ELSE
-         CALL ef_shift_wfc_twochem(npert, ldoss, ldoss_cond, drhos)
+         CALL ef_shift_wfc_twochem(npert, ldos_data, dfpt_data%drhos)
       ENDIF
       !
    ENDIF ! lmetq0
@@ -585,17 +511,15 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
    !
    DEALLOCATE(dvscftmp)
    IF (noncolin) DEALLOCATE(dbecsum_nc)
+   IF (noncolin .AND. domag) DEALLOCATE(dbecsum_nc_trev)
    IF (noncolin .AND. domag .AND. okvan) THEN
       DEALLOCATE(int3_nc_save)
-      DEALLOCATE(dbecsum_aux)
    ENDIF
    DEALLOCATE(mixin)
    DEALLOCATE(mixout)
    !
    IF (lmetq0) THEN
-      DEALLOCATE(ldoss)
-      DEALLOCATE(ldos)
-      IF (okpaw) DEALLOCATE(becsum1)
+      CALL deallocate_dfpt_ldos(ldos_data)
    ENDIF
    !
    IF (twochem) CALL deallocate_twochem()

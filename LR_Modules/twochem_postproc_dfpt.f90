@@ -6,8 +6,7 @@
 ! or http://www.gnu.org/copyleft/gpl.txt .
 !
 !-----------------------------------------------------------------------
-SUBROUTINE twochem_postproc_dfpt(npe, nsolv, imode0, lmetq0, dos_ef, ldos, ldoss, &
-                                 drhop, dbecsum, becsum1)
+SUBROUTINE twochem_postproc_dfpt(npe, nsolv, imode0, lmetq0, ldos_data, dfpt_data)
    USE kinds,                ONLY : DP
    USE mp,                   ONLY : mp_sum
    USE mp_pools,             ONLY : inter_pool_comm
@@ -20,9 +19,11 @@ SUBROUTINE twochem_postproc_dfpt(npe, nsolv, imode0, lmetq0, dos_ef, ldos, ldoss
    USE uspp,                 ONLY : okvan
    USE uspp_param,           ONLY : nhm
    USE paw_variables,        ONLY : okpaw
+   USE dfpt_type,            ONLY : dfpt_data_type, dfpt_ldos_type
    !
    USE two_chem,             ONLY : twochem
-   USE lr_two_chem
+   USE lr_two_chem,          ONLY : drhos_cond, drhop_cond, dbecsum_cond, dbecsum_cond_nc, &
+                                    ef_shift_twochem
    !
    IMPLICIT NONE
    !
@@ -30,12 +31,10 @@ SUBROUTINE twochem_postproc_dfpt(npe, nsolv, imode0, lmetq0, dos_ef, ldos, ldoss
    INTEGER, INTENT(in) :: nsolv
    INTEGER, INTENT(in) :: imode0
    LOGICAL, INTENT(in) :: lmetq0
-   REAL(DP), INTENT(in) :: dos_ef
-   COMPLEX(DP), INTENT(in) :: ldos(dfftp%nnr, nspin_mag)
-   COMPLEX(DP), INTENT(in) :: ldoss(dffts%nnr, nspin_mag)
-   COMPLEX(DP), INTENT(inout) :: drhop(dfftp%nnr, nspin_mag, npe)
-   COMPLEX(DP), INTENT(inout) :: dbecsum((nhm * (nhm + 1))/2, nat, nspin_mag , npe)
-   REAL(DP), INTENT(in), OPTIONAL :: becsum1((nhm * (nhm + 1))/2 , nat , nspin_mag)
+   TYPE(dfpt_ldos_type), INTENT(in) :: ldos_data
+   !! Local density of states at Ef
+   !! Contains: dos_ef, ldos, ldoss, becsum_dos
+   TYPE(dfpt_data_type), INTENT(inout) :: dfpt_data
    !
    INTEGER :: is, ipert
    !
@@ -81,7 +80,14 @@ SUBROUTINE twochem_postproc_dfpt(npe, nsolv, imode0, lmetq0, dos_ef, ldos, ldoss
       ENDIF
    ENDIF
    !
-   call addusddens_cond(drhop_cond, dbecsum_cond, imode0, npe, 0)
+   IF (okvan) CALL lr_addusddens(npe, dbecsum_cond, drhop_cond)
+   !
+   ! Add Pulay correction to drhop
+   !
+   IF (ALLOCATED(dfpt_data%drhop_pulay)) THEN
+      CALL zaxpy(dfftp%nnr*nspin_mag*npe, (1.d0, 0.d0), dfpt_data%drhop_pulay, 1, &
+                  drhop_cond, 1)
+   ENDIF
    !
    CALL mp_sum ( drhos_cond, inter_pool_comm )
    CALL mp_sum ( drhop_cond, inter_pool_comm )
@@ -91,11 +97,10 @@ SUBROUTINE twochem_postproc_dfpt(npe, nsolv, imode0, lmetq0, dos_ef, ldos, ldoss
    !
    IF (lmetq0) THEN
       IF (okpaw) THEN
-         CALL ef_shift_twochem(npe, dos_ef, dos_ef_cond, ldos, ldos_cond, drhop,&
-                           drhop_cond,dbecsum,dbecsum_cond, becsum1,becsum1_cond)
+         CALL ef_shift_twochem(npe, ldos_data, dfpt_data%drhop, drhop_cond, &
+                           dfpt_data%dbecsum, dbecsum_cond)
       ELSE
-         CALL ef_shift_twochem(npe, dos_ef,dos_ef_cond, ldos,ldos_cond, drhop,&
-                                         drhop_cond)
+         CALL ef_shift_twochem(npe, ldos_data, dfpt_data%drhop, drhop_cond)
       ENDIF
    ENDIF
    !

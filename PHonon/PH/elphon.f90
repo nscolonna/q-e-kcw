@@ -531,8 +531,9 @@ SUBROUTINE elphel (irr, npe, imode0, dvscfins)
            !  selfconsist term which comes from the dependence of D on
            !  V_{eff} on the bare change of the potential
            !
+           call adddvscf (ipert, ik, isolv==2)
+           !
            IF (isolv==1) THEN
-              call adddvscf (ipert, ik)
               !
               ! DFPT+U: add to dvpsi the scf part of the response
               ! Hubbard potential dV_hub
@@ -541,8 +542,6 @@ SUBROUTINE elphel (irr, npe, imode0, dvscfins)
                  IF (.NOT.trans) dnsscf(:,:,:,:,ipert) = dnsscf_all_modes(:,:,:,:,mode)
                  call adddvhubscf (ipert, ik)
               ENDIF
-           ELSE
-              call adddvscf_ph_mag (ipert, ik)
            END IF
            !
            !  reset the original magnetic field if it was changed

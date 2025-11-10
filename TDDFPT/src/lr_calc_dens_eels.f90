@@ -116,7 +116,7 @@ SUBROUTINE lr_calc_dens_eels (drhoscf, dpsi)
      ! Calculate the total charge density response
      ! (sum up the normal and ultrasoft terms)
      !
-     CALL lr_addusddens (drhoscf, dbecsum)
+     CALL lr_addusddens (1, dbecsum, drhoscf)
      !
   ENDIF
   !
