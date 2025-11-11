@@ -14,6 +14,7 @@ cg.o \
 cg_sub.o \
 chargedensity.o \
 cp_autopilot.o \
+cp_control.o \
 cp_emass.o \
 cp_interfaces.o \
 cp_restart_new.o \
