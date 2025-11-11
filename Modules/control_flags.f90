@@ -62,7 +62,6 @@ MODULE control_flags
     lscf    =.FALSE., &! if .TRUE. the calc. is selfconsistent
     lbfgs   =.FALSE., &! if .TRUE. the calc. is a relaxation based on BFGS
     lmd     =.FALSE., &! if .TRUE. the calc. is a dynamics
-    lwf     =.FALSE., &! if .TRUE. the calc. is with wannier functions
     lbands  =.FALSE., &! if .TRUE. the calc. is band structure
     lconstrain=.FALSE.,&! if .TRUE. the calc. is constraint
     llondon =.FALSE., & ! if .TRUE. compute Grimme D2 dispersion corrections

@@ -13,7 +13,7 @@ SUBROUTINE init_run()
   !! appropriate routines) the memory.
   !
   USE kinds,                    ONLY : DP
-  USE control_flags,            ONLY : lwf, iverbosity, iprint, ts_vdw, &
+  USE control_flags,            ONLY : iverbosity, iprint, ts_vdw, &
                                        mbd_vdw, use_para_diag
   USE cp_control,               ONLY : ndw, tfor, tpre, nbeg, nomore, &
                                        dt_xml_old, force_pairing
@@ -72,7 +72,7 @@ SUBROUTINE init_run()
   USE mp,                       ONLY : mp_barrier
   USE clib_wrappers
   USE ldaU_cp
-  USE cp_control,               ONLY : lwfpbe0nscf         ! exx_wf related 
+  USE cp_control,               ONLY : lwf, lwfpbe0nscf    ! exx_wf related 
   USE cp_wavefunctions,         ONLY : cv0                 ! exx_wf related
   USE wannier_base,             ONLY : vnbsp               ! exx_wf related
   !!!USE cp_restart,               ONLY : cp_read_wfc_Kong    ! exx_wf related

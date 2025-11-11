@@ -13,8 +13,7 @@ SUBROUTINE move_electrons_x( nfi, tprint, tfirst, tlast, b1, b2, b3, fion, &
   !! This routine updates the electronic degrees of freedom.
   !
   USE kinds,                ONLY : DP
-  USE control_flags,        ONLY : lwf
-  USE cp_control,           ONLY : tfor, thdyn, lwfpbe0nscf  ! exx_wf related
+  USE cp_control,           ONLY : lwf, tfor, thdyn, lwfpbe0nscf  ! exx_wf related
   USE cg_module,            ONLY : tcg
   USE cp_main_variables,    ONLY : eigr, irb, eigrb, rhog, rhos, rhor, drhor, &
                                    drhog, sfac, ema0bg, bec_bgrp, becdr_bgrp,  &
