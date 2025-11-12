@@ -24,7 +24,7 @@ Module ifconstants
   INTEGER, ALLOCATABLE  :: ityp_blk(:)
   !! atomic types for each atom of the original cell
   !
-  CHARACTER(LEN=3), ALLOCATABLE :: atm(:)
+  CHARACTER(LEN=6), ALLOCATABLE :: atm(:)
   !
 end Module ifconstants
 !
