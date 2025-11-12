@@ -24,8 +24,6 @@ MODULE control_flags
   LOGICAL :: tv0rd         = .FALSE. ! read ionic velocities from standard input
   LOGICAL :: tstress       = .FALSE. ! compute stress
   LOGICAL :: lecrpa        = .FALSE. ! RPA correlation energy request
-  LOGICAL :: dfpt_hub      = .FALSE. ! If .true. perform the SCF calculation of U (and V)
-                                     ! and let PW rotuines to know about this
   LOGICAL :: tddfpt        = .FALSE. ! use TDDFPT specific tweaks when using the Environ plugin
   LOGICAL :: smallmem      = .FALSE. ! reduce memory by avoiding global sort
   !
