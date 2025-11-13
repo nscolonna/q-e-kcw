@@ -652,7 +652,7 @@ MODULE cp_restart_new
       ! ... variables read for testing purposes
       !
       INTEGER               :: ibrav_
-      CHARACTER(LEN=3)      :: atm_(ntypx)
+      CHARACTER(LEN=6)      :: atm_(ntypx)
       INTEGER               :: nat_, nsp_, na_
       INTEGER               :: nk_, isk_(2), nt_, natomwfc
       LOGICAL               :: gamma_only_ , lsda_
