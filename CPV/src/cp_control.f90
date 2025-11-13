@@ -96,6 +96,7 @@ MODULE cp_control
   REAL(DP) :: dt_xml_old = -1.0_DP 
   !
   ! exx_wf related 
+  LOGICAL :: lwf         =.FALSE. ! if .TRUE. the calc. is with wannier functions
   LOGICAL :: lwfnscf     = .FALSE.
   LOGICAL :: lwfpbe0nscf = .FALSE.
   !

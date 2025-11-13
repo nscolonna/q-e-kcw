@@ -9,7 +9,7 @@
 SUBROUTINE from_scratch( )
     !
     USE kinds,                ONLY : DP
-    USE control_flags,        ONLY : iverbosity, tv0rd, lwf
+    USE control_flags,        ONLY : iverbosity, tv0rd
     USE cp_control,           ONLY : tfor, tpre, thdyn, tranp, amprp, tortho, &
                                      tsde, tcap, force_pairing
     USE input_parameters,     ONLY : startingwfc

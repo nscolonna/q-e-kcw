@@ -139,9 +139,8 @@ MODULE input
      USE control_flags, ONLY : remove_rigid_rot_ => remove_rigid_rot
      USE control_flags, ONLY : textfor
      USE control_flags, ONLY : do_makov_payne
-     USE control_flags, ONLY : lwf
      USE control_flags, ONLY : smallmem
-     USE cp_control,    ONLY : tconvthrs, lwfnscf, lwfpbe0nscf, &
+     USE cp_control,    ONLY : tconvthrs, lwf, lwfnscf, lwfpbe0nscf, &
                                isave_     => isave, &
                                taurdr_    => taurdr, &
                                trhor_     => trhor, &

@@ -14,14 +14,14 @@ SUBROUTINE cprmain( tau_out, fion_out, etot_out )
   USE kinds,                    ONLY : DP
   USE constants,                ONLY : bohr_radius_angs, amu_au, au_gpa
   USE control_flags,            ONLY : iprint, iverbosity, lconstrain, &
-                                       remove_rigid_rot, llondon, lwf,       &
-                                       textfor, tnosep, tnoseh, tolp,        &
+                                       remove_rigid_rot, llondon,      &
+                                       textfor, tnosep, tnoseh, tolp,  &
                                        conv_elec, do_makov_payne
   USE cp_control,               ONLY : tfirst, tlast, tconvthrs, tcp, isave, &
                                        tfor, tortho, ortho_eps, ortho_max,   &
                                        tsdp, tsdc, tsde, nomore, ndr, ndw,   &
                                        thdyn, tprnfor, trane, tranp, ampre,  &
-                                       amprp, tnosee, tpre
+                                       amprp, tnosee, tpre, lwf
   USE core,                     ONLY : rhoc
   USE uspp_param,               ONLY : nhm, nh
   USE uspp,                     ONLY : nkb, vkb, becsum, deeq, okvan, nlcc_any
@@ -1059,11 +1059,11 @@ SUBROUTINE terminate_run()
   !! Terminate CP run and print statistics.
   !
   USE io_global,         ONLY : stdout, ionode
-  USE control_flags,     ONLY : ts_vdw, lwf
+  USE control_flags,     ONLY : ts_vdw
   USE cg_module,         ONLY : tcg, print_clock_tcg
   USE ldaU_cp,           ONLY : lda_plus_u
   USE mp,                ONLY : mp_report
-  USE cp_control,        ONLY : thdyn, lwfpbe0nscf, tortho
+  USE cp_control,        ONLY : thdyn, lwf, lwfpbe0nscf, tortho
   USE tsvdw_module,      ONLY : tsvdw_finalize
   USE exx_module,        ONLY : exx_finalize
   USE xc_lib,     ONLY : xclib_dft_is, exx_is_active

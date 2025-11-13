@@ -24,8 +24,6 @@ MODULE control_flags
   LOGICAL :: tv0rd         = .FALSE. ! read ionic velocities from standard input
   LOGICAL :: tstress       = .FALSE. ! compute stress
   LOGICAL :: lecrpa        = .FALSE. ! RPA correlation energy request
-  LOGICAL :: dfpt_hub      = .FALSE. ! If .true. perform the SCF calculation of U (and V)
-                                     ! and let PW rotuines to know about this
   LOGICAL :: tddfpt        = .FALSE. ! use TDDFPT specific tweaks when using the Environ plugin
   LOGICAL :: smallmem      = .FALSE. ! reduce memory by avoiding global sort
   !
@@ -62,7 +60,6 @@ MODULE control_flags
     lscf    =.FALSE., &! if .TRUE. the calc. is selfconsistent
     lbfgs   =.FALSE., &! if .TRUE. the calc. is a relaxation based on BFGS
     lmd     =.FALSE., &! if .TRUE. the calc. is a dynamics
-    lwf     =.FALSE., &! if .TRUE. the calc. is with wannier functions
     lbands  =.FALSE., &! if .TRUE. the calc. is band structure
     lconstrain=.FALSE.,&! if .TRUE. the calc. is constraint
     llondon =.FALSE., & ! if .TRUE. compute Grimme D2 dispersion corrections

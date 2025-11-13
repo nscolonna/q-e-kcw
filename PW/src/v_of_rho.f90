@@ -848,9 +848,10 @@ SUBROUTINE v_hubbard( ns, v_hub, eth )
   USE kinds,                ONLY : DP
   USE ions_base,            ONLY : nat, ityp
   USE ldaU,                 ONLY : Hubbard_lmax, Hubbard_l, Hubbard_U, &
-                                   Hubbard_alpha, Hubbard_J0, Hubbard_beta
+                                   Hubbard_alpha, Hubbard_J0, Hubbard_beta, &
+                                   dfpt_hub
   USE lsda_mod,             ONLY : nspin
-  USE control_flags,        ONLY : iverbosity, dfpt_hub
+  USE control_flags,        ONLY : iverbosity
   USE io_global,            ONLY : stdout
   !
   IMPLICIT NONE
@@ -950,9 +951,10 @@ SUBROUTINE v_hubbard_nc( ns, v_hub, eth )
   USE kinds,                ONLY : DP
   USE ions_base,            ONLY : nat, ityp
   USE ldaU,                 ONLY : Hubbard_lmax, Hubbard_l, Hubbard_U, &
-                                   Hubbard_alpha, Hubbard_J0, Hubbard_beta
+                                   Hubbard_alpha, Hubbard_J0, Hubbard_beta, &
+                                   dfpt_hub
   USE lsda_mod,             ONLY : nspin
-  USE control_flags,        ONLY : iverbosity, dfpt_hub
+  USE control_flags,        ONLY : iverbosity
   USE io_global,            ONLY : stdout
   !
   IMPLICIT NONE
@@ -1050,9 +1052,9 @@ SUBROUTINE v_hubbard_b (ns, v_hub, eth)
   USE ions_base,            ONLY : nat, ityp
   USE ldaU,                 ONLY : Hubbard_J0, Hubbard_beta, Hubbard_U2,  &
                                    ldim_back, ldmx_b, Hubbard_alpha_back, &
-                                   is_hubbard_back
+                                   is_hubbard_back, dfpt_hub
   USE lsda_mod,             ONLY : nspin
-  USE control_flags,        ONLY : iverbosity, dfpt_hub
+  USE control_flags,        ONLY : iverbosity
   USE io_global,            ONLY : stdout
 
   IMPLICIT NONE
@@ -1456,14 +1458,15 @@ SUBROUTINE v_hubbard_extended (nsg, v_hub, eth)
   !! DFT+U+V: Simplified rotationally-invariant formulation by
   !! V.L. Campo Jr and M. Cococcioni, J. Phys.: Condens. Matter 22, 055602 (2010).
   !
-  USE kinds,             ONLY : DP
-  USE ions_base,         ONLY : nat, ityp
-  USE ldaU,              ONLY : Hubbard_l, Hubbard_alpha, Hubbard_J0, Hubbard_beta,   &
-                                ldim_u, ldmx_tot, max_num_neighbors, at_sc, neighood, &
-                                Hubbard_V, Hubbard_alpha_back, is_hubbard, is_hubbard_back
-  USE lsda_mod,          ONLY : nspin
-  USE control_flags,     ONLY : iverbosity, dfpt_hub
-  USE io_global,         ONLY : stdout
+  USE kinds,         ONLY : DP
+  USE ions_base,     ONLY : nat, ityp
+  USE ldaU,          ONLY : Hubbard_l, Hubbard_alpha, Hubbard_J0, Hubbard_beta,&
+                            ldim_u, ldmx_tot, max_num_neighbors, at_sc,        &
+                            neighood, Hubbard_V, Hubbard_alpha_back,           &
+                            is_hubbard, is_hubbard_back, dfpt_hub
+  USE lsda_mod,      ONLY : nspin
+  USE control_flags, ONLY : iverbosity
+  USE io_global,     ONLY : stdout
   !
   IMPLICIT NONE
   !
@@ -1648,9 +1651,10 @@ SUBROUTINE v_hubbard_extended_nc (nsg, v_hub, eth)
    USE ions_base,         ONLY : nat, ityp
    USE ldaU,              ONLY : Hubbard_l, Hubbard_alpha, Hubbard_J0, Hubbard_beta,   &
                                  ldim_u, ldmx_tot, max_num_neighbors, at_sc, neighood, &
-                                 Hubbard_V, Hubbard_alpha_back, is_hubbard, is_hubbard_back
+                                 Hubbard_V, Hubbard_alpha_back, is_hubbard, &
+                                 is_hubbard_back, dfpt_hub
    USE lsda_mod,          ONLY : nspin
-   USE control_flags,     ONLY : iverbosity, dfpt_hub
+   USE control_flags,     ONLY : iverbosity
    USE io_global,         ONLY : stdout
    USE noncollin_module,  ONLY : npol
    !
@@ -1791,11 +1795,11 @@ SUBROUTINE v_hubbard_resolved( ns, v_hub, eth )
 USE kinds,                ONLY : DP
 USE ions_base,            ONLY : nat, ityp
 USE ldaU,                 ONLY : Hubbard_lmax, Hubbard_l, Hubbard_Um, &
-                                 Hubbard_alpha_m, lambda_ns, &
+                                 Hubbard_alpha_m, lambda_ns, dfpt_hub, &
                                  eigenvecs_ref, order_um, apply_U, hub_pot_fix
 USE lsda_mod,             ONLY : nspin
 USE constants,            ONLY : eps16, RYTOEV
-USE control_flags,        ONLY : iverbosity, dfpt_hub
+USE control_flags,        ONLY : iverbosity
 USE io_global,            ONLY : stdout
 !
 IMPLICIT NONE
@@ -1962,10 +1966,10 @@ USE kinds,                ONLY : DP
 USE ions_base,            ONLY : nat, ityp
 USE ldaU,                 ONLY : Hubbard_lmax, Hubbard_l, Hubbard_Um_nc, &
                                  Hubbard_alpha_m_nc, lambda_ns, order_um,&
-                                 eigenvecs_ref, apply_U, hub_pot_fix
+                                 eigenvecs_ref, apply_U, hub_pot_fix, dfpt_hub
 USE lsda_mod,             ONLY : nspin
 USE constants,            ONLY : eps16, RYTOEV
-USE control_flags,        ONLY : iverbosity, dfpt_hub
+USE control_flags,        ONLY : iverbosity
 USE io_global,            ONLY : stdout
 !
 IMPLICIT NONE
