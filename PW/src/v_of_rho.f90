@@ -19,8 +19,7 @@ SUBROUTINE v_of_rho( rho, rho_core, rhog_core, &
   USE gvect,            ONLY : ngm
   USE noncollin_module, ONLY : noncolin, nspin_lsda
   USE ions_base,        ONLY : nat, tau
-  USE ldaU,             ONLY : lda_plus_u, lda_plus_u_kind, ldmx_b, &
-                               nsg, v_nsg, Hubbard_l, Hubbard_lmax, apply_U, orbital_resolved 
+  USE ldaU,             ONLY : lda_plus_u
   USE xc_lib,           ONLY : xclib_dft_is
   USE scf,              ONLY : scf_type
   USE cell_base,        ONLY : alat
@@ -40,7 +39,7 @@ SUBROUTINE v_of_rho( rho, rho_core, rhog_core, &
   TYPE(scf_type), INTENT(INOUT) :: rho
   !! the valence charge
   TYPE(scf_type), INTENT(INOUT) :: v
-  !! the scf (Hxc) potential 
+  !! the scf (Hxc) potential
   !=================> NB: NOTE that in F90 derived data type must be INOUT and 
   !=================> not just OUT because otherwise their allocatable or pointer
   !=================> components are NOT defined 
@@ -58,8 +57,6 @@ SUBROUTINE v_of_rho( rho, rho_core, rhog_core, &
   !! the hubbard energy
   REAL(DP), INTENT(OUT) :: charge
   !! the integral of the charge
-  REAL(DP) :: eth1
-  !! the hubbard energy coming from the background states
   REAL(DP), INTENT(INOUT) :: etotefield
   !! electric field energy - inout due to the screwed logic of add_efield
   !
@@ -91,58 +88,7 @@ SUBROUTINE v_of_rho( rho, rho_core, rhog_core, &
   !
   ! ... DFT+U(+V): build up (extended) Hubbard potential 
   !
-  IF (lda_plus_u) THEN
-     !
-     IF (lda_plus_u_kind == 0) THEN
-        !
-        ! DFT+U (simplified)
-        !
-        IF (noncolin) THEN
-           IF (orbital_resolved) THEN        
-              CALL v_hubbard_resolved_nc (rho%ns_nc, v%ns_nc, eth)
-           ELSE
-              CALL v_hubbard_nc (rho%ns_nc, v%ns_nc, eth)
-           ENDIF
-        ELSE
-           IF (orbital_resolved) THEN
-              CALL v_hubbard_resolved(rho%ns, v%ns, eth)
-           ELSE
-              CALL v_hubbard (rho%ns, v%ns, eth)
-           ENDIF
-        ENDIF   
-        !
-        ! Background
-        IF (ldmx_b.GT.0) THEN
-           CALL v_hubbard_b (rho%nsb, v%nsb, eth1)
-           eth = eth + eth1
-        ENDIF
-        !
-     ELSEIF (lda_plus_u_kind == 1) THEN
-        !
-        ! DFT+U (full)
-        !
-        IF (noncolin) THEN
-           CALL v_hubbard_full_nc (rho%ns_nc, v%ns_nc, eth)
-        ELSE
-           CALL v_hubbard_full (rho%ns, v%ns, eth)
-        ENDIF
-        !
-     ELSEIF (lda_plus_u_kind == 2) THEN
-        !
-        ! DFT+U+V (simplified)
-        !
-        IF (noncolin) THEN
-           CALL v_hubbard_extended_nc (nsg, v_nsg, eth)
-        ELSE
-           CALL v_hubbard_extended (nsg, v_nsg, eth)
-        ENDIF
-     ELSE
-        !
-        CALL errore('v_of_rho', 'Not allowed value of lda_plus_u_kind',1)
-        !
-     ENDIF
-     !
-  ENDIF
+  IF (lda_plus_u) CALL v_hubbard ( noncolin, rho, v, eth )
   !
 #if defined (__OSCDFT)
   IF (use_oscdft .AND. (oscdft_ctx%inp%oscdft_type==2)) THEN
@@ -837,7 +783,84 @@ SUBROUTINE v_h_without_esm( rhog, ehart, charge, v )
 END SUBROUTINE v_h_without_esm
 !
 !-----------------------------------------------------------------------
-SUBROUTINE v_hubbard( ns, v_hub, eth )
+SUBROUTINE v_hubbard ( noncolin, rho, v, eth )
+  !---------------------------------------------------------------------
+  !
+  USE kinds, ONLY : dp
+  USE ldaU,  ONLY : lda_plus_u, lda_plus_u_kind, ldmx_b, nsg, v_nsg, &
+                    Hubbard_l, Hubbard_lmax, apply_U, orbital_resolved 
+  USE scf,   ONLY : scf_type
+  !
+  IMPLICIT NONE
+  !
+  TYPE(scf_type), INTENT(INOUT) :: rho
+  !! the valence charge
+  TYPE(scf_type), INTENT(INOUT) :: v
+  !! the scf (Hxc) potential
+  REAL(dp), INTENT(OUT) :: eth
+  !! the hubbard energy
+  LOGICAL, INTENT(IN) :: noncolin
+  !! noncollinear calculation
+  !
+  REAL(dp) :: eth1
+  !! the hubbard energy coming from the background states
+  !
+  IF ( lda_plus_u ) THEN
+     !
+     IF (lda_plus_u_kind == 0) THEN
+        !
+        ! DFT+U (simplified)
+        !
+        IF (noncolin) THEN
+           IF (orbital_resolved) THEN
+              CALL v_hubbard_resolved_nc (rho%ns_nc, v%ns_nc, eth)
+           ELSE
+              CALL v_hubbard_nc (rho%ns_nc, v%ns_nc, eth)
+           ENDIF
+        ELSE
+           IF (orbital_resolved) THEN
+              CALL v_hubbard_resolved(rho%ns, v%ns, eth)
+           ELSE
+              CALL v_hubbard_plain (rho%ns, v%ns, eth)
+           ENDIF
+        ENDIF
+        !
+        ! Background
+        IF (ldmx_b.GT.0) THEN
+           CALL v_hubbard_b (rho%nsb, v%nsb, eth1)
+           eth = eth + eth1
+        ENDIF
+        !
+     ELSEIF (lda_plus_u_kind == 1) THEN
+        !
+        ! DFT+U (full)
+        !
+        IF (noncolin) THEN
+           CALL v_hubbard_full_nc (rho%ns_nc, v%ns_nc, eth)
+        ELSE
+           CALL v_hubbard_full (rho%ns, v%ns, eth)
+        ENDIF
+        !
+     ELSEIF (lda_plus_u_kind == 2) THEN
+        !
+        ! DFT+U+V (simplified)
+        !
+        IF (noncolin) THEN
+           CALL v_hubbard_extended_nc (nsg, v_nsg, eth)
+        ELSE
+           CALL v_hubbard_extended (nsg, v_nsg, eth)
+        ENDIF
+     ELSE
+        !
+        CALL errore('v_of_rho', 'Not allowed value of lda_plus_u_kind',1)
+        !
+     ENDIF
+     !
+  ENDIF
+  !
+END SUBROUTINE v_hubbard
+!-----------------------------------------------------------------------
+SUBROUTINE v_hubbard_plain ( ns, v_hub, eth )
   !---------------------------------------------------------------------
   !
   !! Computes Hubbard potential and Hubbard energy.
@@ -936,7 +959,7 @@ SUBROUTINE v_hubbard( ns, v_hub, eth )
   !
   RETURN
   !
-END SUBROUTINE v_hubbard
+END SUBROUTINE v_hubbard_plain
 !-----------------------------------------------------------------------
 
 !----------------------------------------------------------------------
