@@ -1060,7 +1060,6 @@ SUBROUTINE electrons_scf ( printout, exxen )
            scf_error = dr2
            n_scf_steps = iter
      ENDIF  
-
      !
      IF ( conv_elec .OR. dmft_updated ) THEN
         !
