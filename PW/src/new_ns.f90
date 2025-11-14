@@ -11,12 +11,14 @@ SUBROUTINE new_ns_hubbard ( noncolin, rho )
 !-----------------------------------------------------------------------
   !! Wrapper for all DFT+U+V+J+... cases
   !
-  USE ldaU, ONLY : lda_plus_u_kind, is_hubbard_back
-  USE scf,  ONLY : scf_type
+  USE ions_base, ONLY : ntyp => nsp
+  USE ldaU,      ONLY : lda_plus_u_kind, is_hubbard_back
+  USE scf,       ONLY : scf_type
   !
   IMPLICIT NONE
   TYPE(scf_type), INTENT(INOUT) :: rho
   LOGICAL, INTENT(in) :: noncolin
+  INTEGER :: nt
   !
   IF (lda_plus_u_kind==0) THEN
      !
