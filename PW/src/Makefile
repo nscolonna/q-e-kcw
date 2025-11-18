@@ -244,6 +244,7 @@ two_chem.o\
 update_pot.o \
 us_exx.o \
 usnldiag.o \
+v_hubbard.o \
 v_of_rho.o \
 vcsmd.o \
 vcsubs.o \
