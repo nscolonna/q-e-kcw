@@ -231,6 +231,7 @@ set(src_pw
    src/update_pot.f90 
    src/us_exx.f90 
    src/usnldiag.f90 
+   src/v_hubbard.f90
    src/v_of_rho.f90 
    src/vcsmd.f90 
    src/vcsubs.f90 
