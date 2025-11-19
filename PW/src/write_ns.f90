@@ -6,6 +6,37 @@
 ! or http://www.gnu.org/copyleft/gpl.txt .
 !
 !-----------------------------------------------------------------------
+SUBROUTINE write_ns_hubbard ( noncolin )
+  !-----------------------------------------------------------------------
+  !! Wrapper routine for all write_ns* routines
+  !
+  USE ldaU,       ONLY : lda_plus_u_kind
+  !
+  IMPLICIT NONE
+  LOGICAL, INTENT(IN) :: noncolin
+  !
+  IF (lda_plus_u_kind.EQ.0) THEN
+     IF (noncolin) THEN
+        CALL write_ns_nc()
+     ELSE
+        CALL write_ns()
+     ENDIF
+  ELSEIF (lda_plus_u_kind.EQ.1) THEN
+     IF (noncolin) THEN
+        CALL write_ns_nc()
+     ELSE
+        CALL write_ns()
+     ENDIF
+  ELSEIF (lda_plus_u_kind.EQ.2) THEN
+     IF (noncolin) THEN
+        CALL write_nsg_nc()
+     ELSE
+        CALL write_nsg()
+     ENDIF
+  ENDIF
+  !
+END SUBROUTINE write_ns_hubbard
+!-----------------------------------------------------------------------
 SUBROUTINE write_ns
   !-----------------------------------------------------------------------
   !! Prints on output ns infos.
