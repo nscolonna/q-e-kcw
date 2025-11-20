@@ -746,27 +746,8 @@ SUBROUTINE electrons_scf ( printout, exxen )
            !
            ! Write the occupation matrices
            !
-           IF ( iverbosity > 0 .OR. first ) THEN
-              IF (lda_plus_u_kind.EQ.0) THEN
-                IF (noncolin) THEN
-                    CALL write_ns_nc()
-                ELSE        
-                    CALL write_ns()
-                ENDIF 
-              ELSEIF (lda_plus_u_kind.EQ.1) THEN
-                 IF (noncolin) THEN
-                    CALL write_ns_nc()
-                 ELSE
-                    CALL write_ns()
-                 ENDIF
-              ELSEIF (lda_plus_u_kind.EQ.2) THEN
-                 IF (noncolin) THEN
-                    CALL write_nsg_nc()   
-                 ELSE 
-                    CALL write_nsg()
-                 ENDIF
-              ENDIF
-           ENDIF
+           IF ( iverbosity > 0 .OR. first ) &
+                CALL write_ns_hubbard ( noncolin ) 
            !
            ! Keep the Hubbard potential fixed, i.e. keep the 
            ! occupation matrix equal to the ground-state one.
@@ -1083,30 +1064,19 @@ SUBROUTINE electrons_scf ( printout, exxen )
               ENDIF
            ENDIF
            !
+           ! Not sure why the following is needed and what
+           ! happens if lda_plus_u != 0 : not implemented?
+           !
+           IF ( orbital_resolved .AND. hub_pot_fix .AND. &
+                lda_plus_u_kind == 0) THEN
+              IF ( noncolin) THEN
+                 CALL alpha_m_nc_trace(rho%ns_nc)
+              ELSE
+                 CALL alpha_m_trace(rho%ns)
+              END IF
+           END IF
            ! Write the occupation matrices
-           IF (lda_plus_u_kind == 0) THEN
-              IF (noncolin) THEN
-                 IF ( orbital_resolved .AND. hub_pot_fix ) &
-                    CALL alpha_m_nc_trace(rho%ns_nc)      
-                 CALL write_ns_nc()
-              ELSE
-                 IF ( orbital_resolved .AND. hub_pot_fix ) &
-                    CALL alpha_m_trace(rho%ns)
-                 CALL write_ns()
-              ENDIF
-           ELSEIF (lda_plus_u_kind == 1) THEN
-              IF (noncolin) THEN
-                 CALL write_ns_nc()
-              ELSE
-                 CALL write_ns()
-              ENDIF
-           ELSEIF (lda_plus_u_kind == 2) THEN
-              IF (noncolin) THEN 
-                 CALL write_nsg_nc()
-              ELSE
-                 CALL write_nsg()
-              ENDIF
-           ENDIF
+           CALL write_ns_hubbard ( noncolin )
            !
         ENDIF
 #if defined (__OSCDFT)
