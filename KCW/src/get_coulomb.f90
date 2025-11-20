@@ -1,3 +1,66 @@
+SUBROUTINE read_coulomb()
+USE kinds,                ONLY : DP
+USE control_kcw,          ONLY : Vcoulomb, Wcoulomb
+USE control_kcw,          ONLY : spin_component, get_coulomb
+USE control_kcw,          ONLY : num_wann, nqstot, num_R
+USE noncollin_module,     ONLY : nspin_mag
+!
+IMPLICIT NONE
+!
+INTEGER              ::    iun_coulomb
+CHARACTER(len=1024)  ::    filename  
+INTEGER              ::    iwann, jwann, ir, is
+INTEGER              ::    iwann_, jwann_, ir_, is_
+INTEGER              ::    irvect(3,num_R), spin_index
+REAL(DP)             ::    Re, Im
+
+!
+!
+  filename = 'barecoulomb.txt'
+  iun_coulomb = 237 
+  OPEN (iun_coulomb, file = filename)
+
+  DO ir = 1, num_R
+    READ(iun_coulomb, '(3I7)') irvect(:, ir) 
+    !WRITE(*, '(3I7)') irvect(:, ir) 
+    DO iwann=1, num_wann
+      DO jwann=1, num_wann
+        DO is = 1, nspin_mag !one for spin component, other for non spin component
+          READ(iun_coulomb, '(3I5, 3X, 2ES24.16)') iwann_, jwann_, is_, Re, Im
+          Vcoulomb(is, ir, jwann, iwann) = CMPLX(Re, Im, kind=DP)
+          !
+     !     WRITE(*, '(3I5, 3X, 2ES24.16)') iwann, jwann, spin_index(is), &
+     !     real(Vcoulomb(is, ir, jwann, iwann)), aimag(Vcoulomb(is, ir, jwann, iwann)) 
+        END DO!is
+      END DO!jwann
+    END DO!iwann
+  END DO!ir
+  CLOSE(iun_coulomb)
+  !
+  !
+  iun_coulomb = 238 
+  filename = 'screencoulomb.txt'
+  OPEN (iun_coulomb, file = filename)
+  !
+  DO ir = 1, num_R
+    READ(iun_coulomb, '(3I7)') irvect(:, ir) 
+    !WRITE(*, '(3I7)') irvect(:, ir) 
+    DO iwann=1, num_wann
+      DO jwann=1, num_wann
+        DO is = 1, nspin_mag !one for spin component, other for non spin component
+          READ(iun_coulomb, '(3I5, 3X, 2ES24.16)') iwann_, jwann_, is_, Re, Im
+          Wcoulomb(is, ir, jwann, iwann) = CMPLX(Re, Im, kind=DP)
+          !
+     !     WRITE(*, '(3I5, 3X, 2ES24.16)') iwann, jwann, spin_index(is), &
+     !          real(Wcoulomb(is, ir, jwann, iwann)), aimag(Wcoulomb(is, ir, jwann, iwann)) 
+        END DO!is
+      END DO!jwann
+    END DO!iwann
+  END DO!ir
+  CLOSE(iun_coulomb)
+!
+END SUBROUTINE read_coulomb
+
 
 SUBROUTINE write_coulomb()
 USE kinds,                ONLY : DP
