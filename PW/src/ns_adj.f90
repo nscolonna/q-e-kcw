@@ -7,7 +7,7 @@
 !
 !
 !-----------------------------------------------------------------------
-SUBROUTINE ns_adj ( )
+SUBROUTINE ns_hubbard_adj ( )
   !-----------------------------------------------------------------------
   !
   !! Wrapper routine: adjusts (modifies) the eigenvalues of the atomic
@@ -22,12 +22,12 @@ SUBROUTINE ns_adj ( )
   IF (lda_plus_u_kind == 0 .OR. lda_plus_u_kind == 1) THEN
      CALL nsg_adj()
   ELSE IF (lda_plus_u_kind == 2) THEN
-     CALL ns_adj_()
+     CALL ns_adj()
   ENDIF
   !
-END SUBROUTINE ns_adj
+END SUBROUTINE ns_hubbard_adj
 !-----------------------------------------------------------------------
-SUBROUTINE ns_adj_ ( )
+SUBROUTINE ns_adj ( )
   !-----------------------------------------------------------------------
   !
   !! All DFT+U/J/J0 cases, collinear or noncollinear
@@ -57,7 +57,7 @@ SUBROUTINE ns_adj_ ( )
      !
      WRITE( stdout, '(/5X,"WARNING!!! Modifying starting ns matrices according to input values")')
      !
-     IF (2*Hubbard_lmax+1>ldmx) CALL errore('ns_adj_',' ldmx too small',ldmx) 
+     IF (2*Hubbard_lmax+1>ldmx) CALL errore('ns_adj',' ldmx too small',ldmx) 
      !
      DO na = 1, nat
         !
@@ -166,8 +166,7 @@ SUBROUTINE ns_adj_ ( )
 #endif
      !
      ! Write the updated occupation matrices
-     !
-     CALL write_ns_hubbard ( ) 
+     CALL write_ns_hubbard ( noncolin ) 
      !
   ELSE
 #if defined (__OSCDFT)
@@ -177,9 +176,8 @@ SUBROUTINE ns_adj_ ( )
         CALL oscdft_ns_set (oscdft_ctx, Hubbard_lmax, Hubbard_l, rho%ns, 1)
      ENDIF
      !
-     ! Write the updated occupation matrices
-     !
-     CALL write_ns_hubbard ( ) 
+     ! Write the original occupation matrices
+     CALL write_ns_hubbard ( noncolin ) 
 #endif
   ENDIF
   !
@@ -188,7 +186,7 @@ SUBROUTINE ns_adj_ ( )
   !
   RETURN
   !
-END SUBROUTINE ns_adj_
+END SUBROUTINE ns_adj
 !
 !-----------------------------------------------------------------------
 SUBROUTINE nsg_adj ( ) 
@@ -201,6 +199,7 @@ SUBROUTINE nsg_adj ( )
   USE ldaU,             ONLY : Hubbard_lmax, Hubbard_l, starting_ns, &
        nsgnew, neighood, is_hubbard, ldmx_tot
   USE lsda_mod,         ONLY : nspin
+  USE noncollin_module, ONLY : noncolin
   USE io_global,        ONLY : stdout
 #if defined (__OSCDFT)
   USE plugin_flags,     ONLY : use_oscdft
@@ -282,7 +281,8 @@ SUBROUTINE nsg_adj ( )
      ENDIF
 #endif
      !
-     CALL write_ns_hubbard( )
+     ! Write the updated occupation matrices
+     CALL write_ns_hubbard( noncolin )
      !
    ELSE
 #if defined (__OSCDFT)
@@ -291,11 +291,11 @@ SUBROUTINE nsg_adj ( )
        ! current/working occupation matrix nsgnew
        CALL oscdft_nsg(4)
      ENDIF
-     CALL write_ns_hubbard( )
+     !
+     ! Write the original occupation matrices
+     CALL write_ns_hubbard( noncolin )
 #endif
   ENDIF
-  !
-  ! Write the updated occupation matrices
   !
   ! Reset starting_ns so that this step is not repeated
   starting_ns = -1.0_dp
