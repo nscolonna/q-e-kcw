@@ -20,9 +20,9 @@ SUBROUTINE ns_hubbard_adj ( )
   IMPLICIT NONE
   !
   IF (lda_plus_u_kind == 0 .OR. lda_plus_u_kind == 1) THEN
-     CALL nsg_adj()
-  ELSE IF (lda_plus_u_kind == 2) THEN
      CALL ns_adj()
+  ELSE IF (lda_plus_u_kind == 2) THEN
+     CALL nsg_adj()
   ENDIF
   !
 END SUBROUTINE ns_hubbard_adj

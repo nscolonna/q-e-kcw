@@ -309,7 +309,7 @@ SUBROUTINE potinit()
      ! FIXME: next line why?
      IF (lda_plus_u_kind == 2) nsgnew = nsg
      !
-     CALL write_ns_hubbard()
+     CALL write_ns_hubbard( noncolin )
      !
   END IF
   !
