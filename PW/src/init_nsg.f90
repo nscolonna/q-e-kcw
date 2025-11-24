@@ -10,12 +10,7 @@
 SUBROUTINE init_nsg
    !-----------------------------------------------------------------------
    !
-   ! This routine computes the starting ns (for DFT+U+V calculation) filling
-   ! up the Hubbard manifold (we are only interested in the on-site potential 
-   ! for the moment) according to the Hund's rule (valid for the isolated atoms 
-   ! on which starting potential is built), and to the starting_magnetization:
-   ! majority spin levels are populated first, then the remaining electrons
-   ! are equally distributed among the minority spin states
+   !! DFT+U+V version of \(\textrm{init}\_\textrm{ns}\)
    !
    USE kinds,       ONLY : DP
    USE ions_base,   ONLY : nat, ityp
