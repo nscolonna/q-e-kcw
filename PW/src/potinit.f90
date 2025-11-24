@@ -171,20 +171,8 @@ SUBROUTINE potinit()
               WRITE( stdout, '(/,5X,47("="))')
               !
            ENDIF
-           IF (noncolin) THEN
-              CALL init_ns_nc() 
-           ELSE 
-              CALL init_ns()
-           ENDIF   
-        ELSEIF (lda_plus_u_kind == 1) THEN
-           IF (noncolin) THEN
-              CALL init_ns_nc()
-           ELSE
-              CALL init_ns()
-           ENDIF
-        ELSEIF (lda_plus_u_kind == 2) THEN
-           CALL init_nsg()
         ENDIF
+        CALL init_ns_hubbard ( noncolin ) 
         !
      ENDIF
 
@@ -306,9 +294,10 @@ SUBROUTINE potinit()
      !
      ! ... info about starting occupations
      WRITE( stdout, '(/5X,"STARTING HUBBARD OCCUPATIONS:")')
-     ! FIXME: next line why?
-     IF (lda_plus_u_kind == 2) nsgnew = nsg
      !
+     ! FIXME: next line because write_nsg prints nsgnew, not nsg
+     ! FIXME: Apparently nsgnew, not nsg, is the same as rho%ns
+     IF (lda_plus_u_kind == 2) nsgnew = nsg
      CALL write_ns_hubbard( noncolin )
      !
   END IF

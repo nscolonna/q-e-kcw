@@ -899,7 +899,7 @@ SUBROUTINE electrons_scf ( printout, exxen )
                  !
                  ! ... activate the orbital-resolved Hubbard corrections
                  ! ... once the eigenstates (and thus, the eigenvectors) 
-                 ! ... have stablilized. Also turn them on after 10 iterations
+                 ! ... have stabilized. Also turn them on after 10 iterations
                  ! ... but print a warning message in this case.
                  WRITE( stdout, '(/,5X,47("="))')
                  WRITE( stdout, '(/,5X,"Switching ON", &
@@ -1049,18 +1049,8 @@ SUBROUTINE electrons_scf ( printout, exxen )
            !
            ! Recompute the occupation matrix:
            ! needed when computing U (and V) in a SCF way
-           IF (hub_pot_fix) THEN
-              IF (lda_plus_u_kind.EQ.0) THEN
-                 IF (noncolin) THEN
-                    CALL new_ns_nc(rho%ns_nc)
-                 ELSE
-                    CALL new_ns(rho%ns)
-                 ENDIF
-                 IF (lhb) CALL new_nsb(rho%nsb)
-              ELSEIF (lda_plus_u_kind.EQ.2) THEN
-                 CALL new_nsg()
-              ENDIF
-           ENDIF
+           !
+           IF (hub_pot_fix) CALL new_ns_hubbard ( noncolin, rho )
            !
            ! Not sure why the following is needed and what
            ! happens if lda_plus_u != 0 : not implemented?
