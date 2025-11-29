@@ -188,7 +188,6 @@ MODULE ldaU
   !! Distance between atoms in the 3x3x3 supercell (if sc_size = 1)
   INTEGER,  ALLOCATABLE :: ityp_s(:)
   !! Type of atoms in the 3x3x3 supercell (if sc_size = 1)
-  REAL(DP), ALLOCATABLE :: nsnew(:,:,:,:)
   COMPLEX(DP), ALLOCATABLE :: nsg(:,:,:,:,:), nsgnew(:,:,:,:,:)
   !! Generalized occupation matrices, which depend on two atomic sites.
   !! These matrices nsg(at1,m1,viz,m2,sp) store the expectation value:

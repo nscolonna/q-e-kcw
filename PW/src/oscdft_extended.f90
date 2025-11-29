@@ -5,16 +5,11 @@
 ! or http://www.gnu.org/copyleft/gpl.txt .
 !
 !
-SUBROUTINE oscdft_nsg (lflag)
+SUBROUTINE oscdft_nsg3 (nsnew)
    !
-   !! This routine adjusts (modifies) the nsg based on constraints
-   !! If lflag=1, then copy ctx%inp%occupation to nsgnew
-   !! If lflag=2, then copy nsgnew to ctx%inp%occupation
-   !! If lflag=3, then copy the diagonal components of the complex 
-   !! If lflag=4, like lflag=1 but it does not nullify the occupations for 
-   !!             Hubbard atoms atoms to which we do not apply the constraints
-   !! generalized occupation matrix nsgnew to a real array nsnew that is used 
-   !! to build the contraint 
+   !! This routine copies the diagonal components of the complex 
+   !! generalized occupation matrix nsgnew to a real array nsnew
+   !! that is used to build the contraint - replaces oscdft_nsg(iflag=3)
    !
    USE kinds,           ONLY : DP
    USE parameters,      ONLY : ntypx
@@ -23,7 +18,64 @@ SUBROUTINE oscdft_nsg (lflag)
    USE lsda_mod,        ONLY : nspin
    USE upf_params,      ONLY : lqmax
    USE ldaU,            ONLY : max_num_neighbors, ldmx_tot, nsgnew, neighood, &
-                               Hubbard_l, Hubbard_lmax, nsgnew, nsnew
+                               Hubbard_l, Hubbard_lmax
+#if defined (__OSCDFT)
+   USE oscdft_base,     ONLY : oscdft_ctx
+#endif
+   !
+   IMPLICIT NONE
+   REAL(dp), INTENT(OUT) :: nsnew(2*Hubbard_lmax+1, 2*Hubbard_lmax+1, nspin,nat)
+   !
+   INTEGER :: na, na1, nt, viz, ldim, is, m1, m2
+   !
+#if defined (__OSCDFT)
+   IF (.NOT.(oscdft_ctx%inp%oscdft_type==2) .OR. .NOT.oscdft_ctx%is_constraint) RETURN
+   !
+   DO na = 1, nat
+      IF (oscdft_ctx%constraining(na)) THEN
+         nt = ityp(na)
+         ldim = 2*Hubbard_l(nt) + 1
+         DO is = 1, nspin
+            DO viz = 1, neighood(na)%num_neigh
+               na1 = neighood(na)%neigh(viz)
+               IF (na1.EQ.na) THEN
+                  DO m1 = 1, ldim
+                     DO m2 = 1, ldim
+                        nsnew(m1,m2,is,na) = DBLE(nsgnew(m1,m2,viz,na,is))
+                     ENDDO
+                  ENDDO
+                  GO TO 7
+               ENDIF
+            ENDDO
+7           CONTINUE
+         ENDDO
+      ENDIF
+   ENDDO
+   !
+#endif
+   RETURN
+   !
+END SUBROUTINE oscdft_nsg3
+!
+SUBROUTINE oscdft_nsg (lflag)
+   !
+   !! This routine adjusts (modifies) the nsg based on constraints
+   !! If lflag=1, then copy ctx%inp%occupation to nsgnew
+   !! If lflag=2, then copy nsgnew to ctx%inp%occupation
+   !! If lflag=3, then copy the diagonal components of the complex 
+   !!             generalized occupation matrix nsgnew to a real array 
+   !!             nsnew that is used to build the contraint - OBSOLETE
+   !! If lflag=4, like lflag=1 but it does not nullify the occupations for 
+   !!             Hubbard atoms atoms to which we do not apply the constraints
+   !
+   USE kinds,           ONLY : DP
+   USE parameters,      ONLY : ntypx
+   USE io_global,       ONLY : stdout
+   USE ions_base,       ONLY : nat, ityp
+   USE lsda_mod,        ONLY : nspin
+   USE upf_params,      ONLY : lqmax
+   USE ldaU,            ONLY : max_num_neighbors, ldmx_tot, nsgnew, neighood, &
+                               Hubbard_l, Hubbard_lmax
 #if defined (__OSCDFT)
    USE oscdft_base,     ONLY : oscdft_ctx
 #endif
@@ -37,8 +89,12 @@ SUBROUTINE oscdft_nsg (lflag)
 #if defined (__OSCDFT)
    IF (.NOT.(oscdft_ctx%inp%oscdft_type==2) .OR. .NOT.oscdft_ctx%is_constraint) RETURN
    !
-   IF (lflag==1 .OR. lflag==2 .OR. lflag==4) &
-   WRITE(stdout, '(/5x,"Modifying starting occupation matrices according to input constrained values")')
+   IF (lflag==1 .OR. lflag==2 .OR. lflag==4) THEN
+      WRITE(stdout, '(/5x,"Modifying starting occupation matrices according to input constrained values")')
+   ELSE
+      WRITE(stdout, '(/5x,"Incorrect call to oscdft_nsg, exiting")')
+      RETURN
+   END IF
    !
    found = .true.
    !
@@ -63,8 +119,6 @@ SUBROUTINE oscdft_nsg (lflag)
                            ENDIF
                         ELSEIF (lflag==2) THEN
                            oscdft_ctx%inp%occupation(m1,m2,is,na) = DBLE(nsgnew(m1,m2,viz,na,is))
-                        ELSEIF (lflag==3) THEN
-                           nsnew(m1,m2,is,na) = DBLE(nsgnew(m1,m2,viz,na,is))
                         ENDIF
                      ENDDO
                   ENDDO

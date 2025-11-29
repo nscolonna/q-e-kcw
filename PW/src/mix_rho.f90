@@ -42,7 +42,7 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
                              mix_type_COPY, mix_type_SCAL
   USE io_global,      ONLY : stdout
   USE gcscf_module,   ONLY : lgcscf, gcscf_gh, gcscf_mu, gcscf_eps
-  USE ldaU,           ONLY : lda_plus_u, lda_plus_u_kind, ldim_u, nsnew, neighood, &
+  USE ldaU,           ONLY : lda_plus_u, lda_plus_u_kind, ldim_u, neighood, &
                              max_num_neighbors, nsg, nsgnew, Hubbard_l, Hubbard_lmax
   USE buffers,        ONLY : open_buffer, close_buffer, get_buffer, save_buffer
 #if defined (__OSCDFT)
@@ -91,7 +91,8 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
     ldim,          &! 2 * Hubbard_lmax + 1
     nt,            &! index of the atomic type
     nword           ! size the DFT+U+V-related arrays
-  REAL(DP),ALLOCATABLE :: betamix(:,:), work(:)
+  REAL(DP), ALLOCATABLE :: betamix(:,:), work(:)
+  REAL(DP), ALLOCATABLE :: nsnew(:,:,:,:)
   INTEGER, ALLOCATABLE :: iwork(:)
   LOGICAL :: exst, exst_mem, exst_file
   REAL(DP) :: gamma0
@@ -221,7 +222,7 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
                           input_rhout%ns, oscdft_ctx%conv, dr2, tr2, iter)
         ELSEIF (lda_plus_u_kind==2) THEN
            ALLOCATE (nsnew(2*Hubbard_lmax+1, 2*Hubbard_lmax+1, nspin, nat))
-           CALL oscdft_nsg(3)
+           CALL oscdft_nsg3 (nsnew)
            CALL oscdft_constrain_ns (oscdft_ctx, Hubbard_lmax, Hubbard_l, &
                        nsnew, oscdft_ctx%conv, dr2, tr2, iter)
            DEALLOCATE (nsnew)
