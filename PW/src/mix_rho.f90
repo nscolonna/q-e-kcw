@@ -38,11 +38,11 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
                              mix_type, create_mix_type, destroy_mix_type, &
                              assign_scf_to_mix_type, assign_mix_to_scf_type, &
                              mix_type_AXPY, davcio_mix_type, rho_ddot, &
-                             high_frequency_mixing, nsg_ddot, &
+                             high_frequency_mixing, &
                              mix_type_COPY, mix_type_SCAL
   USE io_global,      ONLY : stdout
   USE gcscf_module,   ONLY : lgcscf, gcscf_gh, gcscf_mu, gcscf_eps
-  USE ldaU,           ONLY : lda_plus_u, lda_plus_u_kind, ldim_u, nsnew, neighood, &
+  USE ldaU,           ONLY : lda_plus_u, lda_plus_u_kind, ldim_u, neighood, &
                              max_num_neighbors, nsg, nsgnew, Hubbard_l, Hubbard_lmax
   USE buffers,        ONLY : open_buffer, close_buffer, get_buffer, save_buffer
 #if defined (__OSCDFT)
@@ -89,13 +89,11 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
     i, j,          &! counters on number of iterations
     info,          &! flag saying if the exec. of libr. routines was ok
     ldim,          &! 2 * Hubbard_lmax + 1
-    iunmix_nsg,    &! the unit for Hubbard mixing within DFT+U+V
     nt,            &! index of the atomic type
     nword           ! size the DFT+U+V-related arrays
-  REAL(DP),ALLOCATABLE :: betamix(:,:), work(:)
+  REAL(DP), ALLOCATABLE :: betamix(:,:), work(:)
+  REAL(DP), ALLOCATABLE :: nsnew(:,:,:,:)
   INTEGER, ALLOCATABLE :: iwork(:)
-  COMPLEX(DP), ALLOCATABLE :: nsginsave(:,:,:,:,:),  nsgoutsave(:,:,:,:,:)
-  COMPLEX(DP), ALLOCATABLE :: deltansg(:,:,:,:,:)
   LOGICAL :: exst, exst_mem, exst_file
   REAL(DP) :: gamma0
 #if defined(__NORMALIZE_BETAMIX)
@@ -115,7 +113,6 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
   ! ... external functions
   !
   INTEGER, EXTERNAL :: find_free_unit
-  COMPLEX(DP), ALLOCATABLE :: df_nsg(:,:,:,:,:,:), dv_nsg(:,:,:,:,:,:)
   !
 #if defined (__OSCDFT)
   INTEGER :: iunmix_cons, & ! the unit for the constraint mixing
@@ -140,19 +137,10 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
   call create_mix_type(rhout_m)
   call create_mix_type(rhoin_m)
   !
-  ! DFT+U+V case
-  !
-  IF (lda_plus_u .AND. lda_plus_u_kind.EQ.2) THEN
-     ldim = 0
-     DO nt = 1, ntyp
-        ldim = MAX(ldim, ldim_u(nt))
-     ENDDO
-     ALLOCATE ( deltansg (ldim, ldim, max_num_neighbors, nat, nspin) )
-     deltansg(:,:,:,:,:) = nsgnew(:,:,:,:,:) - nsg(:,:,:,:,:)
-  ENDIF
-  !
   call assign_scf_to_mix_type(rhoin, rhoin_m)
+  if (lda_plus_u_kind==2) rhoin_m%nsg=nsgnew
   call assign_scf_to_mix_type(input_rhout, rhout_m)
+  if (lda_plus_u_kind==2) rhout_m%nsg=nsg
   call mix_type_AXPY ( -1.d0, rhoin_m, rhout_m )
   !
   IF ( lgcscf ) THEN
@@ -164,9 +152,6 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
      dr2 = rho_ddot( rhout_m, rhout_m, ngms )  !!!! this used to be ngm NOT ngms
      !
   END IF
-  !
-  IF (lda_plus_u .AND. lda_plus_u_kind.EQ.2) &
-      dr2 = dr2 + nsg_ddot( deltansg, deltansg, nspin )
   !
   IF (dr2 < 0.0_DP) CALL errore('mix_rho','negative dr2',1)
   !
@@ -209,13 +194,6 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
      call destroy_mix_type(rhoin_m)
      call destroy_mix_type(rhout_m)
      !
-     IF ( ALLOCATED( dv_nsg ) ) DEALLOCATE( dv_nsg )
-     IF ( ALLOCATED( df_nsg ) ) DEALLOCATE( df_nsg )
-     IF (lda_plus_u .AND. lda_plus_u_kind.EQ.2) THEN
-        nsgnew(:,:,:,:,:) = deltansg(:,:,:,:,:) + nsg(:,:,:,:,:)
-        DEALLOCATE(deltansg)
-     ENDIF
-     !
 #if defined (__OSCDFT)
   IF (use_oscdft .AND. (oscdft_ctx%inp%oscdft_type==2)) THEN
      IF (oscdft_ctx%is_constraint .AND. oscdft_ctx%conv) THEN
@@ -232,14 +210,6 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
      !
   END IF
   !
-  IF (lda_plus_u .AND. lda_plus_u_kind.EQ.2) THEN
-     iunmix_nsg = find_free_unit()
-     nword = ldim * ldim * max_num_neighbors * nat * nspin * n_iter
-     CALL open_buffer( iunmix_nsg, 'mix.nsg', nword, io_level, exst_mem, exst_file)
-     ALLOCATE( df_nsg(ldim,ldim,max_num_neighbors,nat,nspin,n_iter) )
-     ALLOCATE( dv_nsg(ldim,ldim,max_num_neighbors,nat,nspin,n_iter) )
-  ENDIF
-  !
 #if defined (__OSCDFT)
   IF (use_oscdft .AND. (oscdft_ctx%inp%oscdft_type==2)) THEN
      ALLOCATE (t_cons1(ldmx, ldmx, nspin, nat))
@@ -252,7 +222,7 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
                           input_rhout%ns, oscdft_ctx%conv, dr2, tr2, iter)
         ELSEIF (lda_plus_u_kind==2) THEN
            ALLOCATE (nsnew(2*Hubbard_lmax+1, 2*Hubbard_lmax+1, nspin, nat))
-           CALL oscdft_nsg(3)
+           CALL oscdft_nsg3 (nsnew)
            CALL oscdft_constrain_ns (oscdft_ctx, Hubbard_lmax, Hubbard_l, &
                        nsnew, oscdft_ctx%conv, dr2, tr2, iter)
            DEALLOCATE (nsnew)
@@ -303,13 +273,6 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
      call mix_type_AXPY ( -1.d0, rhout_m, df(ipos) )
      call mix_type_AXPY ( -1.d0, rhoin_m, dv(ipos) )
      !
-     IF (lda_plus_u .AND. lda_plus_u_kind.EQ.2) THEN
-        CALL get_buffer ( df_nsg, nword, iunmix_nsg, 1 )
-        CALL get_buffer ( dv_nsg, nword, iunmix_nsg, 2 )
-        df_nsg(:,:,:,:,:,ipos) = df_nsg(:,:,:,:,:,ipos) - deltansg
-        dv_nsg(:,:,:,:,:,ipos) = dv_nsg(:,:,:,:,:,ipos) - nsg
-     ENDIF
-     !
 #if defined (__OSCDFT)
   IF (use_oscdft .AND. (oscdft_ctx%inp%oscdft_type==2)) THEN
      IF (oscdft_ctx%is_constraint .AND. .NOT.oscdft_ctx%conv) THEN
@@ -329,16 +292,9 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
      ELSE
         norm2 = rho_ddot( df(ipos), df(ipos), ngm0 )
      END IF
-     IF (lda_plus_u .AND. lda_plus_u_kind.EQ.2) THEN
-        norm2 = norm2 + nsg_ddot( df_nsg(1,1,1,1,1,ipos), df_nsg(1,1,1,1,1,ipos), nspin )
-     ENDIF
      obn = 1.d0/sqrt(norm2)
      call mix_type_SCAL (obn,df(ipos))
      call mix_type_SCAL (obn,dv(ipos))
-     IF (lda_plus_u .AND. lda_plus_u_kind.EQ.2) THEN
-        df_nsg(:,:,:,:,:,ipos) = df_nsg(:,:,:,:,:,ipos) * obn
-        dv_nsg(:,:,:,:,:,ipos) = dv_nsg(:,:,:,:,:,ipos) * obn
-     ENDIF
 #if defined (__OSCDFT)
   IF (use_oscdft .AND. (oscdft_ctx%inp%oscdft_type==2)) THEN
      IF (oscdft_ctx%is_constraint .AND. .NOT.oscdft_ctx%conv) THEN
@@ -368,17 +324,6 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
      CALL davcio_mix_type( df(ipos), iunmix, 2*ipos+1, write_ )
      CALL davcio_mix_type( dv(ipos), iunmix, 2*ipos+2, write_ )
   END IF
-  !
-  IF (lda_plus_u .AND. lda_plus_u_kind.EQ.2) THEN 
-     !
-     ALLOCATE( nsginsave(  ldim,ldim,max_num_neighbors,nat,nspin ), &
-               nsgoutsave( ldim,ldim,max_num_neighbors,nat,nspin ) )
-     nsginsave  = (0.d0,0.d0)
-     nsgoutsave = (0.d0,0.d0)
-     nsginsave  = nsg
-     nsgoutsave = deltansg !nsgnew
-     !
-  ENDIF
   !
 #if defined (__OSCDFT)
   IF (use_oscdft .AND. (oscdft_ctx%inp%oscdft_type==2)) THEN
@@ -414,10 +359,6 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
                !
             END IF
             !
-            IF (lda_plus_u .AND. lda_plus_u_kind.EQ.2) &
-               betamix(i,j) = betamix(i,j) + &
-                  nsg_ddot( df_nsg(1,1,1,1,1,j), df_nsg(1,1,1,1,1,i), nspin )
-            !
             betamix(j,i) = betamix(i,j)
             !
         END DO
@@ -447,8 +388,6 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
           !
        END IF
        !
-        IF (lda_plus_u .AND. lda_plus_u_kind.EQ.2) &
-           work(i) = work(i) + nsg_ddot( df_nsg(1,1,1,1,1,i), deltansg, nspin )
     END DO
     !
     DO i = 1, iter_used
@@ -458,10 +397,6 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
         call mix_type_AXPY ( -gamma0, dv(i), rhoin_m )
         call mix_type_AXPY ( -gamma0, df(i), rhout_m )
         !
-        IF (lda_plus_u .AND. lda_plus_u_kind.EQ.2) THEN
-           nsg(:,:,:,:,:) = nsg(:,:,:,:,:) - gamma0*dv_nsg(:,:,:,:,:,i)
-           deltansg(:,:,:,:,:) = deltansg(:,:,:,:,:) - gamma0*df_nsg(:,:,:,:,:,i)
-        ENDIF
 #if defined (__OSCDFT)
   IF (use_oscdft .AND. (oscdft_ctx%inp%oscdft_type==2)) THEN
      IF (oscdft_ctx%is_constraint .AND. .NOT.oscdft_ctx%conv) THEN
@@ -491,14 +426,6 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
      DEALLOCATE( dv )
   END IF
   !
-  IF (lda_plus_u .AND. lda_plus_u_kind.EQ.2) THEN
-     inext = mixrho_iter - ( ( mixrho_iter - 1 ) / n_iter ) * n_iter
-     df_nsg(:,:,:,:,:,inext) = nsgoutsave
-     dv_nsg(:,:,:,:,:,inext) = nsginsave
-     IF (ALLOCATED(nsginsave))  DEALLOCATE(nsginsave)
-     IF (ALLOCATED(nsgoutsave)) DEALLOCATE(nsgoutsave)
-  ENDIF
-  !
 #if defined (__OSCDFT)
   IF (use_oscdft .AND. (oscdft_ctx%inp%oscdft_type==2)) THEN
      IF (oscdft_ctx%is_constraint .AND. .NOT.oscdft_ctx%conv) THEN
@@ -526,10 +453,6 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
   ! ... set new trial density
   !
   call mix_type_AXPY ( alphamix, rhout_m, rhoin_m )
-  IF (lda_plus_u .AND. lda_plus_u_kind.EQ.2) THEN
-     nsg = nsg + alphamix * deltansg
-     IF (ALLOCATED(deltansg)) DEALLOCATE(deltansg)
-  ENDIF
   !
 #if defined (__OSCDFT)
   IF (use_oscdft .AND. (oscdft_ctx%inp%oscdft_type==2)) THEN
@@ -548,17 +471,11 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
   call high_frequency_mixing ( rhoin, input_rhout, alphamix )
   ! ... add the mixed rho for the smooth frequencies
   call assign_mix_to_scf_type(rhoin_m,rhoin)
+  if (lda_plus_u_kind==2) nsg = rhoin_m%nsg
   !
   call destroy_mix_type(rhout_m)
   call destroy_mix_type(rhoin_m)
   !
-  IF (lda_plus_u .AND. lda_plus_u_kind.EQ.2) THEN
-     CALL save_buffer ( df_nsg, nword, iunmix_nsg, 1 )
-     CALL save_buffer ( dv_nsg, nword, iunmix_nsg, 2 )
-     DEALLOCATE( dv_nsg )
-     DEALLOCATE( df_nsg )
-     CALL close_buffer(iunmix_nsg, 'keep')
-  ENDIF
 #if defined (__OSCDFT)
   IF (use_oscdft .AND. (oscdft_ctx%inp%oscdft_type==2)) THEN
      IF (oscdft_ctx%is_constraint .AND. .NOT.oscdft_ctx%conv) THEN

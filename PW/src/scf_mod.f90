@@ -1,5 +1,5 @@
 !
-! Copyright (C) 2001-2020 Quantum ESPRESSO group
+! Copyright (C) 2001-2025 Quantum ESPRESSO Foundation
 ! This file is distributed under the terms of the
 ! GNU General Public License. See the file `License'
 ! in the root directory of the present distribution,
@@ -12,7 +12,8 @@ MODULE scf
   USE kinds,           ONLY : DP
   USE lsda_mod,        ONLY : nspin
   USE ldaU,            ONLY : lda_plus_u, Hubbard_lmax, lda_plus_u_kind, ldmx, &
-                              ldmx_b, is_hubbard_back, orbital_resolved
+                              ldmx_b, ldmx_tot, max_num_neighbors, &
+                              is_hubbard_back, orbital_resolved
   USE ions_base,       ONLY : nat
   USE buffers,         ONLY : open_buffer, close_buffer, get_buffer, save_buffer
   USE xc_lib,          ONLY : xclib_dft_is
@@ -58,6 +59,11 @@ MODULE scf
      !! the DFT+U occupation matrix (background states)
      COMPLEX(DP), ALLOCATABLE :: ns_nc(:,:,:,:)
      !! the DFT+U occupation matrix - noncollinear case
+     !!COMPLEX(DP), ALLOCATABLE :: nsg(:,:,:,:,:)
+     !! the DFT+U+V generalized occupation matrix
+     !! Matrix nsg(at1,m1,viz,m2,sp) stores the expectation value:
+     !! <C^\dagger_{at1,m1,sp}C_{viz,m2,sp}>, where sp = spin and
+     !! viz identifies the atom in the neighborhood of at1.
      REAL(DP),    ALLOCATABLE :: bec(:,:,:)
      !! the PAW hamiltonian elements
      REAL(DP),   ALLOCATABLE :: pol_r(:,:) 
@@ -78,6 +84,8 @@ MODULE scf
      !! the DFT+U occupation matrix (background states)
      COMPLEX(DP), ALLOCATABLE :: ns_nc(:,:,:,:)
      !! the DFT+U occupation matrix noncollinear case 
+     COMPLEX(DP), ALLOCATABLE :: nsg(:,:,:,:,:)
+     !! the DFT+U+V generalized occupation matrix
      REAL(DP),    ALLOCATABLE :: bec(:,:,:)
      !! PAW corrections to hamiltonian
      REAL(DP) :: el_dipole
@@ -115,6 +123,7 @@ MODULE scf
   LOGICAL, PRIVATE :: lda_plus_u_co  ! collinear case
   LOGICAL, PRIVATE :: lda_plus_u_cob ! collinear case (background states)
   LOGICAL, PRIVATE :: lda_plus_u_nc  ! noncollinear case
+  LOGICAL, PRIVATE :: lda_plus_u_v   ! U+V case
   COMPLEX(DP), PRIVATE, ALLOCATABLE:: io_buffer(:)
   !
 CONTAINS
@@ -149,10 +158,12 @@ CONTAINS
    lda_plus_u_co  = lda_plus_u .AND. .NOT. ( nspin == 4 ) .AND. .NOT. ( lda_plus_u_kind == 2)
    lda_plus_u_nc  = lda_plus_u .AND.       ( nspin == 4 ) .AND. .NOT. ( lda_plus_u_kind == 2)
    lda_plus_u_cob = lda_plus_u_co .AND. ANY( is_hubbard_back(1:ntyp) )
+   lda_plus_u_v   =  ( lda_plus_u_kind == 2 )
    !
    IF (lda_plus_u_co)  ALLOCATE( rho%ns(2*Hubbard_lmax+1,2*Hubbard_lmax+1,nspin,nat) )
    IF (lda_plus_u_cob) ALLOCATE( rho%nsb(ldmx_b,ldmx_b,nspin,nat) )
    IF (lda_plus_u_nc)  ALLOCATE( rho%ns_nc(2*Hubbard_lmax+1,2*Hubbard_lmax+1,nspin,nat) )
+   !!IF (lda_plus_u_v ) ALLOCATE ( rho%nsg(ldmx_tot,ldmx_tot,max_num_neighbors,nat,nspin) )
    !
    IF (okpaw) THEN ! See the top of the file for clarification
       IF ( PRESENT(do_not_allocate_becsum) ) THEN
@@ -190,6 +201,7 @@ CONTAINS
    IF (ALLOCATED(rho%ns)   )  DEALLOCATE( rho%ns    )
    IF (ALLOCATED(rho%nsb)  )  DEALLOCATE( rho%nsb   )
    IF (ALLOCATED(rho%ns_nc))  DEALLOCATE( rho%ns_nc )
+   !!!IF (ALLOCATED(rho%nsg  ))  DEALLOCATE( rho%nsg   )
    IF (ALLOCATED(rho%bec)  )  DEALLOCATE( rho%bec   )
    IF (ALLOCATED(rho%pol_r))  DEALLOCATE( rho%pol_r )
    IF (ALLOCATED(rho%pol_g))  DEALLOCATE( rho%pol_g )
@@ -225,21 +237,24 @@ CONTAINS
    lda_plus_u_co = lda_plus_u .AND. .NOT. (nspin == 4 ) .AND. .NOT. ( lda_plus_u_kind == 2)
    lda_plus_u_nc = lda_plus_u .AND.       (nspin == 4 ) .AND. .NOT. ( lda_plus_u_kind == 2)
    lda_plus_u_cob = lda_plus_u_co .AND. ANY( is_hubbard_back(1:ntyp) )
+   lda_plus_u_v   =  ( lda_plus_u_kind == 2 )
    !
    IF (lda_plus_u_nc) THEN
       ALLOCATE( rho%ns_nc(2*Hubbard_lmax+1,2*Hubbard_lmax+1,nspin,nat) )
       rho%ns_nc = 0._dp
    ENDIF
-   !
    IF (lda_plus_u_co) THEN
       ALLOCATE( rho%ns(2*Hubbard_lmax+1,2*Hubbard_lmax+1,nspin,nat) )
       rho%ns = 0._dp
    ENDIF
-   !
    IF (lda_plus_u_cob) THEN
       ALLOCATE( rho%nsb(ldmx_b,ldmx_b,nspin,nat) )
       rho%nsb = 0._dp
    ENDIF
+   IF (lda_plus_u_v ) THEN
+      ALLOCATE ( rho%nsg(ldmx_tot,ldmx_tot,max_num_neighbors,nat,nspin) )
+      rho%nsg = 0.0_dp
+   END IF
    !
    IF (okpaw) THEN
       ALLOCATE( rho%bec(nhm*(nhm+1)/2,nat,nspin) )
@@ -280,6 +295,7 @@ CONTAINS
    IF (ALLOCATED(rho%ns)   )  DEALLOCATE( rho%ns    )
    IF (ALLOCATED(rho%nsb)  )  DEALLOCATE( rho%nsb   )
    IF (ALLOCATED(rho%ns_nc))  DEALLOCATE( rho%ns_nc )
+   IF (ALLOCATED(rho%nsg)  )  DEALLOCATE( rho%nsg   )
    IF (ALLOCATED(rho%bec)  )  DEALLOCATE( rho%bec   )
    !
    RETURN
@@ -317,6 +333,7 @@ CONTAINS
    IF (lda_plus_u_nc)  rho_m%ns_nc  = rho_s%ns_nc
    IF (lda_plus_u_co)  rho_m%ns     = rho_s%ns
    IF (lda_plus_u_cob) rho_m%nsb    = rho_s%nsb
+   !!IF (lda_plus_u_v)   rho_m%nsg    = rho_s%nsg
    IF (okpaw)          rho_m%bec    = rho_s%bec
    !
    IF (dipfield) THEN
@@ -367,6 +384,7 @@ CONTAINS
    IF (lda_plus_u_nc)  rho_s%ns_nc(:,:,:,:) = rho_m%ns_nc(:,:,:,:)
    IF (lda_plus_u_co)  rho_s%ns(:,:,:,:)    = rho_m%ns(:,:,:,:)
    IF (lda_plus_u_cob) rho_s%nsb(:,:,:,:)   = rho_m%nsb(:,:,:,:)
+   !!IF (lda_plus_u_v)   rho_s%nsg(:,:,:,:,:)   = rho_m%nsg(:,:,:,:,:)
    IF (okpaw)          rho_s%bec(:,:,:)     = rho_m%bec(:,:,:)
    !
    RETURN
@@ -397,6 +415,7 @@ CONTAINS
   IF (lda_plus_u_nc)  Y%ns_nc = X%ns_nc
   IF (lda_plus_u_co)  Y%ns    = X%ns
   IF (lda_plus_u_cob) Y%nsb   = X%nsb
+  !!IF (lda_plus_u_v)   Y%nsg   = X%nsg
   IF (okpaw)          Y%bec   = X%bec
   IF (sic) THEN
      Y%pol_r = X%pol_r
@@ -437,6 +456,7 @@ CONTAINS
   IF (lda_plus_u_nc)           Y%ns_nc     = Y%ns_nc     + A * X%ns_nc
   IF (lda_plus_u_co)           Y%ns        = Y%ns        + A * X%ns
   IF (lda_plus_u_cob)          Y%nsb       = Y%nsb       + A * X%nsb
+  IF (lda_plus_u_v)            Y%nsg       = Y%nsg       + A * X%nsg
   IF (okpaw)                   Y%bec       = Y%bec       + A * X%bec
   IF (dipfield)                Y%el_dipole = Y%el_dipole + A * X%el_dipole
   IF (sic)                     Y%pol_g     = Y%pol_g     + A * X%pol_g
@@ -472,6 +492,7 @@ CONTAINS
   IF (lda_plus_u_nc)           Y%ns_nc     = X%ns_nc
   IF (lda_plus_u_co)           Y%ns        = X%ns
   IF (lda_plus_u_cob)          Y%nsb       = X%nsb
+  IF (lda_plus_u_v)            Y%nsg       = X%nsg
   IF (okpaw)                   Y%bec       = X%bec
   IF (dipfield)                Y%el_dipole = X%el_dipole
   IF (sic)                     Y%pol_g     = X%pol_g
@@ -508,6 +529,7 @@ CONTAINS
   IF (lda_plus_u_nc)           X%ns_nc     = A * X%ns_nc
   IF (lda_plus_u_co)           X%ns        = A * X%ns
   IF (lda_plus_u_cob)          X%nsb       = A * X%nsb
+  IF (lda_plus_u_v)            X%nsg       = A * X%nsg
   IF (okpaw)                   X%bec       = A * X%bec
   IF (dipfield)                X%el_dipole = A * X%el_dipole
   IF (sic)                     X%pol_g     = A * X%pol_g
@@ -571,6 +593,7 @@ CONTAINS
    IF (lda_plus_u_nc)  rhoin%ns_nc(:,:,:,:) = 0.d0
    IF (lda_plus_u_co)  rhoin%ns(:,:,:,:)    = 0.d0
    IF (lda_plus_u_cob) rhoin%nsb(:,:,:,:)   = 0.d0
+   !!IF (lda_plus_u_v)   rhoin%nsg(:,:,:,:,:)   = 0.d0
    !
    !$acc end data 
    call stop_clock('high_freq_mix') 
@@ -592,11 +615,13 @@ CONTAINS
    LOGICAL :: exst
    !
    ! define lengths (in real numbers) of different record chunks
+   ! FIXME: what about using SIZE(rho%...) ?
    rlen_rho = 2 * ngms * nspin
    IF (xclib_dft_is('meta') .OR. lxdm) rlen_kin  = 2 * ngms * nspin
    IF (lda_plus_u_co)           rlen_ldaU = (2*Hubbard_lmax+1)**2 *nspin*nat
    IF (lda_plus_u_cob)          rlen_ldaUb = (ldmx_b)**2 *nspin*nat
    IF (lda_plus_u_nc)           rlen_ldaU = 2 * (2*Hubbard_lmax+1)**2 *nspin*nat
+   IF (lda_plus_u_v)            rlen_ldaU = 2 * (ldmx_tot**2*max_num_neighbors*nat*nspin)
    IF (okpaw)                   rlen_bec  = (nhm*(nhm+1)/2) * nat * nspin
    IF (dipfield)                rlen_dip  = 1
    IF (sic)                     rlen_pol  = 2*ngms*nspin
@@ -612,6 +637,7 @@ CONTAINS
       start_ldaUb = start_ldaU + ( rlen_ldaU + 1 ) / 2
       start_bec = start_ldaUb + ( rlen_ldaUb + 1 ) / 2
    ELSE
+      ! FIXME: not always present
       start_bec = start_ldaU + ( rlen_ldaU + 1 ) / 2
    ENDIF
    start_dipole = start_bec  + ( rlen_bec + 1 ) / 2
@@ -671,6 +697,7 @@ CONTAINS
       END IF 
       IF (lda_plus_u_nc)           CALL DCOPY(rlen_ldaU,rho%ns_nc,1,io_buffer(start_ldaU),1)
       IF (lda_plus_u_co)           CALL DCOPY(rlen_ldaU,rho%ns,   1,io_buffer(start_ldaU),1)
+      IF (lda_plus_u_v)            CALL DCOPY(rlen_ldaU,rho%nsg,1,io_buffer(start_ldaU),1)
       IF (lda_plus_u_cob)          CALL DCOPY(rlen_ldaUb,rho%nsb, 1,io_buffer(start_ldaUb),1)
       IF (okpaw)                   CALL DCOPY(rlen_bec, rho%bec,  1,io_buffer(start_bec), 1)
       !
@@ -693,6 +720,7 @@ CONTAINS
       IF (lda_plus_u_co)           CALL DCOPY(rlen_ldaU,io_buffer(start_ldaU),1,rho%ns,   1)
       IF (lda_plus_u_cob)          CALL DCOPY(rlen_ldaUb,io_buffer(start_ldaUb),1,rho%nsb,1)
       IF (lda_plus_u_nc)           CALL DCOPY(rlen_ldaU,io_buffer(start_ldaU),1,rho%ns_nc,1)
+      IF (lda_plus_u_v)            CALL DCOPY(rlen_ldaU,io_buffer(start_ldaU),1,rho%nsg,1)
       IF (okpaw)                   CALL DCOPY(rlen_bec, io_buffer(start_bec), 1,rho%bec,  1)
       !
       IF (dipfield) rho%el_dipole = DBLE( io_buffer(start_dipole) )
@@ -948,7 +976,10 @@ FUNCTION ns_ddot( rho1, rho2 )
   !
   ns_ddot = 0.D0
   !
-  IF (lda_plus_u_kind.EQ.2) RETURN
+  IF (lda_plus_u_kind.EQ.2) THEN
+     ns_ddot = nsg_ddot( rho1%nsg, rho2%nsg, nspin )
+     RETURN
+  END IF
   !
   DO na = 1, nat
      nt = ityp(na)
@@ -1336,14 +1367,14 @@ SUBROUTINE bcast_scf_type( rho, root, comm )
   IF (lda_plus_u_co)  CALL mp_bcast( rho%ns,    root, comm )
   IF (lda_plus_u_cob) CALL mp_bcast( rho%nsb,   root, comm )
   IF (lda_plus_u_nc)  CALL mp_bcast( rho%ns_nc, root, comm )
+  !!IF (lda_plus_u_v)   CALL mp_bcast( rho%nsg,   root, comm )
   IF (okpaw)          CALL mp_bcast( rho%bec,   root, comm )
   IF (sic) THEN
      CALL mp_bcast ( rho%pol_r, root, comm )
      CALL mp_bcast ( rho%pol_g, root, comm )
   END IF
   !
-END SUBROUTINE
-!
+END SUBROUTINE bcast_scf_type
 !
 !---------------------------------------------------------------------------
 SUBROUTINE rhoz_or_updw( rho, sp, dir )
@@ -1398,7 +1429,7 @@ SUBROUTINE rhoz_or_updw( rho, sp, dir )
   !
   RETURN
   !
-  END SUBROUTINE
+  END SUBROUTINE rhoz_or_updw
   !
   !
 END MODULE scf
