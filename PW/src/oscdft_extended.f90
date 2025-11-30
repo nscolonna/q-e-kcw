@@ -17,7 +17,7 @@ SUBROUTINE oscdft_nsg3 (nsnew)
    USE ions_base,       ONLY : nat, ityp
    USE lsda_mod,        ONLY : nspin
    USE upf_params,      ONLY : lqmax
-   USE ldaU,            ONLY : max_num_neighbors, ldmx_tot, nsgnew, neighood, &
+   USE ldaU,            ONLY : max_num_neighbors, ldmx_tot, neighood, &
                                Hubbard_l, Hubbard_lmax
 #if defined (__OSCDFT)
    USE oscdft_base,     ONLY : oscdft_ctx
@@ -74,7 +74,7 @@ SUBROUTINE oscdft_nsg (lflag)
    USE ions_base,       ONLY : nat, ityp
    USE lsda_mod,        ONLY : nspin
    USE upf_params,      ONLY : lqmax
-   USE ldaU,            ONLY : max_num_neighbors, ldmx_tot, nsgnew, neighood, &
+   USE ldaU,            ONLY : max_num_neighbors, ldmx_tot, neighood, &
                                Hubbard_l, Hubbard_lmax
 #if defined (__OSCDFT)
    USE oscdft_base,     ONLY : oscdft_ctx

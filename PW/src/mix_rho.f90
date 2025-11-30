@@ -43,7 +43,7 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
   USE io_global,      ONLY : stdout
   USE gcscf_module,   ONLY : lgcscf, gcscf_gh, gcscf_mu, gcscf_eps
   USE ldaU,           ONLY : lda_plus_u, lda_plus_u_kind, ldim_u, neighood, &
-                             max_num_neighbors, nsg, nsgnew, Hubbard_l, Hubbard_lmax
+                             max_num_neighbors, Hubbard_l, Hubbard_lmax
   USE buffers,        ONLY : open_buffer, close_buffer, get_buffer, save_buffer
 #if defined (__OSCDFT)
   USE plugin_flags,     ONLY : use_oscdft
@@ -138,9 +138,7 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
   call create_mix_type(rhoin_m)
   !
   call assign_scf_to_mix_type(rhoin, rhoin_m)
-  if (lda_plus_u_kind==2) rhoin_m%nsg=nsgnew
   call assign_scf_to_mix_type(input_rhout, rhout_m)
-  if (lda_plus_u_kind==2) rhout_m%nsg=nsg
   call mix_type_AXPY ( -1.d0, rhoin_m, rhout_m )
   !
   IF ( lgcscf ) THEN
@@ -222,6 +220,7 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
                           input_rhout%ns, oscdft_ctx%conv, dr2, tr2, iter)
         ELSEIF (lda_plus_u_kind==2) THEN
            ALLOCATE (nsnew(2*Hubbard_lmax+1, 2*Hubbard_lmax+1, nspin, nat))
+TO BE FIXED
            CALL oscdft_nsg3 (nsnew)
            CALL oscdft_constrain_ns (oscdft_ctx, Hubbard_lmax, Hubbard_l, &
                        nsnew, oscdft_ctx%conv, dr2, tr2, iter)
@@ -471,7 +470,6 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
   call high_frequency_mixing ( rhoin, input_rhout, alphamix )
   ! ... add the mixed rho for the smooth frequencies
   call assign_mix_to_scf_type(rhoin_m,rhoin)
-  if (lda_plus_u_kind==2) nsg = rhoin_m%nsg
   !
   call destroy_mix_type(rhout_m)
   call destroy_mix_type(rhoin_m)

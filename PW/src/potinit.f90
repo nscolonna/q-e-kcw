@@ -40,7 +40,7 @@ SUBROUTINE potinit()
   USE ener,                 ONLY : ehart, etxc, vtxc, epaw, esol, vsol
   USE ldaU,                 ONLY : lda_plus_u, eth, &
                                    niter_with_fixed_ns, lda_plus_u_kind, &
-                                   nsg, nsgnew, apply_U, hub_pot_fix, &
+                                   apply_U, hub_pot_fix, &
                                    orbital_resolved
   USE noncollin_module,     ONLY : noncolin, domag, report, lforcet
   USE io_files,             ONLY : restart_dir, input_drho, check_file_exist
@@ -295,9 +295,6 @@ SUBROUTINE potinit()
      ! ... info about starting occupations
      WRITE( stdout, '(/5X,"STARTING HUBBARD OCCUPATIONS:")')
      !
-     ! FIXME: next line because write_nsg prints nsgnew, not nsg
-     ! FIXME: Apparently nsgnew, not nsg, is the same as rho%ns
-     IF (lda_plus_u_kind == 2) nsgnew = nsg
      CALL write_ns_hubbard( noncolin )
      !
   END IF

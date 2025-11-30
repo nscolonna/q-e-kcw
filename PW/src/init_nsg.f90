@@ -17,8 +17,9 @@ SUBROUTINE init_nsg
    USE uspp_param,  ONLY : upf
    USE lsda_mod,    ONLY : nspin, starting_magnetization
    USE ldaU,        ONLY : Hubbard_l, Hubbard_l2, Hubbard_l3, hubbard_occ, &
-                           nsg, nsgnew, ldim_u, backall, is_hubbard, is_hubbard_back
+                           ldim_u, backall, is_hubbard, is_hubbard_back
    USE noncollin_module, ONLY : angle1, angle2, noncolin
+   USE scf,              ONLY : rho
 #if defined (__OSCDFT)
    USE plugin_flags,     ONLY : use_oscdft
    USE oscdft_base,      ONLY : oscdft_ctx
@@ -31,11 +32,12 @@ SUBROUTINE init_nsg
    LOGICAL :: nm        ! true if the atom is non-magnetic
    INTEGER, EXTERNAL :: find_viz
    !
-   nsg(:,:,:,:,:) = (0.d0, 0.d0)
+   rho%nsg(:,:,:,:,:) = (0.d0, 0.d0)
    !
 #if defined (__OSCDFT)
    IF (use_oscdft .AND. (oscdft_ctx%inp%oscdft_type==2) .AND. &
       .NOT.oscdft_ctx%inp%constraint_diag) THEN
+      FIX HERE
       CALL oscdft_nsg(1)
       nsg = nsgnew
    ENDIF
@@ -54,7 +56,7 @@ SUBROUTINE init_nsg
 #if defined (__OSCDFT)
       IF (use_oscdft .AND. (oscdft_ctx%inp%oscdft_type==2) .AND. &
          .NOT.oscdft_ctx%inp%constraint_diag) THEN
-         IF (ANY(DBLE(nsg(:,:,:,na,:))/=0.d0)) GO TO 7
+         IF (ANY(DBLE(rho%nsg(:,:,:,na,:))/=0.d0)) GO TO 7
       ENDIF
 #endif
          !
@@ -102,18 +104,18 @@ SUBROUTINE init_nsg
                ns(3) = m * CONJG( esin ) / 2.d0 
                ns(4) = ( n - m*cosin ) / 2.d0 
                DO m1 = 1, ldim
-                  nsg(m1,m1,viz,na,:) = ns(:)
+                  rho%nsg(m1,m1,viz,na,:) = ns(:)
                ENDDO
             ELSE
                !
                IF (totoc.GT.ldim) THEN
                   DO m1 = 1, ldim
-                     nsg (m1,m1,viz,na,majs) = 1.d0
-                     nsg (m1,m1,viz,na,mins) = (totoc - ldim) / ldim
+                     rho%nsg (m1,m1,viz,na,majs) = 1.d0
+                     rho%nsg (m1,m1,viz,na,mins) = (totoc - ldim) / ldim
                   ENDDO
                ELSE
                   DO m1 = 1, ldim
-                     nsg (m1,m1,viz,na,majs) = totoc / ldim
+                     rho%nsg (m1,m1,viz,na,majs) = totoc / ldim
                   ENDDO
                ENDIF
                !   
@@ -122,13 +124,13 @@ SUBROUTINE init_nsg
             ! Atom is non-magnetic
             IF (noncolin) THEN
                DO m1 = 1, ldim
-                  nsg (m1,m1,viz,na,1) = totoc / 2.d0 / ldim
-                  nsg (m1,m1,viz,na,4) = totoc / 2.d0 / ldim
+                  rho%nsg (m1,m1,viz,na,1) = totoc / 2.d0 / ldim
+                  rho%nsg (m1,m1,viz,na,4) = totoc / 2.d0 / ldim
                ENDDO
             ELSE
                DO is = 1, nspin
                   DO m1 = 1, ldim  
-                     nsg (m1,m1,viz,na,is) = totoc /  2.d0 / ldim
+                     rho%nsg (m1,m1,viz,na,is) = totoc /  2.d0 / ldim
                   ENDDO  
                ENDDO  
             ENDIF
@@ -144,7 +146,7 @@ SUBROUTINE init_nsg
                totoc_b = hubbard_occ(nt,2)
                DO is = 1, nspin
                   DO m1 = ldim+1, ldim_u(nt)
-                     nsg (m1,m1,viz,na,is) = totoc_b / 2.d0 / ldim2
+                     rho%nsg (m1,m1,viz,na,is) = totoc_b / 2.d0 / ldim2
                   ENDDO
                ENDDO
             ELSE
@@ -153,7 +155,7 @@ SUBROUTINE init_nsg
                totoc_b = hubbard_occ(nt,2)
                DO is = 1, nspin
                   DO m1 = ldim+1, ldim+2*Hubbard_l2(nt)+1
-                     nsg (m1,m1,viz,na,is) = totoc_b / 2.d0 / ldim2
+                     rho%nsg (m1,m1,viz,na,is) = totoc_b / 2.d0 / ldim2
                   ENDDO
                ENDDO
                ! Fill in the third Hubbard manifold
@@ -161,7 +163,7 @@ SUBROUTINE init_nsg
                totoc_b = hubbard_occ(nt,3)
                DO is = 1, nspin
                   DO m1 = ldim+2*Hubbard_l2(nt)+2, ldim_u(nt)
-                     nsg (m1,m1,viz,na,is) = totoc_b / 2.d0 / ldim2
+                     rho%nsg (m1,m1,viz,na,is) = totoc_b / 2.d0 / ldim2
                   ENDDO
                ENDDO
             ENDIF
