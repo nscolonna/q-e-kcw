@@ -11,7 +11,7 @@ SUBROUTINE v_hubbard ( noncolin, rho, v, eth )
   !---------------------------------------------------------------------
   !
   USE kinds, ONLY : dp
-  USE ldaU,  ONLY : lda_plus_u, lda_plus_u_kind, ldmx_b, nsg, v_nsg, &
+  USE ldaU,  ONLY : lda_plus_u, lda_plus_u_kind, ldmx_b, v_nsg, &
                     Hubbard_l, Hubbard_lmax, apply_U, orbital_resolved 
   USE scf,   ONLY : scf_type
   !
@@ -70,9 +70,9 @@ SUBROUTINE v_hubbard ( noncolin, rho, v, eth )
         ! DFT+U+V (simplified)
         !
         IF (noncolin) THEN
-           CALL v_hubbard_extended_nc (nsg, v_nsg, eth)
+           CALL v_hubbard_extended_nc (rho%nsg, v_nsg, eth)
         ELSE
-           CALL v_hubbard_extended (nsg, v_nsg, eth)
+           CALL v_hubbard_extended (rho%nsg, v_nsg, eth)
         ENDIF
      ELSE
         !

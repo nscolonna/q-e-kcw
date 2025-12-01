@@ -424,7 +424,7 @@ SUBROUTINE electrons_scf ( printout, exxen )
   USE io_files,             ONLY : iunmix, output_drho
   USE ldaU,                 ONLY : eth, lda_plus_u, lda_plus_u_kind, &
                                    niter_with_fixed_ns, hub_pot_fix, &
-                                   nsg, nsgnew, v_nsg, at_sc, neighood, &
+                                   v_nsg, at_sc, neighood, &
                                    ldim_u, is_hubbard_back, apply_U, orbital_resolved
   USE extfield,             ONLY : tefield, etotefield, gate, etotgatefield !TB
   USE noncollin_module,     ONLY : noncolin, magtot_nc, i_cons,  bfield, &
@@ -773,7 +773,7 @@ SUBROUTINE electrons_scf ( printout, exxen )
              ELSEIF (lda_plus_u_kind.EQ.2) THEN
                 IF (noncolin) CALL errore('electrons_scf', &
                 & 'hub_pot_fix is not implemented for (lda_plus_u_kind=2 .AND. noncolin)',1)
-                nsgnew = nsg
+                rho%nsg = rhoin%nsg
              ENDIF
            ENDIF
            !
@@ -792,7 +792,8 @@ SUBROUTINE electrons_scf ( printout, exxen )
                  ELSE
                     rhoin%ns = rho%ns
                  ENDIF
-              !ELSEIF (lda_plus_u_kind.EQ.2) THEN
+              ELSEIF (lda_plus_u_kind.EQ.2) THEN
+                 rhoin%nsg = rho%nsg
               ENDIF
            ENDIF
            IF ( iter <= niter_with_fixed_ns ) THEN
@@ -811,7 +812,7 @@ SUBROUTINE electrons_scf ( printout, exxen )
                     rho%ns = rhoin%ns
                  ENDIF
               ELSEIF (lda_plus_u_kind.EQ.2) THEN
-                 nsgnew = nsg
+                 rho%nsg = rhoin%nsg
               ENDIF
            ENDIF
            !
@@ -849,7 +850,7 @@ SUBROUTINE electrons_scf ( printout, exxen )
            ENDIF
            ! DFT+U+V: this variable is not in "mix-type" variable rhoin
            IF (lda_plus_u_kind.EQ.2) THEN
-              IF (ALLOCATED(nsg) ) CALL mp_bcast ( nsg, root_pool, inter_pool_comm)
+              IF (ALLOCATED(rhoin%nsg) ) CALL mp_bcast ( rhoin%nsg, root_pool, inter_pool_comm)
            ENDIF
         ENDIF
         !
@@ -935,7 +936,6 @@ SUBROUTINE electrons_scf ( printout, exxen )
            descf = delta_escf()
            !
            ! ... now copy the mixed charge density in R- and G-space in rho
-           !
            CALL scf_type_COPY( rhoin, rho )
            !
 #if defined (__OSCDFT)
@@ -950,8 +950,6 @@ SUBROUTINE electrons_scf ( printout, exxen )
            ENDIF
 #endif
            !
-           IF (lda_plus_u .AND. lda_plus_u_kind.EQ.2) nsgnew = nsg
-           !
            IF ( lgcscf ) THEN
               CALL gcscf_set_nelec( charge )
            END IF
@@ -963,8 +961,6 @@ SUBROUTINE electrons_scf ( printout, exxen )
            ! ... 2) vnew contains V(out)-V(in) ( used to correct the forces ).
            !
            vnew%of_r(:,:) = v%of_r(:,:)
-           !
-           IF (lda_plus_u .AND. lda_plus_u_kind.EQ.2) nsg = nsgnew
            !
            CALL v_of_rho( rho,rho_core,rhog_core, &
                           ehart, etxc, vtxc, eth, etotefield, charge, v )
@@ -1387,7 +1383,7 @@ SUBROUTINE electrons_scf ( printout, exxen )
                               DO m1 = 1, ldim_u(nt1)
                                  DO m2 = 1, ldim_u(nt2)
                                     delta_e_hub = delta_e_hub - &
-                                       nsgnew(m2,m1,viz,na1,i)*v_nsg(m2,m1,viz,na1,i)
+                                       rho%nsg(m2,m1,viz,na1,i)*v_nsg(m2,m1,viz,na1,i)
                                  ENDDO
                               ENDDO
                            ENDIF
@@ -1407,7 +1403,7 @@ SUBROUTINE electrons_scf ( printout, exxen )
                            DO m1 = 1, ldim_u(nt1)
                               DO m2 = 1, ldim_u(nt2)
                                  delta_e_hub = delta_e_hub - &
-                                     nsgnew(m2,m1,viz,na1,is)*v_nsg(m2,m1,viz,na1,is)
+                                     rho%nsg(m2,m1,viz,na1,is)*v_nsg(m2,m1,viz,na1,is)
                               ENDDO
                            ENDDO
                         ENDIF
@@ -1504,7 +1500,8 @@ SUBROUTINE electrons_scf ( printout, exxen )
                               DO m1 = 1, ldim_u(nt1)
                                  DO m2 = 1, ldim_u(nt2)
                                     delta_escf_hub = delta_escf_hub - &
-                                          (nsg(m2,m1,viz,na1,i)-nsgnew(m2,m1,viz,na1,i)) * &
+                                         (rhoin%nsg(m2,m1,viz,na1,i) - &
+                                            rho%nsg(m2,m1,viz,na1,i)) * &
                                           v_nsg(m2,m1,viz,na1,i)
                                  ENDDO
                               ENDDO
@@ -1525,7 +1522,8 @@ SUBROUTINE electrons_scf ( printout, exxen )
                            DO m1 = 1, ldim_u(nt1)
                               DO m2 = 1, ldim_u(nt2)
                                  delta_escf_hub = delta_escf_hub - &
-                                      (nsg(m2,m1,viz,na1,is)-nsgnew(m2,m1,viz,na1,is)) * &
+                                      (rhoin%nsg(m2,m1,viz,na1,is)- &
+                                         rho%nsg(m2,m1,viz,na1,is)) * &
                                        v_nsg(m2,m1,viz,na1,is)
                               ENDDO
                            ENDDO

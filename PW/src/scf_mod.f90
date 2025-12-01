@@ -59,7 +59,7 @@ MODULE scf
      !! the DFT+U occupation matrix (background states)
      COMPLEX(DP), ALLOCATABLE :: ns_nc(:,:,:,:)
      !! the DFT+U occupation matrix - noncollinear case
-     !!COMPLEX(DP), ALLOCATABLE :: nsg(:,:,:,:,:)
+     COMPLEX(DP), ALLOCATABLE :: nsg(:,:,:,:,:)
      !! the DFT+U+V generalized occupation matrix
      !! Matrix nsg(at1,m1,viz,m2,sp) stores the expectation value:
      !! <C^\dagger_{at1,m1,sp}C_{viz,m2,sp}>, where sp = spin and
@@ -163,7 +163,7 @@ CONTAINS
    IF (lda_plus_u_co)  ALLOCATE( rho%ns(2*Hubbard_lmax+1,2*Hubbard_lmax+1,nspin,nat) )
    IF (lda_plus_u_cob) ALLOCATE( rho%nsb(ldmx_b,ldmx_b,nspin,nat) )
    IF (lda_plus_u_nc)  ALLOCATE( rho%ns_nc(2*Hubbard_lmax+1,2*Hubbard_lmax+1,nspin,nat) )
-   !!IF (lda_plus_u_v ) ALLOCATE ( rho%nsg(ldmx_tot,ldmx_tot,max_num_neighbors,nat,nspin) )
+   IF (lda_plus_u_v ) ALLOCATE ( rho%nsg(ldmx_tot,ldmx_tot,max_num_neighbors,nat,nspin) )
    !
    IF (okpaw) THEN ! See the top of the file for clarification
       IF ( PRESENT(do_not_allocate_becsum) ) THEN
@@ -201,7 +201,7 @@ CONTAINS
    IF (ALLOCATED(rho%ns)   )  DEALLOCATE( rho%ns    )
    IF (ALLOCATED(rho%nsb)  )  DEALLOCATE( rho%nsb   )
    IF (ALLOCATED(rho%ns_nc))  DEALLOCATE( rho%ns_nc )
-   !!!IF (ALLOCATED(rho%nsg  ))  DEALLOCATE( rho%nsg   )
+   IF (ALLOCATED(rho%nsg  ))  DEALLOCATE( rho%nsg   )
    IF (ALLOCATED(rho%bec)  )  DEALLOCATE( rho%bec   )
    IF (ALLOCATED(rho%pol_r))  DEALLOCATE( rho%pol_r )
    IF (ALLOCATED(rho%pol_g))  DEALLOCATE( rho%pol_g )
@@ -333,7 +333,7 @@ CONTAINS
    IF (lda_plus_u_nc)  rho_m%ns_nc  = rho_s%ns_nc
    IF (lda_plus_u_co)  rho_m%ns     = rho_s%ns
    IF (lda_plus_u_cob) rho_m%nsb    = rho_s%nsb
-   !!IF (lda_plus_u_v)   rho_m%nsg    = rho_s%nsg
+   IF (lda_plus_u_v)   rho_m%nsg    = rho_s%nsg
    IF (okpaw)          rho_m%bec    = rho_s%bec
    !
    IF (dipfield) THEN
@@ -384,7 +384,7 @@ CONTAINS
    IF (lda_plus_u_nc)  rho_s%ns_nc(:,:,:,:) = rho_m%ns_nc(:,:,:,:)
    IF (lda_plus_u_co)  rho_s%ns(:,:,:,:)    = rho_m%ns(:,:,:,:)
    IF (lda_plus_u_cob) rho_s%nsb(:,:,:,:)   = rho_m%nsb(:,:,:,:)
-   !!IF (lda_plus_u_v)   rho_s%nsg(:,:,:,:,:)   = rho_m%nsg(:,:,:,:,:)
+   IF (lda_plus_u_v)   rho_s%nsg(:,:,:,:,:)   = rho_m%nsg(:,:,:,:,:)
    IF (okpaw)          rho_s%bec(:,:,:)     = rho_m%bec(:,:,:)
    !
    RETURN
@@ -415,7 +415,7 @@ CONTAINS
   IF (lda_plus_u_nc)  Y%ns_nc = X%ns_nc
   IF (lda_plus_u_co)  Y%ns    = X%ns
   IF (lda_plus_u_cob) Y%nsb   = X%nsb
-  !!IF (lda_plus_u_v)   Y%nsg   = X%nsg
+  IF (lda_plus_u_v)   Y%nsg   = X%nsg
   IF (okpaw)          Y%bec   = X%bec
   IF (sic) THEN
      Y%pol_r = X%pol_r
@@ -593,7 +593,7 @@ CONTAINS
    IF (lda_plus_u_nc)  rhoin%ns_nc(:,:,:,:) = 0.d0
    IF (lda_plus_u_co)  rhoin%ns(:,:,:,:)    = 0.d0
    IF (lda_plus_u_cob) rhoin%nsb(:,:,:,:)   = 0.d0
-   !!IF (lda_plus_u_v)   rhoin%nsg(:,:,:,:,:)   = 0.d0
+   IF (lda_plus_u_v)   rhoin%nsg(:,:,:,:,:) = 0.d0
    !
    !$acc end data 
    call stop_clock('high_freq_mix') 
@@ -1367,7 +1367,7 @@ SUBROUTINE bcast_scf_type( rho, root, comm )
   IF (lda_plus_u_co)  CALL mp_bcast( rho%ns,    root, comm )
   IF (lda_plus_u_cob) CALL mp_bcast( rho%nsb,   root, comm )
   IF (lda_plus_u_nc)  CALL mp_bcast( rho%ns_nc, root, comm )
-  !!IF (lda_plus_u_v)   CALL mp_bcast( rho%nsg,   root, comm )
+  IF (lda_plus_u_v)   CALL mp_bcast( rho%nsg,   root, comm )
   IF (okpaw)          CALL mp_bcast( rho%bec,   root, comm )
   IF (sic) THEN
      CALL mp_bcast ( rho%pol_r, root, comm )
