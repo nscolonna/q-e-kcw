@@ -220,8 +220,7 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
                           input_rhout%ns, oscdft_ctx%conv, dr2, tr2, iter)
         ELSEIF (lda_plus_u_kind==2) THEN
            ALLOCATE (nsnew(2*Hubbard_lmax+1, 2*Hubbard_lmax+1, nspin, nat))
-TO BE FIXED
-           CALL oscdft_nsg3 (nsnew)
+           CALL oscdft_nsg3 (input_rhout%nsg,nsnew)
            CALL oscdft_constrain_ns (oscdft_ctx, Hubbard_lmax, Hubbard_l, &
                        nsnew, oscdft_ctx%conv, dr2, tr2, iter)
            DEALLOCATE (nsnew)

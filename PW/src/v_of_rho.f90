@@ -30,7 +30,7 @@ SUBROUTINE v_of_rho( rho, rho_core, rhog_core, &
   USE sic_mod,          ONLY : add_vsic
 #if defined (__OSCDFT)
   USE ldaU,             ONLY : lda_plus_u_kind, Hubbard_lmax, Hubbard_l, &
-                               nsg, v_nsg
+                               v_nsg
   USE plugin_flags,     ONLY : use_oscdft
   USE oscdft_base,      ONLY : oscdft_ctx
   USE oscdft_functions, ONLY : oscdft_v_constraint
@@ -98,7 +98,7 @@ SUBROUTINE v_of_rho( rho, rho_core, rhog_core, &
         IF (lda_plus_u_kind == 0) THEN
            CALL oscdft_v_constraint (oscdft_ctx, Hubbard_lmax, Hubbard_l, rho%ns, v%ns, eth)
         ELSEIF (lda_plus_u_kind == 2) THEN
-           CALL oscdft_v_constraint_extended (nsg, v_nsg, eth)
+           CALL oscdft_v_constraint_extended (rho%nsg, v_nsg, eth)
         ENDIF
      ENDIF
   ENDIF
