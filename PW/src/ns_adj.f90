@@ -278,7 +278,7 @@ SUBROUTINE nsg_adj ( )
         ! Here we are copying the occupation matrix nsgnew to the 
         ! array oscdft_ctx%inp%occupation because it will be used in
         ! the constrained calculation
-        CALL oscdft_nsg(2)
+        CALL oscdft_nsg(2, rho%nsg)
      ENDIF
 #endif
      !
@@ -290,7 +290,7 @@ SUBROUTINE nsg_adj ( )
      IF (use_oscdft .AND. (oscdft_ctx%inp%oscdft_type==2)) THEN
        ! Here we are copying the target occupation matrix to the
        ! current/working occupation matrix nsgnew
-       CALL oscdft_nsg(4)
+       CALL oscdft_nsg(4, rho%nsg)
      ENDIF
      !
      ! Write the original occupation matrices
