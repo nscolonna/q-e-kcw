@@ -24,7 +24,6 @@ MODULE scf
   USE ions_base,       ONLY : ntyp => nsp
   USE paw_variables,   ONLY : okpaw
   USE uspp_param,      ONLY : nhm
-  USE extfield,        ONLY : dipfield, emaxpos, eopreg, edir
   USE control_flags,   ONLY : lxdm, sic
   !
   SAVE
@@ -70,6 +69,8 @@ MODULE scf
      !! the polaron density in R-space
      COMPLEX(DP),ALLOCATABLE :: pol_g(:,:) 
      !! the polaron density in G-space
+     REAL(DP) :: el_dipole
+     !! electronic dipole, if a dipole field is present
   END TYPE scf_type
   !
   TYPE mix_type
@@ -89,7 +90,7 @@ MODULE scf
      REAL(DP),    ALLOCATABLE :: bec(:,:,:)
      !! PAW corrections to hamiltonian
      REAL(DP) :: el_dipole
-     !! electrons dipole
+     !! electronic dipole, if a dipole field is present
      COMPLEX(DP), ALLOCATABLE :: pol_g(:,:)  
      !! polaron density in G-space
   END TYPE mix_type
@@ -174,6 +175,7 @@ CONTAINS
       IF (allocate_becsum) ALLOCATE( rho%bec(nhm*(nhm+1)/2,nat,nspin) )
    ENDIF
    !
+   rho%el_dipole = 0._dp
    IF (sic) THEN
       IF(.NOT. ALLOCATED(rho%pol_r)) ALLOCATE(rho%pol_r(dfftp%nnr,nspin)) 
       IF(.NOT. ALLOCATED(rho%pol_g)) ALLOCATE(rho%pol_g(ngm,nspin)) 
@@ -314,8 +316,6 @@ CONTAINS
    TYPE(scf_type), INTENT(IN)  :: rho_s
    TYPE(mix_type), INTENT(INOUT) :: rho_m
    !
-   REAL(DP) :: e_dipole
-   !
   !$acc enter data present_or_copyin(rho_s, rho_s%of_g) 
   !$acc kernels present(rho_m, rho_m%of_g, rho_s%of_g) 
    rho_m%of_g(1:ngms,1:nspin) = rho_s%of_g(1:ngms,1:nspin)
@@ -336,10 +336,7 @@ CONTAINS
    IF (lda_plus_u_v)   rho_m%nsg    = rho_s%nsg
    IF (okpaw)          rho_m%bec    = rho_s%bec
    !
-   IF (dipfield) THEN
-      CALL compute_el_dip( emaxpos, eopreg, edir, rho_s%of_r(:,1), e_dipole )
-      rho_m%el_dipole = e_dipole
-   ENDIF
+   rho_m%el_dipole = rho_s%el_dipole
    !
    RETURN
    !
@@ -387,6 +384,8 @@ CONTAINS
    IF (lda_plus_u_v)   rho_s%nsg(:,:,:,:,:)   = rho_m%nsg(:,:,:,:,:)
    IF (okpaw)          rho_s%bec(:,:,:)     = rho_m%bec(:,:,:)
    !
+   rho_s%el_dipole = rho_m%el_dipole
+   !
    RETURN
    !
  END SUBROUTINE assign_mix_to_scf_type
@@ -417,6 +416,7 @@ CONTAINS
   IF (lda_plus_u_cob) Y%nsb   = X%nsb
   IF (lda_plus_u_v)   Y%nsg   = X%nsg
   IF (okpaw)          Y%bec   = X%bec
+  Y%el_dipole = X%el_dipole
   IF (sic) THEN
      Y%pol_r = X%pol_r
      Y%pol_g = X%pol_g
@@ -458,8 +458,10 @@ CONTAINS
   IF (lda_plus_u_cob)          Y%nsb       = Y%nsb       + A * X%nsb
   IF (lda_plus_u_v)            Y%nsg       = Y%nsg       + A * X%nsg
   IF (okpaw)                   Y%bec       = Y%bec       + A * X%bec
-  IF (dipfield)                Y%el_dipole = Y%el_dipole + A * X%el_dipole
   IF (sic)                     Y%pol_g     = Y%pol_g     + A * X%pol_g
+  ! No need to spare an operation on a single number
+  ! IF (dipfield)                Y%el_dipole = Y%el_dipole + A * X%el_dipole
+  Y%el_dipole = Y%el_dipole + A * X%el_dipole
   !
  !$acc end data
   RETURN
@@ -494,8 +496,8 @@ CONTAINS
   IF (lda_plus_u_cob)          Y%nsb       = X%nsb
   IF (lda_plus_u_v)            Y%nsg       = X%nsg
   IF (okpaw)                   Y%bec       = X%bec
-  IF (dipfield)                Y%el_dipole = X%el_dipole
   IF (sic)                     Y%pol_g     = X%pol_g
+  Y%el_dipole = X%el_dipole
   !
  !$acc end data
   RETURN
@@ -531,8 +533,8 @@ CONTAINS
   IF (lda_plus_u_cob)          X%nsb       = A * X%nsb
   IF (lda_plus_u_v)            X%nsg       = A * X%nsg
   IF (okpaw)                   X%bec       = A * X%bec
-  IF (dipfield)                X%el_dipole = A * X%el_dipole
   IF (sic)                     X%pol_g     = A * X%pol_g
+  X%el_dipole = A * X%el_dipole
   !
  !$acc end data
   RETURN
@@ -623,8 +625,8 @@ CONTAINS
    IF (lda_plus_u_nc)           rlen_ldaU = 2 * (2*Hubbard_lmax+1)**2 *nspin*nat
    IF (lda_plus_u_v)            rlen_ldaU = 2 * (ldmx_tot**2*max_num_neighbors*nat*nspin)
    IF (okpaw)                   rlen_bec  = (nhm*(nhm+1)/2) * nat * nspin
-   IF (dipfield)                rlen_dip  = 1
    IF (sic)                     rlen_pol  = 2*ngms*nspin
+   rlen_dip  = 1
    !
    ! define the starting point of the different chunks. Beware: each starting point
    ! is the index of a COMPLEX array. When real arrays with odd dimension are copied
@@ -701,7 +703,7 @@ CONTAINS
       IF (lda_plus_u_cob)          CALL DCOPY(rlen_ldaUb,rho%nsb, 1,io_buffer(start_ldaUb),1)
       IF (okpaw)                   CALL DCOPY(rlen_bec, rho%bec,  1,io_buffer(start_bec), 1)
       !
-      IF (dipfield) io_buffer(start_dipole) = CMPLX( rho%el_dipole, 0.0_dp, KIND=DP )
+      io_buffer(start_dipole) = CMPLX( rho%el_dipole, 0.0_dp, KIND=DP )
       IF (sic)                     CALL DCOPY(rlen_pol, rho%pol_g, 1,io_buffer(start_pol),1)
       !
       CALL save_buffer( io_buffer, record_length, iunit, record )   
@@ -723,7 +725,7 @@ CONTAINS
       IF (lda_plus_u_v)            CALL DCOPY(rlen_ldaU,io_buffer(start_ldaU),1,rho%nsg,1)
       IF (okpaw)                   CALL DCOPY(rlen_bec, io_buffer(start_bec), 1,rho%bec,  1)
       !
-      IF (dipfield) rho%el_dipole = DBLE( io_buffer(start_dipole) )
+      rho%el_dipole = DBLE( io_buffer(start_dipole) )
       IF (sic)                     CALL DCOPY(rlen_pol, io_buffer(start_pol), 1,rho%pol_g,1)
       !
    ENDIF
@@ -861,7 +863,9 @@ FUNCTION rho_ddot( rho1, rho2, gf, g0 )
   ! Beware: commented out because it yields too often negative values
   ! IF (okpaw)         rho_ddot = rho_ddot + paw_ddot(rho1%bec, rho2%bec)
   !
-  IF (dipfield) rho_ddot = rho_ddot + (e2/2.0_DP)*(rho1%el_dipole * rho2%el_dipole)*omega/fpi
+  ! Dipole is zero if not set
+  ! IF (dipfield)
+  rho_ddot = rho_ddot + (e2/2.0_DP)*(rho1%el_dipole * rho2%el_dipole)*omega/fpi
   !
   RETURN
   !

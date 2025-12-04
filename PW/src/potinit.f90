@@ -59,6 +59,7 @@ SUBROUTINE potinit()
   USE pwcom,                ONLY : report_mag 
   USE rism_module,          ONLY : lrism, rism_init3d, rism_calc3d
   !
+  USE extfield,             ONLY : dipfield, emaxpos, eopreg, edir
 #if defined (__ENVIRON)
   USE plugin_flags,         ONLY : use_environ
   USE environ_pw_module,    ONLY : calc_environ_potential
@@ -175,7 +176,6 @@ SUBROUTINE potinit()
         CALL init_ns_hubbard ( noncolin ) 
         !
      ENDIF
-
      ! ... in the paw case uses atomic becsum
      IF ( okpaw )      CALL PAW_atomic_becsum()
      !
@@ -257,6 +257,11 @@ SUBROUTINE potinit()
      ENDIF
      !
   END IF
+  ! ... if a dipolar field is present, store it into rho for later usage
+  ! ... in self-consistency mixing
+  !
+  IF (dipfield) &
+      CALL compute_el_dip(emaxpos, eopreg, edir, rho%of_r(:,1), rho%el_dipole)
   !
   ! ... initialize 3D-RISM
   !
