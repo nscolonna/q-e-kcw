@@ -755,65 +755,29 @@ SUBROUTINE electrons_scf ( printout, exxen )
            ! in a self-consistent way.
            !
            IF (hub_pot_fix) THEN
-             IF (lda_plus_u_kind.EQ.0) THEN
-                IF (noncolin) THEN
-                   ! call occupation counting routine before resetting ns
-                   IF (orbital_resolved) CALL alpha_m_nc_trace(rho%ns_nc) 
-                   rho%ns_nc = rhoin%ns_nc
-                ELSE
-                   ! call occupation counting routine before resetting ns
-                   IF (orbital_resolved) CALL alpha_m_trace(rho%ns) 
-                   rho%ns = rhoin%ns ! back to input values
-                ENDIF
-                !
-                IF (lhb) rho%nsb = rhoin%nsb
-             ELSEIF (lda_plus_u_kind.EQ.1) THEN
-                CALL errore('electrons_scf', &
-                  & 'hub_pot_fix is not implemented for lda_plus_u_kind=1',1)
-             ELSEIF (lda_plus_u_kind.EQ.2) THEN
-                IF (noncolin) CALL errore('electrons_scf', &
-                & 'hub_pot_fix is not implemented for (lda_plus_u_kind=2 .AND. noncolin)',1)
-                rho%nsg = rhoin%nsg
-             ENDIF
+              IF (lda_plus_u_kind == 0) THEN
+                 IF (noncolin) THEN
+                    ! call occupation counting routine before resetting ns
+                    IF (orbital_resolved) CALL alpha_m_nc_trace(rho%ns_nc) 
+                 ELSE
+                    ! call occupation counting routine before resetting ns
+                    IF (orbital_resolved) CALL alpha_m_trace(rho%ns) 
+                 ENDIF
+              ELSE
+                 ! FIXME: this check should be done ealier
+                 CALL errore('electrons_scf', &
+                 & 'hub_pot_fix not implemented for lda_plus_u_kind /= 0',1)
+              END IF
+              CALL scf_ns_copy ( noncolin, rhoin, rho ) ! back to input values
            ENDIF
            !
            IF ( first .AND. starting_pot == 'atomic' ) THEN
               CALL ns_hubbard_adj()
-              IF (lda_plus_u_kind.EQ.0) THEN
-                 IF (noncolin) THEN
-                    rhoin%ns_nc = rho%ns_nc                    
-                 ELSE
-                    rhoin%ns = rho%ns
-                    IF (lhb) rhoin%nsb = rho%nsb
-                 ENDIF   
-              ELSEIF (lda_plus_u_kind.EQ.1) THEN
-                 IF (noncolin) THEN
-                    rhoin%ns_nc = rho%ns_nc
-                 ELSE
-                    rhoin%ns = rho%ns
-                 ENDIF
-              ELSEIF (lda_plus_u_kind.EQ.2) THEN
-                 rhoin%nsg = rho%nsg
-              ENDIF
+              CALL scf_ns_copy ( noncolin, rho, rhoin )
            ENDIF
            IF ( iter <= niter_with_fixed_ns ) THEN
               WRITE( stdout, '(/,5X,"RESET ns to initial values (iter <= mixing_fixed_ns)",/)')
-              IF (lda_plus_u_kind.EQ.0) THEN
-                 IF (noncolin) THEN   
-                    rho%ns_nc = rhoin%ns_nc  
-                 ELSE        
-                    rho%ns = rhoin%ns
-                    IF (lhb) rhoin%nsb = rho%nsb
-                 ENDIF
-              ELSEIF (lda_plus_u_kind.EQ.1) THEN
-                 IF (noncolin) THEN
-                    rho%ns_nc = rhoin%ns_nc
-                 ELSE
-                    rho%ns = rhoin%ns
-                 ENDIF
-              ELSEIF (lda_plus_u_kind.EQ.2) THEN
-                 rho%nsg = rhoin%nsg
-              ENDIF
+              CALL scf_ns_copy ( noncolin, rhoin, rho )
            ENDIF
            !
         ENDIF
@@ -1896,3 +1860,38 @@ FUNCTION exxenergyace( )
   domat = .FALSE.
   !
 END FUNCTION exxenergyace
+
+!-----------------------------------------------------------------------
+SUBROUTINE scf_ns_copy ( noncolin, rho1, rho2 )
+  !-----------------------------------------------------------------------
+  !! Copy Hubbard ns from rho1 into rho2
+  !
+  USE ldaU,      ONLY : lda_plus_u_kind, is_hubbard_back
+  USE ions_base, ONLY : ntyp => nsp
+  USE scf,       ONLY : scf_type
+  !
+  IMPLICIT NONE
+  TYPE(scf_type), INTENT(INOUT) :: rho1
+  TYPE(scf_type), INTENT(INOUT) :: rho2
+  LOGICAL, INTENT(in) :: noncolin
+  !  
+  IF (lda_plus_u_kind == 0) THEN
+     IF (noncolin) THEN
+        rho2%ns_nc = rho1%ns_nc
+     ELSE
+        rho2%ns = rho1%ns
+     ENDIF
+     IF ( ANY(is_hubbard_back(1:ntyp)) ) rho2%nsb = rho1%nsb
+  ELSEIF (lda_plus_u_kind == 1) THEN
+     IF (noncolin) THEN
+        rho2%ns_nc = rho1%ns_nc
+     ELSE
+        rho2%ns = rho1%ns
+     ENDIF
+  ELSEIF (lda_plus_u_kind == 2) THEN
+     rho2%nsg = rho1%nsg
+  ENDIF
+  !
+  RETURN
+  !
+END SUBROUTINE scf_ns_copy
