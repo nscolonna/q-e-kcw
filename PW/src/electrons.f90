@@ -763,7 +763,7 @@ SUBROUTINE electrons_scf ( printout, exxen )
                     IF (orbital_resolved) CALL alpha_m_trace(rho%ns) 
                  ENDIF
               ELSE
-                 ! FIXME: this check should be done ealier
+                 ! FIXME: this check should be done earlier
                  CALL errore('electrons_scf', &
                  & 'hub_pot_fix not implemented for lda_plus_u_kind /= 0',1)
               END IF
