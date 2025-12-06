@@ -409,9 +409,9 @@ SUBROUTINE electrons_scf ( printout, exxen )
                                    egrand, vsol, esol, esic, esci
   USE scf,                  ONLY : scf_type, scf_type_COPY, bcast_scf_type,&
                                    create_scf_type, destroy_scf_type, &
-                                   open_mix_file, close_mix_file, &
                                    rho, rho_core, rhog_core, v, vltot, vrs, &
                                    kedtau, vnew
+  USE mix,                  ONLY : open_mix_file, close_mix_file, mix_rho
   USE control_flags,        ONLY : mixing_beta, tr2, ethr, niter, nmix, &
                                    conv_elec, sic, &
                                    restart, io_level, do_makov_payne,  &
@@ -833,8 +833,10 @@ SUBROUTINE electrons_scf ( printout, exxen )
         ! ... The mixing is done on pool 0 only (image parallelization
         ! ... inside mix_rho => rho_ddot => PAW_ddot is no longer there)
         !
-        IF ( my_pool_id == root_pool ) CALL mix_rho( rho, rhoin, &
+        IF ( my_pool_id == root_pool ) THEN
+            CALL mix_rho( rho, rhoin, &
                 mixing_beta, dr2, tr2_min, iter, nmix, iunmix, conv_elec )
+        END IF
         !
         ! ... Results are broadcast from pool 0 to others to prevent trouble
         ! ... on machines unable to yield the same results for the same 
