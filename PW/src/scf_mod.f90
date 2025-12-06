@@ -204,10 +204,8 @@ CONTAINS
      Y%kin_g = X%kin_g
   ENDIF
   !
-  IF (lda_plus_u_nc)  Y%ns_nc = X%ns_nc
-  IF (lda_plus_u_co)  Y%ns    = X%ns
-  IF (lda_plus_u_cob) Y%nsb   = X%nsb
-  IF (lda_plus_u_v)   Y%nsg   = X%nsg
+  CALL scf_ns_copy (X, Y)
+  !
   IF (okpaw)          Y%bec   = X%bec
   Y%el_dipole = X%el_dipole
   IF (sic) THEN
@@ -219,6 +217,21 @@ CONTAINS
   !
  END SUBROUTINE scf_type_COPY
  !
+ !-----------------------------------------------------------------------
+ SUBROUTINE scf_ns_copy ( rho1, rho2 )
+  !-----------------------------------------------------------------------
+  !! Copy Hubbard ns from rho1 into rho2
+  !
+  IMPLICIT NONE
+  TYPE(scf_type), INTENT(IN)    :: rho1
+  TYPE(scf_type), INTENT(INOUT) :: rho2
+  !  
+  IF (lda_plus_u_co)  rho2%ns(:,:,:,:)   = rho1%ns(:,:,:,:)
+  IF (lda_plus_u_cob) rho2%nsb(:,:,:,:)  = rho1%nsb(:,:,:,:)
+  IF (lda_plus_u_nc)  rho2%ns_nc(:,:,:,:)= rho1%ns_nc(:,:,:,:)
+  IF (lda_plus_u_v)   rho2%nsg(:,:,:,:,:)= rho1%nsg(:,:,:,:,:)
+  !
+END SUBROUTINE scf_ns_copy
 !-------------------------------------------------------------------------------
 SUBROUTINE bcast_scf_type( rho, root, comm )
   !----------------------------------------------------------------------------

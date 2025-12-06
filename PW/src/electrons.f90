@@ -409,8 +409,8 @@ SUBROUTINE electrons_scf ( printout, exxen )
                                    egrand, vsol, esol, esic, esci
   USE scf,                  ONLY : scf_type, scf_type_COPY, bcast_scf_type,&
                                    create_scf_type, destroy_scf_type, &
-                                   rho, rho_core, rhog_core, v, vltot, vrs, &
-                                   kedtau, vnew
+                                   scf_ns_copy, rho, rho_core, rhog_core, &
+                                   v, vltot, vrs, kedtau, vnew
   USE mix,                  ONLY : open_mix_file, close_mix_file, mix_rho
   USE control_flags,        ONLY : mixing_beta, tr2, ethr, niter, nmix, &
                                    conv_elec, sic, &
@@ -588,7 +588,6 @@ SUBROUTINE electrons_scf ( printout, exxen )
   ELSE
      edftd3= 0.0
   ENDIF
-  !
   !
   CALL create_scf_type( rhoin )
   !
@@ -768,16 +767,16 @@ SUBROUTINE electrons_scf ( printout, exxen )
                  CALL errore('electrons_scf', &
                  & 'hub_pot_fix not implemented for lda_plus_u_kind /= 0',1)
               END IF
-              CALL scf_ns_copy ( noncolin, rhoin, rho ) ! back to input values
+              CALL scf_ns_copy ( rhoin, rho ) ! back to input values
            ENDIF
            !
            IF ( first .AND. starting_pot == 'atomic' ) THEN
               CALL ns_hubbard_adj()
-              CALL scf_ns_copy ( noncolin, rho, rhoin )
+              CALL scf_ns_copy ( rho, rhoin )
            ENDIF
            IF ( iter <= niter_with_fixed_ns ) THEN
               WRITE( stdout, '(/,5X,"RESET ns to initial values (iter <= mixing_fixed_ns)",/)')
-              CALL scf_ns_copy ( noncolin, rhoin, rho )
+              CALL scf_ns_copy ( rhoin, rho )
            ENDIF
            !
         ENDIF
@@ -1860,38 +1859,3 @@ FUNCTION exxenergyace( )
   domat = .FALSE.
   !
 END FUNCTION exxenergyace
-
-!-----------------------------------------------------------------------
-SUBROUTINE scf_ns_copy ( noncolin, rho1, rho2 )
-  !-----------------------------------------------------------------------
-  !! Copy Hubbard ns from rho1 into rho2
-  !
-  USE ldaU,      ONLY : lda_plus_u_kind, is_hubbard_back
-  USE ions_base, ONLY : ntyp => nsp
-  USE scf,       ONLY : scf_type
-  !
-  IMPLICIT NONE
-  TYPE(scf_type), INTENT(INOUT) :: rho1
-  TYPE(scf_type), INTENT(INOUT) :: rho2
-  LOGICAL, INTENT(in) :: noncolin
-  !  
-  IF (lda_plus_u_kind == 0) THEN
-     IF (noncolin) THEN
-        rho2%ns_nc = rho1%ns_nc
-     ELSE
-        rho2%ns = rho1%ns
-     ENDIF
-     IF ( ANY(is_hubbard_back(1:ntyp)) ) rho2%nsb = rho1%nsb
-  ELSEIF (lda_plus_u_kind == 1) THEN
-     IF (noncolin) THEN
-        rho2%ns_nc = rho1%ns_nc
-     ELSE
-        rho2%ns = rho1%ns
-     ENDIF
-  ELSEIF (lda_plus_u_kind == 2) THEN
-     rho2%nsg = rho1%nsg
-  ENDIF
-  !
-  RETURN
-  !
-END SUBROUTINE scf_ns_copy
