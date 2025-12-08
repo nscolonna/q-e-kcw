@@ -409,8 +409,8 @@ SUBROUTINE electrons_scf ( printout, exxen )
                                    egrand, vsol, esol, esic, esci
   USE scf,                  ONLY : scf_type, scf_type_COPY, bcast_scf_type,&
                                    create_scf_type, destroy_scf_type, &
-                                   rho, rho_core, rhog_core, v, vltot, vrs, &
-                                   kedtau, vnew
+                                   scf_ns_copy, rho, rho_core, rhog_core, &
+                                   v, vltot, vrs, kedtau, vnew
   USE mix,                  ONLY : open_mix_file, close_mix_file, mix_rho
   USE control_flags,        ONLY : mixing_beta, tr2, ethr, niter, nmix, &
                                    conv_elec, sic, &
@@ -589,7 +589,6 @@ SUBROUTINE electrons_scf ( printout, exxen )
      edftd3= 0.0
   ENDIF
   !
-  !
   CALL create_scf_type( rhoin )
   !
   WRITE( stdout, 9002 )
@@ -755,65 +754,29 @@ SUBROUTINE electrons_scf ( printout, exxen )
            ! in a self-consistent way.
            !
            IF (hub_pot_fix) THEN
-             IF (lda_plus_u_kind.EQ.0) THEN
-                IF (noncolin) THEN
-                   ! call occupation counting routine before resetting ns
-                   IF (orbital_resolved) CALL alpha_m_nc_trace(rho%ns_nc) 
-                   rho%ns_nc = rhoin%ns_nc
-                ELSE
-                   ! call occupation counting routine before resetting ns
-                   IF (orbital_resolved) CALL alpha_m_trace(rho%ns) 
-                   rho%ns = rhoin%ns ! back to input values
-                ENDIF
-                !
-                IF (lhb) rho%nsb = rhoin%nsb
-             ELSEIF (lda_plus_u_kind.EQ.1) THEN
-                CALL errore('electrons_scf', &
-                  & 'hub_pot_fix is not implemented for lda_plus_u_kind=1',1)
-             ELSEIF (lda_plus_u_kind.EQ.2) THEN
-                IF (noncolin) CALL errore('electrons_scf', &
-                & 'hub_pot_fix is not implemented for (lda_plus_u_kind=2 .AND. noncolin)',1)
-                rho%nsg = rhoin%nsg
-             ENDIF
+              IF (lda_plus_u_kind == 0) THEN
+                 IF (noncolin) THEN
+                    ! call occupation counting routine before resetting ns
+                    IF (orbital_resolved) CALL alpha_m_nc_trace(rho%ns_nc) 
+                 ELSE
+                    ! call occupation counting routine before resetting ns
+                    IF (orbital_resolved) CALL alpha_m_trace(rho%ns) 
+                 ENDIF
+              ELSE
+                 ! FIXME: this check should be done earlier
+                 CALL errore('electrons_scf', &
+                 & 'hub_pot_fix not implemented for lda_plus_u_kind /= 0',1)
+              END IF
+              CALL scf_ns_copy ( rhoin, rho ) ! back to input values
            ENDIF
            !
            IF ( first .AND. starting_pot == 'atomic' ) THEN
               CALL ns_hubbard_adj()
-              IF (lda_plus_u_kind.EQ.0) THEN
-                 IF (noncolin) THEN
-                    rhoin%ns_nc = rho%ns_nc                    
-                 ELSE
-                    rhoin%ns = rho%ns
-                    IF (lhb) rhoin%nsb = rho%nsb
-                 ENDIF   
-              ELSEIF (lda_plus_u_kind.EQ.1) THEN
-                 IF (noncolin) THEN
-                    rhoin%ns_nc = rho%ns_nc
-                 ELSE
-                    rhoin%ns = rho%ns
-                 ENDIF
-              ELSEIF (lda_plus_u_kind.EQ.2) THEN
-                 rhoin%nsg = rho%nsg
-              ENDIF
+              CALL scf_ns_copy ( rho, rhoin )
            ENDIF
            IF ( iter <= niter_with_fixed_ns ) THEN
               WRITE( stdout, '(/,5X,"RESET ns to initial values (iter <= mixing_fixed_ns)",/)')
-              IF (lda_plus_u_kind.EQ.0) THEN
-                 IF (noncolin) THEN   
-                    rho%ns_nc = rhoin%ns_nc  
-                 ELSE        
-                    rho%ns = rhoin%ns
-                    IF (lhb) rhoin%nsb = rho%nsb
-                 ENDIF
-              ELSEIF (lda_plus_u_kind.EQ.1) THEN
-                 IF (noncolin) THEN
-                    rho%ns_nc = rhoin%ns_nc
-                 ELSE
-                    rho%ns = rhoin%ns
-                 ENDIF
-              ELSEIF (lda_plus_u_kind.EQ.2) THEN
-                 rho%nsg = rhoin%nsg
-              ENDIF
+              CALL scf_ns_copy ( rhoin, rho )
            ENDIF
            !
         ENDIF
@@ -845,15 +808,10 @@ SUBROUTINE electrons_scf ( printout, exxen )
         IF ( lda_plus_u )  THEN
            ! ... For DFT+U, ns and ns_nc are also broadcast inside each pool
            ! ... to ensure consistency on all processors of all pools
-           IF (noncolin) THEN
-              IF (ALLOCATED(rhoin%ns_nc)) CALL mp_bcast( rhoin%ns_nc, root_pool, intra_pool_comm )
-           ELSE
-              IF (ALLOCATED(rhoin%ns)) CALL mp_bcast( rhoin%ns, root_pool, intra_pool_comm )
-           ENDIF
-           ! DFT+U+V: this variable is not in "mix-type" variable rhoin
-           IF (lda_plus_u_kind.EQ.2) THEN
-              IF (ALLOCATED(rhoin%nsg) ) CALL mp_bcast ( rhoin%nsg, root_pool, inter_pool_comm)
-           ENDIF
+           IF (ALLOCATED(rhoin%ns)) CALL mp_bcast( rhoin%ns, root_pool, intra_pool_comm )
+           IF (ALLOCATED(rhoin%nsb) ) CALL mp_bcast ( rhoin%nsb, root_pool, inter_pool_comm)
+           IF (ALLOCATED(rhoin%ns_nc)) CALL mp_bcast( rhoin%ns_nc, root_pool, intra_pool_comm )
+           IF (ALLOCATED(rhoin%nsg) ) CALL mp_bcast ( rhoin%nsg, root_pool, inter_pool_comm)
         ENDIF
         !
         CALL bcast_scf_type( rhoin, root_pool, inter_pool_comm )
@@ -941,14 +899,9 @@ SUBROUTINE electrons_scf ( printout, exxen )
            CALL scf_type_COPY( rhoin, rho )
            !
 #if defined (__OSCDFT)
-           IF (use_oscdft .AND. (oscdft_ctx%inp%oscdft_type==2)) THEN
-              IF (lda_plus_u .AND. .NOT.oscdft_ctx%conv) THEN
-                 IF (lda_plus_u_kind.EQ.0) THEN
-                    CALL write_ns()
-                 ELSEIF (lda_plus_u_kind.EQ.2) THEN
-                    CALL write_nsg()
-                 ENDIF
-              ENDIF
+           IF ( use_oscdft .AND. (oscdft_ctx%inp%oscdft_type==2) &
+               .AND. lda_plus_u .AND. .NOT.oscdft_ctx%conv) THEN
+               CALL write_ns_hubbard ( noncolin )
            ENDIF
 #endif
            !

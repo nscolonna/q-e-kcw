@@ -221,7 +221,7 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
   !
 #if defined (__OSCDFT)
   IF (use_oscdft .AND. (oscdft_ctx%inp%oscdft_type==2)) THEN
-     IF (conv .AND. .NOT.oscdft_ctx%conv) conv = .FALSE.
+     conv = conv .AND. oscdft_ctx%conv
   ENDIF
 #endif
   !
