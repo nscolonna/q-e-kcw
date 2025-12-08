@@ -808,15 +808,10 @@ SUBROUTINE electrons_scf ( printout, exxen )
         IF ( lda_plus_u )  THEN
            ! ... For DFT+U, ns and ns_nc are also broadcast inside each pool
            ! ... to ensure consistency on all processors of all pools
-           IF (noncolin) THEN
-              IF (ALLOCATED(rhoin%ns_nc)) CALL mp_bcast( rhoin%ns_nc, root_pool, intra_pool_comm )
-           ELSE
-              IF (ALLOCATED(rhoin%ns)) CALL mp_bcast( rhoin%ns, root_pool, intra_pool_comm )
-           ENDIF
-           ! DFT+U+V: this variable is not in "mix-type" variable rhoin
-           IF (lda_plus_u_kind.EQ.2) THEN
-              IF (ALLOCATED(rhoin%nsg) ) CALL mp_bcast ( rhoin%nsg, root_pool, inter_pool_comm)
-           ENDIF
+           IF (ALLOCATED(rhoin%ns)) CALL mp_bcast( rhoin%ns, root_pool, intra_pool_comm )
+           IF (ALLOCATED(rhoin%nsb) ) CALL mp_bcast ( rhoin%nsb, root_pool, inter_pool_comm)
+           IF (ALLOCATED(rhoin%ns_nc)) CALL mp_bcast( rhoin%ns_nc, root_pool, intra_pool_comm )
+           IF (ALLOCATED(rhoin%nsg) ) CALL mp_bcast ( rhoin%nsg, root_pool, inter_pool_comm)
         ENDIF
         !
         CALL bcast_scf_type( rhoin, root_pool, inter_pool_comm )
@@ -904,14 +899,9 @@ SUBROUTINE electrons_scf ( printout, exxen )
            CALL scf_type_COPY( rhoin, rho )
            !
 #if defined (__OSCDFT)
-           IF (use_oscdft .AND. (oscdft_ctx%inp%oscdft_type==2)) THEN
-              IF (lda_plus_u .AND. .NOT.oscdft_ctx%conv) THEN
-                 IF (lda_plus_u_kind.EQ.0) THEN
-                    CALL write_ns()
-                 ELSEIF (lda_plus_u_kind.EQ.2) THEN
-                    CALL write_nsg()
-                 ENDIF
-              ENDIF
+           IF ( use_oscdft .AND. (oscdft_ctx%inp%oscdft_type==2) &
+               .AND. lda_plus_u .AND. .NOT.oscdft_ctx%conv) THEN
+               CALL write_ns_hubbard ( noncolin )
            ENDIF
 #endif
            !
