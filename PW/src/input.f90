@@ -983,10 +983,17 @@ SUBROUTINE control_iosys()
   CASE  ( 'rmm-paro')
      !
      isolve = 4
-     rmm_ndim = diago_rmm_ndim 
-     rmm_conv = diago_rmm_conv 
-     gs_nblock = diago_gs_nblock 
-     rmm_with_davidson = .FALSE.  
+     rmm_ndim = diago_rmm_ndim
+     rmm_conv = diago_rmm_conv
+     gs_nblock = diago_gs_nblock
+     rmm_with_davidson = .FALSE.
+     !
+  CASE ( 'direct' )
+     !
+     isolve = 5
+     WRITE( stdout, '(5X,"Using direct diagonalization")')
+     WRITE( stdout, '(5X,"WARNING: Use only when you need a lot of unoccupied states")')
+     !
   CASE DEFAULT
      !
      CALL errore( 'iosys', 'diagonalization ' // &

@@ -44,7 +44,8 @@ set(src_pw
    src/compute_ux.f90 
    src/Coul_cut_2D.f90 
    src/d_matrix.f90 
-   src/data_structure.f90 
+   src/data_structure.f90
+   src/diag_dense.f90
    src/divide_class.f90 
    src/divide_class_so.f90 
    src/divide_et_impera.f90 
@@ -101,8 +102,8 @@ set(src_pw
    src/hs_1psi.f90 
    src/h_epsi_her_apply.f90 
    src/h_epsi_her_set.f90 
-   src/h_psi.f90 
-   src/h_psi_meta.f90 
+   src/h_psi.f90
+   src/h_psi_meta.f90
    src/hinit0.f90 
    src/hinit1.f90 
    src/hubbard.f90 

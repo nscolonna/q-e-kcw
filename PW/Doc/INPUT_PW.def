@@ -2218,6 +2218,11 @@ input_description -distribution {Quantum ESPRESSO} -package PWscf -program pw.x 
                     Other variables that can be used to tune the behavior of 
                     RMM-DIIS are:  @ref diago_rmm_ndim and @ref diago_rmm_conv
                 }
+
+                opt -val {'direct'} {
+                    Direct diagonalization of the dense Hamiltonian in the plane-wave
+                    basis. Use ONLY when a large number of unoccupied states are needed.
+                }
             }
         }
 
