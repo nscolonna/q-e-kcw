@@ -2,7 +2,7 @@
 
 AC_DEFUN([X_AC_QE_MAKEDEPS], [
 
-$topdir/install/makedeps.sh
+$topdir/install/makedeps.sh $topbuilddir
 
 ]
 )
