@@ -34,13 +34,11 @@ then
 else
     if  test $1 = "-addson"
     then
-	echo "$0: add new dependencies to default ones"
-	echo "Usage: $0 -addson DIR DEPENDENCY_DIRS"
-	echo "$0 assumes that the new dependencies are in $TOPDIR/../"
 	dirs=$2
 	shift
 	shift
 	add_deps=$*
+	echo "$0: add new dependencies to default ones"
 	echo "dependencies in $add_deps will be searched for $dirs"
     else
         if test $# = 1
@@ -49,7 +47,11 @@ else
             echo "$0: compute all dependencies, output to $BUILDDIR"
 # final make.depend files go to BUILDDIR (for out-of-source building)
 	else
-	    echo "$0: wrong number of arguments, specify just one"
+	    echo "Usage: $0 [BUILDDIR]                                   "
+	    echo "       compute all dependencies under the current tree "
+	    echo "       optionally write output make.depend to BUILDDIR "
+	    echo "Usage: $0 [-addson DIR DEP_DIRS]                       "
+	    echo "       find dependencies of DIR in directories DEP_DIRS"
 	fi
     fi
 fi
@@ -76,17 +78,30 @@ for dir in $dirs; do
 	     $LEVEL1/UtilXlib $LEVEL1/upflib"
     DEPEND3="$LEVEL2/include $LEVEL2/FFTXlib/src $LEVEL2/LAXlib $LEVEL2/UtilXlib"
     DEPEND2="$DEPEND3 $LEVEL2/upflib $LEVEL2/XClib $LEVEL2/Modules"
+    # default for out-of-source build: needed to convert VPATH in Makefiles
+    LEVEL=$LEVEL3
+    #
     case $DIR in
+        LAXlib | UtilXlib )
+	     LEVEL=$LEVEL2
+             DEPENDS="$LEVEL1/include" ;;
         upflib )
+	     LEVEL=$LEVEL2
              DEPENDS="$LEVEL1/include $LEVEL1/UtilXlib" ;;
         XClib )
+	     LEVEL=$LEVEL2
              DEPENDS="$LEVEL1/include $LEVEL1/upflib" ;;
         Modules )
+	     LEVEL=$LEVEL2
              DEPENDS="$DEPEND1" ;;
         dft-d3 )
+	     LEVEL=$LEVEL2
              DEPENDS="$LEVEL1/include $LEVEL1/UtilXlib $LEVEL1/Modules" ;;
         LR_Modules )
+	     LEVEL=$LEVEL2
              DEPENDS="$DEPEND1 $LEVEL1/Modules $LEVEL1/PW/src" ;;
+        FFTXlib/src )
+             DEPENDS="$LEVEL1/include" ;;
 	ACFDT/src )
              DEPENDS="$DEPEND2 $LEVEL2/PW/src $LEVEL2/PHonon/PH $LEVEL2/LR_Modules" ;;
 	atomic/src | GWW/gww )
@@ -105,10 +120,10 @@ for dir in $dirs; do
 	     DEPENDS="$DEPEND2 $LEVEL2/PW/src $LEVEL2/LR_Modules" ;;
 	KCW/PP )
 	     DEPENDS="$DEPEND2 $LEVEL2/PW/src $LEVEL2/LR_Modules $LEVEL1/src" ;;
-    EPW/src )
-         DEPENDS="$DEPEND2 io utilities $LEVEL2/PW/src $LEVEL2/LR_Modules $LEVEL2/PHonon/PH $LEVEL2/Modules" ;;
-    QEHeat/src )
-         DEPENDS="$DEPEND2 $LEVEL2/PW/src $LEVEL2/LR_Modules $LEVEL2/PHonon/PH $LEVEL2/Modules" ;;
+        EPW/src )
+             DEPENDS="$DEPEND2 io utilities $LEVEL2/PW/src $LEVEL2/LR_Modules $LEVEL2/PHonon/PH $LEVEL2/Modules" ;;
+        QEHeat/src )
+             DEPENDS="$DEPEND2 $LEVEL2/PW/src $LEVEL2/LR_Modules $LEVEL2/PHonon/PH $LEVEL2/Modules" ;;
 	EPW/ZG/src )
 	     DEPENDS="$LEVEL3/PW/src $LEVEL3/LR_Modules $LEVEL3/PHonon/PH $LEVEL3/Modules $LEVEL3/upflib $LEVEL3/UtilXlib" ;;
 	GWW/head )
@@ -169,7 +184,7 @@ EOF
             echo "/@$no_dep@/d" >> removedeps.tmp
 	done
         sed -f removedeps.tmp make.depend  > tmp; mv tmp make.depend
-	/bin/rm removedeps.tmp 
+	/bin/rm removedeps.tmp
 
         # check for missing dependencies
 	missing=`grep @ make.depend | grep -v @some_module@`
@@ -181,11 +196,18 @@ EOF
         else
            $ECHO -n "\rdirectory $DIR : ok"
         fi
+	# for out-of-source build:
         if test "$BUILDDIR" != ""; then
-	   mv make.depend $BUILDDIR/$DIR/make.depend
-        fi	
+	    # check existence of target directory, create if not existent,
+	    if [ ! -d "$BUILDDIR/$DIR" ]; then
+		mkdir -p $BUILDDIR/$DIR
+	    fi
+	    # copy Makefiles, move make.depend to the target directory
+	    mv make.depend $BUILDDIR/$DIR/make.depend
+	    sed "s?@srcdir@?$LEVEL/$DIR?" Makefile > $BUILDDIR/$DIR/Makefile
+        fi
     else
-       $ECHO "\ndirectory $DIR : not present in $TOPDIR"
+       $ECHO "\ndirectory $DIR : not present in $TOPDIR/.."
     fi
 done
 if test "$notfound" = ""
