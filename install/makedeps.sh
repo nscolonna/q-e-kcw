@@ -1,5 +1,5 @@
 #!/bin/sh
-# compute dependencies for the PWscf directory tree
+# compute dependencies for the QE directory tree
 
 # make sure there is no locale setting creating unneeded differences.
 LC_ALL=C
@@ -11,37 +11,48 @@ if test "`echo -e`" = "-e" ; then ECHO=echo ; else ECHO="echo -e" ; fi
 cd `dirname $0`
 TOPDIR=`pwd`
 
-if test $# = 0
-then
 # this is the list of all directories for which we want to find dependencies
 # upon include files *.h or *.fh or modules. Note that libraries that are
 # externally maintained should not go into this list
 
-    dirs=" LAXlib FFTXlib/src UtilXlib \
-           dft-d3 \
-           KS_Solvers/Davidson KS_Solvers/Davidson_RCI KS_Solvers/CG \
-	   KS_Solvers/ParO  KS_Solvers/DENSE  KS_Solvers/RMM \
-           upflib XClib Modules LR_Modules PW/src CPV/src PW/tools PP/src PWCOND/src \
-           PHonon/Gamma PHonon/PH PHonon/FD HP/src atomic/src \
-           EPW/src EPW/ZG/src XSpectra/src NEB/src TDDFPT/src \
-           GWW/pw4gww GWW/gww GWW/head GWW/bse GWW/simple \
-	   GWW/simple_bse GWW/simple_ip QEHeat/src KCW/src KCW/PP "
-          
-elif
-    test $1 = "-addson"
-then
-    echo "The script for adding new dependencies is running"
-    echo "Usage: $0 -addson DIR DEPENDENCY_DIRS"
-    echo "$0 assumes that the new dependencies are in $TOPDIR/../"
-    dirs=$2
-    shift
-    shift
-    add_deps=$*
-    echo "dependencies in $add_deps will be searched for $dirs"
-else
-    dirs=$*
-fi
+dirs=" LAXlib FFTXlib/src UtilXlib \
+       dft-d3 \
+       KS_Solvers/Davidson KS_Solvers/Davidson_RCI KS_Solvers/CG \
+       KS_Solvers/ParO  KS_Solvers/DENSE  KS_Solvers/RMM \
+       upflib XClib Modules LR_Modules \
+       PW/src CPV/src PW/tools PP/src PWCOND/src \
+       PHonon/Gamma PHonon/PH PHonon/FD HP/src atomic/src \
+       EPW/src EPW/ZG/src XSpectra/src NEB/src TDDFPT/src \
+       GWW/pw4gww GWW/gww GWW/head GWW/bse GWW/simple \
+       GWW/simple_bse GWW/simple_ip QEHeat/src KCW/src KCW/PP "
 
+BUILDDIR=
+
+if test $# = 0
+then
+    echo "$0: no arguments, compute all dependencies"
+else
+    if  test $1 = "-addson"
+    then
+	echo "$0: add new dependencies to default ones"
+	echo "Usage: $0 -addson DIR DEPENDENCY_DIRS"
+	echo "$0 assumes that the new dependencies are in $TOPDIR/../"
+	dirs=$2
+	shift
+	shift
+	add_deps=$*
+	echo "dependencies in $add_deps will be searched for $dirs"
+    else
+        if test $# = 1
+	then
+            BUILDDIR=$1
+            echo "$0: compute all dependencies, output to $BUILDDIR"
+# final make.depend files go to BUILDDIR (for out-of-source building)
+	else
+	    echo "$0: wrong number of arguments, specify just one"
+	fi
+    fi
+fi
 
 for dir in $dirs; do
 
@@ -158,19 +169,21 @@ EOF
             echo "/@$no_dep@/d" >> removedeps.tmp
 	done
         sed -f removedeps.tmp make.depend  > tmp; mv tmp make.depend
-	/bin/rm removedeps.tmp
+	/bin/rm removedeps.tmp 
 
         # check for missing dependencies
 	missing=`grep @ make.depend | grep -v @some_module@`
-        if test "$missing" != "";
-        then
+        if test "$missing" != ""; then
 	   notfound=1
 	   $ECHO "\nWARNING! dependencies not found in directory $DIR:"
 	   grep @ make.depend
-	   $ECHO "File $DIR/make.depend is broken"
-       else
+	   $ECHO "File make.depend is broken"
+        else
            $ECHO -n "\rdirectory $DIR : ok"
-       fi
+        fi
+        if test "$BUILDDIR" != ""; then
+	   mv make.depend $BUILDDIR/$DIR/make.depend
+        fi	
     else
        $ECHO "\ndirectory $DIR : not present in $TOPDIR"
     fi
