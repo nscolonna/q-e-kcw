@@ -157,12 +157,9 @@ AC_CONFIG_FILES([install/make_wannier90.inc])
 
 AC_OUTPUT
 
-# make.depend files generated after the directory structure has been copied
-if test ! $topdir -ef $topbuilddir ; then
-   $topdir/install/makedeps.sh $topbuilddir
-else
-   $topdir/install/makedeps.sh
-fi
+# generation of make.depend files - to be called after directories
+# have been created in X_AC_QE_MAKE_TREE + AC_OUTPUT
+X_AC_QE_MAKEDEPS()
 
 # final messages
 sed '/@delete@/d' configure.msg
