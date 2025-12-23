@@ -1,6 +1,6 @@
 # Copyright (C) 2001-2025 Quantum ESPRESSO Foundation
 
-# Files (mostly Malefiles) to be copied to the build directories
+# Files (mostly Makefiles) to be copied to the build directories
 # NB: make.depend files and Makefiles including them are copied in makedeps.sh, not here
 
 AC_DEFUN([X_AC_QE_MAKE_TREE], [
