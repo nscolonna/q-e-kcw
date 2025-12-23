@@ -991,7 +991,7 @@ SUBROUTINE control_iosys()
   CASE ( 'direct' )
      !
      isolve = 5
-     WRITE( stdout, '(5X,"Using direct diagonalization")')
+     WRITE( stdout, '(/5X,"Using direct diagonalization")')
      WRITE( stdout, '(5X,"WARNING: Use only when you need a lot of unoccupied states")')
      !
   CASE DEFAULT
