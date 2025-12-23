@@ -75,13 +75,13 @@ fox_clean:
 libdevx :
 	# if "libdevx" is not present, updates and compiles devxlib
 	$(call update_submodule,external,devxlib)
-	cd $(TOPDIR)/external/devxlib/src
-	ln -fs $(BUILDDIR)/make.inc ../
-	$(MAKE) all
-	# next case for out-of-source build: move objects to build directory
+	cd $(TOPDIR)/external/devxlib/src ; \
+	ln -fs $(BUILDDIR)/make.inc ../ ; \
+	$(MAKE) all ; \
 	if test ! -d $(BUILDDIR)/external/devxlib/src; then \
 	    mkdir -p $(BUILDDIR)/external/devxlib/src ; \
 	    mv *.o *.mod *.a $(BUILDDIR)/external/devxlib/src/ ; fi
+	# last line for out-of-source build: move objects to build directory
 	# touch "libdevx" so next time devxlib is not downloaded and compiled 
 	touch $(BUILDDIR)/install/libdevx
 

@@ -59,21 +59,13 @@ MOD_FLAG      = @imod@
 # More package-specific directories can be added in each Makefile
 # and stored into MODFLAGS, and the same for module libraries in QEMODS
 
-BASEMOD_FLAGS= $(MOD_FLAG)$(TOPDIR)/upflib \
+BASEMOD_FLAGS= $(MOD_FLAG)$(BUILDDIR)/Modules \
                $(MOD_FLAG)$(BUILDDIR)/upflib \
-               $(MOD_FLAG)$(TOPDIR)/XClib \
                $(MOD_FLAG)$(BUILDDIR)/XClib \
-               $(MOD_FLAG)$(TOPDIR)/Modules \
-               $(MOD_FLAG)$(BUILDDIR)/Modules \
-               $(MOD_FLAG)$(TOPDIR)/FFTXlib/src \
                $(MOD_FLAG)$(BUILDDIR)/FFTXlib/src \
-	       $(MOD_FLAG)$(TOPDIR)/LAXlib \
 	       $(MOD_FLAG)$(BUILDDIR)/LAXlib \
-	       $(MOD_FLAG)$(TOPDIR)/UtilXlib \
 	       $(MOD_FLAG)$(BUILDDIR)/UtilXlib \
 	       $(MOD_FLAG)$(BUILDDIR)/MBD \
-	       $(MOD_FLAG)$(TOPDIR)/external/mbd/src \
-	       $(MOD_FLAG)$(TOPDIR)/KS_Solvers \
 	       $(MOD_FLAG)$(BUILDDIR)/KS_Solvers $(FOX_MOD)
 
 # If A depends upon B, A should come before B in the list below
