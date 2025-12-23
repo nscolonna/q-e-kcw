@@ -185,7 +185,6 @@ MASS_LIBS      = @mass_libs@
 
 # CUDA libraries
 CUDA_LIBS=@cuda_libs@ -L$(BUILDDIR)/external/devxlib/src -ldevXlib
-CUDA_EXTLIBS = @cuda_extlibs@
 
 # ar command and flags - for most architectures: AR = ar, ARFLAGS = ruv
 

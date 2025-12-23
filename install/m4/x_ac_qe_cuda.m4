@@ -15,7 +15,6 @@
 #    cuda_cflags
 #    cuda_fflags
 #    cuda_libs
-#    cuda_extlibs
 #
 # LICENCE
 # Public domain
@@ -30,8 +29,6 @@ cuda_runtime=
 cuda_cflags=
 cuda_fflags=
 cuda_libs=
-# FIXME: currently devxlib is needed also for non-CUDA compilation
-cuda_extlibs=devxlib
 
 # Provide your CUDA path with this
 AC_ARG_WITH([cuda],
@@ -91,7 +88,6 @@ then
    if test "$use_parallel" -eq 1 && test "$with_cuda_mpi" == "yes"; then 
       try_dflags="$try_dflags -D__GPU_MPI"
    fi
-   cuda_extlibs="devxlib"
    cuda_libs="-cudalib=cufft,cublas,cusolver,curand \$(BUILDDIR)/external/devxlib/src/libdevXlib.a"
    
    cuda_fflags="-cuda -gpu=cc$with_cuda_cc,cuda$with_cuda_runtime"
@@ -132,5 +128,4 @@ AC_SUBST(cuda_runtime)
 AC_SUBST(cuda_cflags)
 AC_SUBST(cuda_fflags)
 AC_SUBST(cuda_libs)
-AC_SUBST(cuda_extlibs)
 ])

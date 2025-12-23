@@ -100,9 +100,8 @@ w90lib:
 	cd $(BUILDDIR)/install && make -f plugins_makefile w90_install
 
 w90_clean:
-	if test -d $(TOPDIR)/external/wannier90; then \
-	(cd $(TOPDIR)/external/wannier90; \
-	$(MAKE) veryclean); fi
+	if test -e $(TOPDIR)/external/wannier90/make.inc; then \
+	(cd $(TOPDIR)/external/wannier90; $(MAKE) veryclean); fi
 	rm -f $(TOPDIR)/bin/wannier90.x
 
 w90_veryclean: w90_clean
@@ -215,11 +214,9 @@ yambo_distclean:
 # cleaning
 ###########################################################
 
-clean: w90_clean want_clean yambo_clean gipaw_clean d3q_clean
+clean: want_clean yambo_clean gipaw_clean d3q_clean w90_clean
 
-veryclean: w90_veryclean want_veryclean yambo_veryclean \
-	gipaw_veryclean d3q_veryclean
+veryclean: want_veryclean yambo_veryclean gipaw_veryclean d3q_veryclean w90_veryclean
 
-distclean: w90_distclean want_distclean yambo_distclean \
-	gipaw_distclean d3q_distclean
+distclean: want_distclean yambo_distclean gipaw_distclean d3q_distclean w90_distclean
 
