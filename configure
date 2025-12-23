@@ -8321,7 +8321,6 @@ echo setting IFLAGS... $iflags
 if test ! $topdir -ef $topbuilddir ; then
 
 
-
 ac_config_files="$ac_config_files install/extlibs_makefile:install/extlibs_makefile"
 
 ac_config_files="$ac_config_files install/install_utils:install/install_utils"
@@ -8343,8 +8342,6 @@ ac_config_files="$ac_config_files FFTXlib/Makefile:FFTXlib/Makefile"
 
 ac_config_files="$ac_config_files FFTXlib/tests/Makefile:FFTXlib/tests/Makefile"
 
-ac_config_files="$ac_config_files FFTXlib/src/Makefile:FFTXlib/src/Makefile"
-
 
 ac_config_files="$ac_config_files PIOUD/Makefile:PIOUD/Makefile"
 
@@ -8355,12 +8352,8 @@ ac_config_files="$ac_config_files PIOUD/src/make.depend:PIOUD/src/make.depend"
 
 ac_config_files="$ac_config_files NEB/Makefile:NEB/Makefile"
 
-ac_config_files="$ac_config_files NEB/src/Makefile:NEB/src/Makefile"
-
 
 ac_config_files="$ac_config_files XSpectra/Makefile:XSpectra/Makefile"
-
-ac_config_files="$ac_config_files XSpectra/src/Makefile:XSpectra/src/Makefile"
 
 
 ac_config_files="$ac_config_files XClib/Makefile:XClib/Makefile"
@@ -8371,36 +8364,16 @@ ac_config_files="$ac_config_files Modules/Makefile:Modules/Makefile"
 
 ac_config_files="$ac_config_files atomic/Makefile:atomic/Makefile"
 
-ac_config_files="$ac_config_files atomic/src/Makefile:atomic/src/Makefile"
-
 
 ac_config_files="$ac_config_files PP/Makefile:PP/Makefile"
-
-ac_config_files="$ac_config_files PP/src/Makefile:PP/src/Makefile"
 
 ac_config_files="$ac_config_files PP/simple_transport/src/Makefile:PP/simple_transport/src/Makefile"
 
 
 ac_config_files="$ac_config_files QEHeat/Makefile:QEHeat/Makefile"
 
-ac_config_files="$ac_config_files QEHeat/src/Makefile:QEHeat/src/Makefile"
-
 
 ac_config_files="$ac_config_files GWW/Makefile:GWW/Makefile"
-
-ac_config_files="$ac_config_files GWW/pw4gww/Makefile:GWW/pw4gww/Makefile"
-
-ac_config_files="$ac_config_files GWW/gww/Makefile:GWW/gww/Makefile"
-
-ac_config_files="$ac_config_files GWW/simple_bse/Makefile:GWW/simple_bse/Makefile"
-
-ac_config_files="$ac_config_files GWW/head/Makefile:GWW/head/Makefile"
-
-ac_config_files="$ac_config_files GWW/simple_ip/Makefile:GWW/simple_ip/Makefile"
-
-ac_config_files="$ac_config_files GWW/bse/Makefile:GWW/bse/Makefile"
-
-ac_config_files="$ac_config_files GWW/simple/Makefile:GWW/simple/Makefile"
 
 ac_config_files="$ac_config_files GWW/util/Makefile:GWW/util/Makefile"
 
@@ -8409,91 +8382,39 @@ ac_config_files="$ac_config_files GWW/minpack/Makefile:GWW/minpack/Makefile"
 
 ac_config_files="$ac_config_files HP/Makefile:HP/Makefile"
 
-ac_config_files="$ac_config_files HP/src/Makefile:HP/src/Makefile"
-
-
-ac_config_files="$ac_config_files upflib/Makefile:upflib/Makefile"
-
 
 ac_config_files="$ac_config_files PW/Makefile:PW/Makefile"
-
-ac_config_files="$ac_config_files PW/tools/Makefile:PW/tools/Makefile"
-
-ac_config_files="$ac_config_files PW/src/Makefile:PW/src/Makefile"
 
 
 ac_config_files="$ac_config_files PWCOND/Makefile:PWCOND/Makefile"
 
-ac_config_files="$ac_config_files PWCOND/src/Makefile:PWCOND/src/Makefile"
-
 
 ac_config_files="$ac_config_files KS_Solvers/Makefile:KS_Solvers/Makefile"
 
-ac_config_files="$ac_config_files KS_Solvers/CG/Makefile:KS_Solvers/CG/Makefile"
-
-ac_config_files="$ac_config_files KS_Solvers/RMM/Makefile:KS_Solvers/RMM/Makefile"
-
-ac_config_files="$ac_config_files KS_Solvers/ParO/Makefile:KS_Solvers/ParO/Makefile"
-
-ac_config_files="$ac_config_files KS_Solvers/Davidson/Makefile:KS_Solvers/Davidson/Makefile"
-
-ac_config_files="$ac_config_files KS_Solvers/DENSE/Makefile:KS_Solvers/DENSE/Makefile"
-
-ac_config_files="$ac_config_files KS_Solvers/Davidson_RCI/Makefile:KS_Solvers/Davidson_RCI/Makefile"
-
 
 ac_config_files="$ac_config_files CPV/Makefile:CPV/Makefile"
-
-ac_config_files="$ac_config_files CPV/src/Makefile:CPV/src/Makefile"
-
-
-
-ac_config_files="$ac_config_files dft-d3/Makefile:dft-d3/Makefile"
 
 
 # TG: TDDFPT/ColorCalculator/Install?
 ac_config_files="$ac_config_files TDDFPT/Makefile:TDDFPT/Makefile"
 
-ac_config_files="$ac_config_files TDDFPT/src/Makefile:TDDFPT/src/Makefile"
-
-
-ac_config_files="$ac_config_files UtilXlib/Makefile:UtilXlib/Makefile"
 
 # TG: autotest.inc?
 ac_config_files="$ac_config_files UtilXlib/tests/Makefile:UtilXlib/tests/Makefile"
 
-
-ac_config_files="$ac_config_files LR_Modules/Makefile:LR_Modules/Makefile"
-
-
-ac_config_files="$ac_config_files LAXlib/Makefile:LAXlib/Makefile"
 
 ac_config_files="$ac_config_files LAXlib/tests/Makefile:LAXlib/tests/Makefile"
 
 
 ac_config_files="$ac_config_files PHonon/Makefile:PHonon/Makefile"
 
-ac_config_files="$ac_config_files PHonon/FD/Makefile:PHonon/FD/Makefile"
-
-ac_config_files="$ac_config_files PHonon/Gamma/Makefile:PHonon/Gamma/Makefile"
-
-ac_config_files="$ac_config_files PHonon/PH/Makefile:PHonon/PH/Makefile"
-
 
 ac_config_files="$ac_config_files KCW/Makefile:KCW/Makefile"
-
-ac_config_files="$ac_config_files KCW/PP/Makefile:KCW/PP/Makefile"
-
-ac_config_files="$ac_config_files KCW/src/Makefile:KCW/src/Makefile"
 
 
 ac_config_files="$ac_config_files EPW/Makefile:EPW/Makefile"
 
 ac_config_files="$ac_config_files EPW/irobjs/Makefile:EPW/irobjs/Makefile"
-
-ac_config_files="$ac_config_files EPW/ZG/src/Makefile:EPW/ZG/src/Makefile"
-
-ac_config_files="$ac_config_files EPW/src/Makefile:EPW/src/Makefile"
 
 
 ac_config_files="$ac_config_files archive/README.md:archive/README.md"
@@ -9219,69 +9140,32 @@ do
     "COUPLE/src/Makefile") CONFIG_FILES="$CONFIG_FILES COUPLE/src/Makefile:COUPLE/src/Makefile" ;;
     "FFTXlib/Makefile") CONFIG_FILES="$CONFIG_FILES FFTXlib/Makefile:FFTXlib/Makefile" ;;
     "FFTXlib/tests/Makefile") CONFIG_FILES="$CONFIG_FILES FFTXlib/tests/Makefile:FFTXlib/tests/Makefile" ;;
-    "FFTXlib/src/Makefile") CONFIG_FILES="$CONFIG_FILES FFTXlib/src/Makefile:FFTXlib/src/Makefile" ;;
     "PIOUD/Makefile") CONFIG_FILES="$CONFIG_FILES PIOUD/Makefile:PIOUD/Makefile" ;;
     "PIOUD/src/Makefile") CONFIG_FILES="$CONFIG_FILES PIOUD/src/Makefile:PIOUD/src/Makefile" ;;
     "PIOUD/src/make.depend") CONFIG_FILES="$CONFIG_FILES PIOUD/src/make.depend:PIOUD/src/make.depend" ;;
     "NEB/Makefile") CONFIG_FILES="$CONFIG_FILES NEB/Makefile:NEB/Makefile" ;;
-    "NEB/src/Makefile") CONFIG_FILES="$CONFIG_FILES NEB/src/Makefile:NEB/src/Makefile" ;;
     "XSpectra/Makefile") CONFIG_FILES="$CONFIG_FILES XSpectra/Makefile:XSpectra/Makefile" ;;
-    "XSpectra/src/Makefile") CONFIG_FILES="$CONFIG_FILES XSpectra/src/Makefile:XSpectra/src/Makefile" ;;
     "XClib/Makefile") CONFIG_FILES="$CONFIG_FILES XClib/Makefile:XClib/Makefile" ;;
     "Modules/Makefile") CONFIG_FILES="$CONFIG_FILES Modules/Makefile:Modules/Makefile" ;;
     "atomic/Makefile") CONFIG_FILES="$CONFIG_FILES atomic/Makefile:atomic/Makefile" ;;
-    "atomic/src/Makefile") CONFIG_FILES="$CONFIG_FILES atomic/src/Makefile:atomic/src/Makefile" ;;
     "PP/Makefile") CONFIG_FILES="$CONFIG_FILES PP/Makefile:PP/Makefile" ;;
-    "PP/src/Makefile") CONFIG_FILES="$CONFIG_FILES PP/src/Makefile:PP/src/Makefile" ;;
     "PP/simple_transport/src/Makefile") CONFIG_FILES="$CONFIG_FILES PP/simple_transport/src/Makefile:PP/simple_transport/src/Makefile" ;;
     "QEHeat/Makefile") CONFIG_FILES="$CONFIG_FILES QEHeat/Makefile:QEHeat/Makefile" ;;
-    "QEHeat/src/Makefile") CONFIG_FILES="$CONFIG_FILES QEHeat/src/Makefile:QEHeat/src/Makefile" ;;
     "GWW/Makefile") CONFIG_FILES="$CONFIG_FILES GWW/Makefile:GWW/Makefile" ;;
-    "GWW/pw4gww/Makefile") CONFIG_FILES="$CONFIG_FILES GWW/pw4gww/Makefile:GWW/pw4gww/Makefile" ;;
-    "GWW/gww/Makefile") CONFIG_FILES="$CONFIG_FILES GWW/gww/Makefile:GWW/gww/Makefile" ;;
-    "GWW/simple_bse/Makefile") CONFIG_FILES="$CONFIG_FILES GWW/simple_bse/Makefile:GWW/simple_bse/Makefile" ;;
-    "GWW/head/Makefile") CONFIG_FILES="$CONFIG_FILES GWW/head/Makefile:GWW/head/Makefile" ;;
-    "GWW/simple_ip/Makefile") CONFIG_FILES="$CONFIG_FILES GWW/simple_ip/Makefile:GWW/simple_ip/Makefile" ;;
-    "GWW/bse/Makefile") CONFIG_FILES="$CONFIG_FILES GWW/bse/Makefile:GWW/bse/Makefile" ;;
-    "GWW/simple/Makefile") CONFIG_FILES="$CONFIG_FILES GWW/simple/Makefile:GWW/simple/Makefile" ;;
     "GWW/util/Makefile") CONFIG_FILES="$CONFIG_FILES GWW/util/Makefile:GWW/util/Makefile" ;;
     "GWW/minpack/Makefile") CONFIG_FILES="$CONFIG_FILES GWW/minpack/Makefile:GWW/minpack/Makefile" ;;
     "HP/Makefile") CONFIG_FILES="$CONFIG_FILES HP/Makefile:HP/Makefile" ;;
-    "HP/src/Makefile") CONFIG_FILES="$CONFIG_FILES HP/src/Makefile:HP/src/Makefile" ;;
-    "upflib/Makefile") CONFIG_FILES="$CONFIG_FILES upflib/Makefile:upflib/Makefile" ;;
     "PW/Makefile") CONFIG_FILES="$CONFIG_FILES PW/Makefile:PW/Makefile" ;;
-    "PW/tools/Makefile") CONFIG_FILES="$CONFIG_FILES PW/tools/Makefile:PW/tools/Makefile" ;;
-    "PW/src/Makefile") CONFIG_FILES="$CONFIG_FILES PW/src/Makefile:PW/src/Makefile" ;;
     "PWCOND/Makefile") CONFIG_FILES="$CONFIG_FILES PWCOND/Makefile:PWCOND/Makefile" ;;
-    "PWCOND/src/Makefile") CONFIG_FILES="$CONFIG_FILES PWCOND/src/Makefile:PWCOND/src/Makefile" ;;
     "KS_Solvers/Makefile") CONFIG_FILES="$CONFIG_FILES KS_Solvers/Makefile:KS_Solvers/Makefile" ;;
-    "KS_Solvers/CG/Makefile") CONFIG_FILES="$CONFIG_FILES KS_Solvers/CG/Makefile:KS_Solvers/CG/Makefile" ;;
-    "KS_Solvers/RMM/Makefile") CONFIG_FILES="$CONFIG_FILES KS_Solvers/RMM/Makefile:KS_Solvers/RMM/Makefile" ;;
-    "KS_Solvers/ParO/Makefile") CONFIG_FILES="$CONFIG_FILES KS_Solvers/ParO/Makefile:KS_Solvers/ParO/Makefile" ;;
-    "KS_Solvers/Davidson/Makefile") CONFIG_FILES="$CONFIG_FILES KS_Solvers/Davidson/Makefile:KS_Solvers/Davidson/Makefile" ;;
-    "KS_Solvers/DENSE/Makefile") CONFIG_FILES="$CONFIG_FILES KS_Solvers/DENSE/Makefile:KS_Solvers/DENSE/Makefile" ;;
-    "KS_Solvers/Davidson_RCI/Makefile") CONFIG_FILES="$CONFIG_FILES KS_Solvers/Davidson_RCI/Makefile:KS_Solvers/Davidson_RCI/Makefile" ;;
     "CPV/Makefile") CONFIG_FILES="$CONFIG_FILES CPV/Makefile:CPV/Makefile" ;;
-    "CPV/src/Makefile") CONFIG_FILES="$CONFIG_FILES CPV/src/Makefile:CPV/src/Makefile" ;;
-    "dft-d3/Makefile") CONFIG_FILES="$CONFIG_FILES dft-d3/Makefile:dft-d3/Makefile" ;;
     "TDDFPT/Makefile") CONFIG_FILES="$CONFIG_FILES TDDFPT/Makefile:TDDFPT/Makefile" ;;
-    "TDDFPT/src/Makefile") CONFIG_FILES="$CONFIG_FILES TDDFPT/src/Makefile:TDDFPT/src/Makefile" ;;
-    "UtilXlib/Makefile") CONFIG_FILES="$CONFIG_FILES UtilXlib/Makefile:UtilXlib/Makefile" ;;
     "UtilXlib/tests/Makefile") CONFIG_FILES="$CONFIG_FILES UtilXlib/tests/Makefile:UtilXlib/tests/Makefile" ;;
-    "LR_Modules/Makefile") CONFIG_FILES="$CONFIG_FILES LR_Modules/Makefile:LR_Modules/Makefile" ;;
-    "LAXlib/Makefile") CONFIG_FILES="$CONFIG_FILES LAXlib/Makefile:LAXlib/Makefile" ;;
     "LAXlib/tests/Makefile") CONFIG_FILES="$CONFIG_FILES LAXlib/tests/Makefile:LAXlib/tests/Makefile" ;;
     "PHonon/Makefile") CONFIG_FILES="$CONFIG_FILES PHonon/Makefile:PHonon/Makefile" ;;
-    "PHonon/FD/Makefile") CONFIG_FILES="$CONFIG_FILES PHonon/FD/Makefile:PHonon/FD/Makefile" ;;
-    "PHonon/Gamma/Makefile") CONFIG_FILES="$CONFIG_FILES PHonon/Gamma/Makefile:PHonon/Gamma/Makefile" ;;
-    "PHonon/PH/Makefile") CONFIG_FILES="$CONFIG_FILES PHonon/PH/Makefile:PHonon/PH/Makefile" ;;
     "KCW/Makefile") CONFIG_FILES="$CONFIG_FILES KCW/Makefile:KCW/Makefile" ;;
-    "KCW/PP/Makefile") CONFIG_FILES="$CONFIG_FILES KCW/PP/Makefile:KCW/PP/Makefile" ;;
-    "KCW/src/Makefile") CONFIG_FILES="$CONFIG_FILES KCW/src/Makefile:KCW/src/Makefile" ;;
     "EPW/Makefile") CONFIG_FILES="$CONFIG_FILES EPW/Makefile:EPW/Makefile" ;;
     "EPW/irobjs/Makefile") CONFIG_FILES="$CONFIG_FILES EPW/irobjs/Makefile:EPW/irobjs/Makefile" ;;
-    "EPW/ZG/src/Makefile") CONFIG_FILES="$CONFIG_FILES EPW/ZG/src/Makefile:EPW/ZG/src/Makefile" ;;
-    "EPW/src/Makefile") CONFIG_FILES="$CONFIG_FILES EPW/src/Makefile:EPW/src/Makefile" ;;
     "archive/README.md") CONFIG_FILES="$CONFIG_FILES archive/README.md:archive/README.md" ;;
     "make.inc") CONFIG_FILES="$CONFIG_FILES make.inc:install/make.inc.in" ;;
     "configure.msg") CONFIG_FILES="$CONFIG_FILES configure.msg:install/configure.msg.in" ;;
