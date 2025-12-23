@@ -208,7 +208,7 @@ mods : $(FOX) libutil libla libfft libupf libmbd librxc
 libks_solvers : libutil libla
 	( cd KS_Solvers ; $(MAKE) TLDEPS= all || exit 1 )
 
-libla : $(LAPACK) libutil libcuda
+libla : $(LAPACK) libutil libdevx
 	( cd LAXlib ; $(MAKE) TLDEPS= all || exit 1 )
 
 libfft : 
@@ -220,7 +220,7 @@ librxc :
 libutil : 
 	( cd UtilXlib ; $(MAKE) TLDEPS= all || exit 1 )
 
-libupf : libutil libcuda
+libupf : libutil libdevx
 	( cd upflib ; $(MAKE) TLDEPS= all || exit 1 )
 
 lrmods : mods pwlibs
@@ -242,7 +242,7 @@ liblapack:
 libfox: 
 	cd install ; $(MAKE) -f extlibs_makefile $@
 
-libcuda: 
+libdevx:
 	cd install ; $(MAKE) -f extlibs_makefile $@
 
 libmbd:
