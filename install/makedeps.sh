@@ -68,16 +68,17 @@ for dir in $dirs; do
     # modules that are used, or files that are included, by routines
     # in directory DIR should be listed in DEPENDS
     # (directory DIR itself should not be listed in DEPENDS)
+    # Next line: for subdirectories
     LEVEL1=..
+    # Next line: for sub-subdirectories
     LEVEL2=../..
+    # Next line for EPW/ZG/src, that is in a sub-sub-subdirectory ... !
     LEVEL3=../../..
-    # default
-    DEPENDS="$LEVEL1/include"
     # for convenience, used later
     DEPEND1="$LEVEL1/include $LEVEL1/FFTXlib/src $LEVEL1/XClib $LEVEL1/LAXlib \
 	     $LEVEL1/UtilXlib $LEVEL1/upflib"
-    DEPEND3="$LEVEL2/include $LEVEL2/FFTXlib/src $LEVEL2/LAXlib $LEVEL2/UtilXlib"
-    DEPEND2="$DEPEND3 $LEVEL2/upflib $LEVEL2/XClib $LEVEL2/Modules"
+    DEPEND2="$LEVEL2/include $LEVEL2/FFTXlib/src $LEVEL2/LAXlib $LEVEL2/UtilXlib"
+    DEPEND3="$DEPEND2 $LEVEL2/upflib $LEVEL2/XClib $LEVEL2/Modules"
     # default for out-of-source build: needed to convert VPATH in Makefiles
     LEVEL=$LEVEL3
     #
@@ -102,44 +103,44 @@ for dir in $dirs; do
              DEPENDS="$DEPEND1 $LEVEL1/Modules $LEVEL1/PW/src" ;;
         FFTXlib/src )
              DEPENDS="$LEVEL1/include" ;;
-	ACFDT/src )
-             DEPENDS="$DEPEND2 $LEVEL2/PW/src $LEVEL2/PHonon/PH $LEVEL2/LR_Modules" ;;
-	atomic/src | GWW/gww )
-	     DEPENDS="$DEPEND2" ;;
-	PW/src | CPV/src )
-	     DEPENDS="$DEPEND2 $LEVEL2/KS_Solvers/Davidson $LEVEL2/KS_Solvers/CG $LEVEL2/KS_Solvers/ParO $LEVEL2/KS_Solvers/DENSE $LEVEL2/KS_Solvers/RMM $LEVEL2/dft-d3" ;;
 	KS_Solvers/Davidson | KS_Solvers/Davidson_RCI | KS_Solvers/CG | KS_Solvers/ParO | KS_Solvers/DENSE | KS_Solvers/RMM )
+	     DEPENDS="$DEPEND2" ;;
+	ACFDT/src )
+             DEPENDS="$DEPEND3 $LEVEL2/PW/src $LEVEL2/PHonon/PH $LEVEL2/LR_Modules" ;;
+	atomic/src | GWW/gww )
 	     DEPENDS="$DEPEND3" ;;
+	PW/src | CPV/src )
+	     DEPENDS="$DEPEND3 $LEVEL2/KS_Solvers/Davidson $LEVEL2/KS_Solvers/CG $LEVEL2/KS_Solvers/ParO $LEVEL2/KS_Solvers/DENSE $LEVEL2/KS_Solvers/RMM $LEVEL2/dft-d3" ;;
 	PP/src )
-	     DEPENDS="$DEPEND2 $LEVEL2/PW/src $LEVEL2/dft-d3" ;;
+	     DEPENDS="$DEPEND3 $LEVEL2/PW/src $LEVEL2/dft-d3" ;;
 	PW/tools | PWCOND/src | GWW/pw4gww | NEB/src )
-	     DEPENDS="$DEPEND2 $LEVEL2/PW/src" ;;
+	     DEPENDS="$DEPEND3 $LEVEL2/PW/src" ;;
 	PHonon/PH )
-	     DEPENDS="$DEPEND2 $LEVEL2/PW/src $LEVEL2/LR_Modules $LEVEL2/dft-d3" ;;
+	     DEPENDS="$DEPEND3 $LEVEL2/PW/src $LEVEL2/LR_Modules $LEVEL2/dft-d3" ;;
 	PHonon/FD | PHonon/PH | PHonon/Gamma | HP/src | TDDFPT/src | XSpectra/src  | GIPAW/src | KCW/src )
-	     DEPENDS="$DEPEND2 $LEVEL2/PW/src $LEVEL2/LR_Modules" ;;
+	     DEPENDS="$DEPEND3 $LEVEL2/PW/src $LEVEL2/LR_Modules" ;;
 	KCW/PP )
-	     DEPENDS="$DEPEND2 $LEVEL2/PW/src $LEVEL2/LR_Modules $LEVEL1/src" ;;
+	     DEPENDS="$DEPEND3 $LEVEL2/PW/src $LEVEL2/LR_Modules $LEVEL1/src" ;;
         EPW/src )
-             DEPENDS="$DEPEND2 io utilities $LEVEL2/PW/src $LEVEL2/LR_Modules $LEVEL2/PHonon/PH $LEVEL2/Modules" ;;
+             DEPENDS="$DEPEND3 io utilities $LEVEL2/PW/src $LEVEL2/LR_Modules $LEVEL2/PHonon/PH $LEVEL2/Modules" ;;
         QEHeat/src )
-             DEPENDS="$DEPEND2 $LEVEL2/PW/src $LEVEL2/LR_Modules $LEVEL2/PHonon/PH $LEVEL2/Modules" ;;
+             DEPENDS="$DEPEND3 $LEVEL2/PW/src $LEVEL2/LR_Modules $LEVEL2/PHonon/PH $LEVEL2/Modules" ;;
 	EPW/ZG/src )
+             LEVEL=../$LEVEL3
 	     DEPENDS="$LEVEL3/PW/src $LEVEL3/LR_Modules $LEVEL3/PHonon/PH $LEVEL3/Modules $LEVEL3/upflib $LEVEL3/UtilXlib" ;;
 	GWW/head )
-	     DEPENDS="$DEPEND2 $LEVEL2/PW/src $LEVEL2/PHonon/PH $LEVEL2/LR_Modules" ;;
+	     DEPENDS="$DEPEND3 $LEVEL2/PW/src $LEVEL2/PHonon/PH $LEVEL2/LR_Modules" ;;
 	GWW/bse )
-	     DEPENDS="$DEPEND2 $LEVEL2/PW/src $LEVEL2/PHonon/PH $LEVEL2/LR_Modules $LEVEL2/GWW/pw4gww $LEVEL2/GWW/gww" ;;
+	     DEPENDS="$DEPEND3 $LEVEL2/PW/src $LEVEL2/PHonon/PH $LEVEL2/LR_Modules $LEVEL2/GWW/pw4gww $LEVEL2/GWW/gww" ;;
 	GWW/simple )
-	     DEPENDS="$DEPEND2 $LEVEL2/PW/src $LEVEL2/GWW/pw4gww $LEVEL2/GWW/gww" ;;
+	     DEPENDS="$DEPEND3 $LEVEL2/PW/src $LEVEL2/GWW/pw4gww $LEVEL2/GWW/gww" ;;
 	GWW/simple_bse )
-	     DEPENDS="$DEPEND2 $LEVEL2/GWW/gww" ;;
+	     DEPENDS="$DEPEND3 $LEVEL2/GWW/gww" ;;
 	GWW/simple_ip)
-	     DEPENDS="$DEPEND2" ;;
-    *)
+	     DEPENDS="$DEPEND3" ;;
+        *)
 # if addson needs a make.depend file
-	DEPENDS="$DEPENDS $add_deps"
-
+	     DEPENDS="$DEPEND1 $add_deps"
     esac
 
     # list of all system modules

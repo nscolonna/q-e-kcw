@@ -408,10 +408,9 @@ doc_clean :
 	( cd $$dir; $(MAKE) TLDEPS= clean ) ; fi ) ;  done
 
 depend:
+	echo 'Checking dependencies...'
 	-@if test ! $(TOPDIR) -ef $(BUILDDIR) ; then \
-	   echo "make $@ cannot be called from the build directory." ; \
-	   echo "Please run it from $(TOPDIR)" ; \
+	    $(TOPDIR)/install/makedeps.sh $(BUILDDIR) ; \
 	else \
-		 echo 'Checking dependencies...' ;\
-		( if test -x install/makedeps.sh ; then install/makedeps.sh ; fi) ; \
+	    install/makedeps.sh ; \
 	fi
