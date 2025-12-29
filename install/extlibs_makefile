@@ -1,4 +1,4 @@
-# Copyright (C) 2001-2020 Quantum ESPRESSO group
+# Copyright (C) 2001-2025 Quantum ESPRESSO Foundation
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -13,7 +13,97 @@ include install_utils
 
 # MAIN target
 
-all: libdevx
+all: libdevx libmbd
+
+###################################
+# devxlib
+###################################
+
+# download and compile devxlib, if file "libdevx" is not present;
+# touch file "libdevx" so next time devxlib is not downloaded and compiled 
+libdevx :
+	$(call update_submodule,external,devxlib)
+	cd $(TOPDIR)/external/devxlib/src; \
+	ln -fs $(BUILDDIR)/make.inc ../; \
+	$(MAKE) all ; \
+	if test ! -d $(BUILDDIR)/devxlib/src; then \
+	    mkdir -p $(BUILDDIR)/devxlib/src ; \
+	    mv *.o *.mod *.a $(BUILDDIR)/devxlib/src/ ; fi
+	touch $(BUILDDIR)/install/libdevx
+
+# normal clean (does not remove make.inc)
+libdevx_clean:
+	if test -f $(TOPDIR)/external/devxlib/make.inc; then \
+	   cd $(TOPDIR)/external/devxlib; $(MAKE) clean; fi
+	if test -d $(BUILDDIR)/devxlib/src; then \
+		rm -r $(BUILDDIR)/devxlib; fi
+	if test -f $(BUILDDIR)/install/libdevx; then rm $(BUILDDIR)/install/libdevx; fi
+# file "libdevx" removed so next time it is downloaded and compiled again
+
+libdevx_veryclean:
+	if test -d $(TOPDIR)/external/devxlib; then \
+	   (cd $(TOPDIR)/external/devxlib; if test -f make.inc; then \
+	      ($(MAKE) distclean && rm -f make.inc); fi); fi
+
+###################################
+# LIBMBD
+###################################
+
+libmbd:
+	$(call update_submodule,external,mbd)
+	if test ! -d $(BUILDDIR)/MBD; then \
+        mkdir $(BUILDDIR)/MBD; \
+        cd $(TOPDIR)/external/mbd/src; \
+        export FXX=$(F90); export FXXOPT="$(F90FLAGS)"; \
+        $(MAKE) -f ../../mbd.make ; mv *.o *.mod *.a $(BUILDDIR)/MBD; cd ../../.. ;fi
+
+libmbd_clean:
+	if test -d $(BUILDDIR)/MBD; then (rm -R -f $(BUILDDIR)/MBD); fi
+	if test -d $(TOPDIR)/external/mbd/src; then cd $(TOPDIR)/external/mbd/src; \
+          $(MAKE) -f ../../mbd.make clean; fi
+
+libmbd_distclean:
+	if test -d $(BUILDDIR)/MBD; then (rm -R -f $(BUILDDIR)/MBD); fi
+	if test -d $(TOPDIR)/external/mbd/src; then cd $(TOPDIR)/external/mbd/src; \
+          $(MAKE) -f ../../mbd.make distclean; fi
+
+###########################################################
+# wannier90
+###########################################################
+
+libw90: w90git w90make
+
+w90git:
+	$(call update_submodule,external,wannier90)
+	touch $(BUILDDIR)/install/w90git
+# file "w90git" is touched so next time w90 is not downloaded
+
+# compile W90 sources, install library, executables, sources,
+# respectively in lib/, bin/, obj/ under $(BUILDDIR)/wannier90
+w90make: w90git
+	cp $(BUILDDIR)/install/make_wannier90.inc \
+	   $(TOPDIR)/external/wannier90/make.inc
+	cd $(TOPDIR)/external/wannier90; $(MAKE) lib ; \
+	$(MAKE) PREFIX=$(BUILDDIR)/wannier90 install ; \
+	cd src/obj ; mkdir $(BUILDDIR)/wannier90/obj ; \
+	cp *.o *.mod $(BUILDDIR)/wannier90/obj
+	touch $(BUILDDIR)/install/w90make
+# file "w90make" is touched so next time w90 is not compiled
+
+w90_clean:
+	rm -f $(BUILDDIR)/install/w90make \
+		$(BUILDDIR)/wannier90/lib/*.a \
+		$(BUILDDIR)/wannier90/bin/*.x \
+		$(BUILDDIR)/wannier90/obj/*.o \
+		$(BUILDDIR)/wannier90/obj/*.mod \
+	cd $(TOPDIR)/external/wannier90; $(MAKE) clean && rm make.inc
+
+w90_veryclean: w90_clean
+	rm -f $(BUILDDIR)/install/w90git
+
+w90_distclean: w90_veryclean
+	rm -rf $(TOPDIR)/external/wannier90 $(BUILDDIR)/wannier90
+
 
 ###################################
 # LAPACK (includes BLAS) - OBSOLETE?
@@ -68,64 +158,13 @@ fox_clean:
 	if test -d $(TOPDIR)/external/fox; then cd $(TOPDIR)/external/fox; \
           (if test -f FoX-config; then $(MAKE) clean; fi); fi
 
-###################################
-# devxlib
-###################################
-
-libdevx :
-	# if "libdevx" is not present, updates and compiles devxlib
-	$(call update_submodule,external,devxlib)
-	cd $(TOPDIR)/external/devxlib/src ; \
-	ln -fs $(BUILDDIR)/make.inc ../ ; \
-	$(MAKE) all ; \
-	if test ! -d $(BUILDDIR)/external/devxlib/src; then \
-	    mkdir -p $(BUILDDIR)/external/devxlib/src ; \
-	    mv *.o *.mod *.a $(BUILDDIR)/external/devxlib/src/ ; fi
-	# last line for out-of-source build: move objects to build directory
-	# touch "libdevx" so next time devxlib is not downloaded and compiled 
-	touch $(BUILDDIR)/install/libdevx
-
-libdevx_clean:
-	# normal clean (does not remove make.inc)
-	if test -f $(TOPDIR)/external/devxlib/make.inc; then \
-	   cd $(TOPDIR)/external/devxlib; $(MAKE) clean; fi
-	# clean out-of-source build directory (has no make.inc)
-	if test ! -f $(BUILDDIR)/external/devxlib/src/make.inc; then \
-		rm -r $(BUILDDIR)/external/devxlib; fi
-	# remove "libdevx" so next time it is downloaded and compiled again
-	if test -f $(BUILDDIR)/install/libdevx; then rm $(BUILDDIR)/install/libdevx; fi
-
-libdevx_veryclean:
-	if test -d $(TOPDIR)/external/devxlib; then \
-	   (cd $(TOPDIR)/external/devxlib; if test -f make.inc; then \
-	      ($(MAKE) distclean && rm -f make.inc); fi); fi
-
-###################################
-# LIBMBD
-###################################
-
-libmbd:
-	$(call update_submodule,external,mbd)
-	if test ! -d $(BUILDDIR)/MBD; then \
-        mkdir $(BUILDDIR)/MBD; \
-        cd $(TOPDIR)/external/mbd/src; \
-        export FXX=$(F90); export FXXOPT="$(F90FLAGS)"; \
-        $(MAKE) -f ../../mbd.make ; mv *.o *.mod *.a $(BUILDDIR)/MBD; cd ../../.. ;fi
-
-libmbd_clean:
-	if test -d $(BUILDDIR)/MBD; then (rm -R -f $(BUILDDIR)/MBD); fi
-	if test -d $(TOPDIR)/external/mbd/src; then cd $(TOPDIR)/external/mbd/src; \
-          $(MAKE) -f ../../mbd.make clean; fi
-
-libmbd_distclean:
-	if test -d $(BUILDDIR)/MBD; then (rm -R -f $(BUILDDIR)/MBD); fi
-	if test -d $(TOPDIR)/external/mbd/src; then cd $(TOPDIR)/external/mbd/src; \
-          $(MAKE) -f ../../mbd.make distclean; fi
 
 ###################################
 # cleaning
 ###################################
 
-clean: lapack_clean fox_clean libdevx_clean libmbd_clean
+clean: lapack_clean fox_clean libdevx_clean libmbd_clean w90_clean
 
-veryclean: fox_clean libdevx_veryclean libmbd_distclean
+veryclean: clean libdevx_veryclean libmbd_distclean w90_veryclean
+
+distlean: veryclean w90_distclean

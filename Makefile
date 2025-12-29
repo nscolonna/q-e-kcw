@@ -1,4 +1,4 @@
-# Copyright (C) 2001-2020 Quantum ESPRESSO Foundation
+# Copyright (C) 2001-2025 Quantum ESPRESSO Foundation
 # 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -33,6 +33,7 @@ default :
 	@echo '  xspectra     X-ray core-hole spectroscopy calculations'
 	@echo '  couple       Library interface for coupling to external codes'
 	@echo '  epw          Electron-Phonon Coupling with Wannier functions'
+	@echo '               (compiles w90 as well)'
 	@echo '  kcw          KCW code: implementation of Koopmans functionals in primitive cell'
 	@echo '  pioud        Path Integral Molecular Dynamics with PIOUD algorithm'
 	@echo '  gui          Graphical User Interface'
@@ -126,7 +127,7 @@ couple : pw cp
 	if test -d COUPLE ; then \
 	( cd COUPLE ; $(MAKE) TLDEPS= all || exit 1 ) ; fi
 
-epw: phlibs w90lib pp
+epw: phlibs w90 pp
 	if test -d EPW ; then \
 	( cd EPW ; $(MAKE) all || exit 1; \
 		cd ../bin; ln -fs ../EPW/bin/epw.x . ); fi
@@ -142,7 +143,7 @@ travis : pwall epw
 	if test -d test-suite ; then \
 	( cd test-suite ; make run-travis || exit 1 ) ; fi
 
-kcw : pwlibs lrmods pp w90lib
+kcw : pwlibs lrmods pp 
 	if test -d KCW ; then \
 	( cd KCW ; $(MAKE) all || exit 1 ) ; fi
 
@@ -236,27 +237,27 @@ bindir :
 # Targets for external libraries
 ############################################################
 
+libdevx:
+	( cd install ; $(MAKE) -f extlibs_makefile $@ || exit 1 )
+
+libmbd:
+	( cd install ; $(MAKE) -f extlibs_makefile $@ || exit 1 )
+
+libw90:
+	( cd install ; $(MAKE) -f extlibs_makefile $@ || exit 1 )
+
+# next two targets are obsolescent if not obsolete
 liblapack: 
 	cd install ; $(MAKE) -f extlibs_makefile $@
 
 libfox: 
 	cd install ; $(MAKE) -f extlibs_makefile $@
 
-libdevx:
-	cd install ; $(MAKE) -f extlibs_makefile $@
-
-libmbd:
-	cd install ; $(MAKE) -f extlibs_makefile $@
-
 #########################################################
 # plugins
 #########################################################
 
-w90: w90lib
-	( cd install ; $(MAKE) -f plugins_makefile $@ || exit 1 )
-
-w90lib: bindir $(LAPACK)
-	( cd install ; $(MAKE) -f plugins_makefile $@ || exit 1 )
+w90: libw90
 
 want: $(LAPACK)
 	( cd install ; $(MAKE) -f plugins_makefile $@ || exit 1 )
@@ -335,6 +336,7 @@ distclean : veryclean
 	   echo "make $@ not supported in out-of-source builds" ; \
 	else \
 		cd pseudo; ./clean_ps ; cd - ;\
+		(cd install ; $(MAKE) -f extlibs_makefile $@) ;\
 		(cd install ; $(MAKE) -f plugins_makefile $@) ;\
 		git submodule deinit --all --force  ;\
 	fi

@@ -73,7 +73,7 @@ QEMODS = ../../Modules/libqemod.a ../../KS_Solvers/libks_solvers.a ../../upflib/
          ../../FFTXlib/src/libqefft.a ../../LAXlib/libqela.a ../../UtilXlib/libutil.a ../../dft-d3/libdftd3qe.a \
          ../..//MBD/libmbd.a
 
-TLDEPS= pwlibs lrmods pp w90
+TLDEPS= pwlibs lrmods pp
 
 all : tldeps libs-kcw kcw.x clean_partial
 

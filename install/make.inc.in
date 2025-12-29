@@ -95,7 +95,7 @@ GPU_ARCH=@gpu_arch@
 CUDA_RUNTIME=@cuda_runtime@
 
 # CUDA F90 Flags
-CUDA_F90FLAGS=@cuda_fflags@ $(MOD_FLAG)$(BUILDDIR)/external/devxlib/src \
+CUDA_F90FLAGS=@cuda_fflags@ $(MOD_FLAG)$(BUILDDIR)/devxlib/src \
                             $(MOD_FLAG)$(TOPDIR)/external/devxlib/include
 
 # CUDA C Flags
@@ -136,14 +136,14 @@ LD_LIBS        = @ld_libs@
 
 # External Libraries (if any) : blas, lapack, fft, MPI
 
-# If you have nothing better, use the local copy
-# BLAS_LIBS = $(BUILDDIR)/external/lapack/libblas.a
+# If you have nothing better, use the local copy, e.g.:
+# BLAS_LIBS = $(BUILDDIR)/lapack/libblas.a
 
 BLAS_LIBS      = @blas_libs@
 
-# If you have nothing better, use the local copy
+# If you have nothing better, use the local copy, e.g.:
 # LAPACK = liblapack
-# LAPACK_LIBS = $(BUILDDIR)/external/lapack/liblapack.a
+# LAPACK_LIBS = $(BUILDDIR)/lapack/liblapack.a
 
 LAPACK      = @lapack_target@
 LAPACK_LIBS = @lapack_libs@
@@ -176,7 +176,7 @@ MPI_LIBS       = @mpi_libs@
 MASS_LIBS      = @mass_libs@
 
 # CUDA libraries
-CUDA_LIBS=@cuda_libs@ -L$(BUILDDIR)/external/devxlib/src -ldevXlib
+CUDA_LIBS=@cuda_libs@ -L$(BUILDDIR)/devxlib/src -ldevXlib
 
 # ar command and flags - for most architectures: AR = ar, ARFLAGS = ruv
 

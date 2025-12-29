@@ -13,7 +13,7 @@ MODFLAGS= $(BASEMOD_FLAGS) \
           $(MOD_FLAG)../../PW/src \
           $(MOD_FLAG)../../PHonon/PH \
           $(MOD_FLAG)../../LR_Modules \
-          $(MOD_FLAG)../../external/wannier90/src/obj \
+          $(MOD_FLAG)../../wannier90/obj \
           $(MOD_FLAG)../../dft-d3
 
 #
@@ -88,12 +88,12 @@ utilities/screening.o \
 #default : epw
 
 PHOBJS = ../../PHonon/PH/libph.a
-W90LIB = ../../external/wannier90/libwannier.a
+W90LIB = ../../wannier90/lib/libwannier.a
 LRMODS = ../../LR_Modules/liblrmod.a
 PWOBJS = ../../PW/src/libpw.a ../../KS_Solvers/libks_solvers.a ../../dft-d3/libdftd3qe.a
 QEMODS = $(BASEMODS)
 
-TLDEPS= pw ph pp
+TLDEPS= pw ph pp w90
 
 all : iodir utildir bindir pw ph pp wannier libepw.a epw.x nscf2supercond.x
 
