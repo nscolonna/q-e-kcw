@@ -1,7 +1,8 @@
 # Makefile for PWCOND
-# Adapted from TDDFPT main Makefile
 
-default: all
+# see comments in file tldeps for explanations
+include $(BUILDDIR)/install/tldeps
+TLDEPS=pwlibs
 
 all:
 	( cd src ; $(MAKE) all || exit 1 )

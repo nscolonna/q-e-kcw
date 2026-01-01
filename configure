@@ -8322,6 +8322,8 @@ ac_config_files="$ac_config_files install/plugins_makefile:install/plugins_makef
 
 ac_config_files="$ac_config_files install/plugins_list:install/plugins_list"
 
+ac_config_files="$ac_config_files install/tldeps:install/tldeps"
+
 
 ac_config_files="$ac_config_files Makefile:Makefile"
 
@@ -9128,6 +9130,7 @@ do
     "install/install_utils") CONFIG_FILES="$CONFIG_FILES install/install_utils:install/install_utils" ;;
     "install/plugins_makefile") CONFIG_FILES="$CONFIG_FILES install/plugins_makefile:install/plugins_makefile" ;;
     "install/plugins_list") CONFIG_FILES="$CONFIG_FILES install/plugins_list:install/plugins_list" ;;
+    "install/tldeps") CONFIG_FILES="$CONFIG_FILES install/tldeps:install/tldeps" ;;
     "Makefile") CONFIG_FILES="$CONFIG_FILES Makefile:Makefile" ;;
     "COUPLE/Makefile") CONFIG_FILES="$CONFIG_FILES COUPLE/Makefile:COUPLE/Makefile" ;;
     "COUPLE/src/Makefile") CONFIG_FILES="$CONFIG_FILES COUPLE/src/Makefile:COUPLE/src/Makefile" ;;

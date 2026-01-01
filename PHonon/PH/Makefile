@@ -190,12 +190,15 @@ write_eigenvectors.o
 LRMODS = ../../LR_Modules/liblrmod.a
 PWOBJS = ../../PW/src/libpw.a ../../KS_Solvers/libks_solvers.a ../../dft-d3/libdftd3qe.a
 QEMODS = $(BASEMODS)
-TLDEPS= phlibs
 
-all : tldeps libs-ph ph.x dynmat.x matdyn.x q2r.x lambda.x fqha.x q2qstar.x \
+# see comments in file tldeps for explanations
+TLDEPS=pwlibs lrmods
+include $(BUILDDIR)/install/tldeps
+
+all : phlibs ph.x dynmat.x matdyn.x q2r.x lambda.x fqha.x q2qstar.x \
 	alpha2f.x epa.x dvscf_q2r.x postahc.x
 
-libs-ph : libph.a libphaux.a
+phlibs : libph.a libphaux.a
 
 ph.x : phonon.o libph.a $(PWOBJS) $(LRMODS) $(QEMODS)
 	$(LD) $(LDFLAGS) -o $@ phonon.o libph.a \
@@ -243,9 +246,6 @@ dvscf_q2r.x : dvscf_q2r.o libphaux.a libph.a $(PWOBJS) $(LRMODS) $(QEMODS)
          $(LRMODS) $(PWOBJS) $(QEMODS) $(QELIBS)
 	- ( cd ../../bin ; ln -fs ../PHonon/PH/$@ . )
 
-#fqha.o :
-#	$(MPIF90) $(FFLAGS_NOOPT) -c fqha.f90
-
 fqha.x : fqha.o $(PWOBJS) $(QEMODS)
 	$(LD) $(LDFLAGS) -o $@ fqha.o \
                  $(PWOBJS) $(QEMODS) $(QELIBS)
@@ -255,10 +255,6 @@ postahc.x : postahc.o libphaux.a libph.a $(PWOBJS) $(LRMODS) $(QEMODS) $(LIBOBJS
 	$(LD) $(LDFLAGS) -o $@ postahc.o \
                  $(LRMODS) $(PWOBJS) $(QEMODS) $(LIBOBJS) $(QELIBS)
 	- ( cd ../../bin ; ln -fs ../PHonon/PH/$@ . )
-
-tldeps :
-	if test -n "$(TLDEPS)" ; then \
-	( cd ../.. ; $(MAKE) $(TLDEPS) || exit 1 ) ; fi
 
 libph.a : $(PHOBJS) $(RAMANOBJS) 
 	$(AR) $(ARFLAGS) $@ $?
