@@ -39,9 +39,8 @@ beefun.o
 XCT = \
 qe_dft_refs.o
 
-# TLDEPS should contain the same list of dependencies as in the main Makefile
-TLDEPS = libupf
-# Ensure that "make" run in this subdirectory builds the needed dependencies
+# see comments in file tldeps for explanations
+TLDEPS= libupf
 include $(BUILDDIR)/install/tldeps
 
 # "make all" is called from Makefile in the root directory
