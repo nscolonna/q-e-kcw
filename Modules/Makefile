@@ -228,18 +228,16 @@ sockets.o
 MODULES += \
   random_numbers_gpu.o
 
-TLDEPS= libfox libla libfft libutil libmbd librxc libupf
+# TLDEPS should contain the same list of dependencies as in the main Makefile
+TLDEPS= $(FOX) libla libfft libutil libmbd librxc libupf
+# Ensure that "make" run in this subdirectory builds the needed dependencies
+include $(BUILDDIR)/install/tldeps
 
 all : libqemod.a
 
 libqemod.a: 	$(MODULES) $(OBJS) $(RISMLIB)
 	$(AR) $(ARFLAGS) $@ $?       
 	$(RANLIB) $@    
-
-tldeps :
-	if test -n "$(TLDEPS)" ; then \
-	( cd ../.. ; $(MAKE) $(TLDEPS) || exit 1 ) ; fi
-
 
 clean :
 	- /bin/rm -f *.o *.a *.d *.i *~ *_tmp.f90 *.mod *.L

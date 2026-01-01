@@ -16,6 +16,10 @@ PWOBJS = ../../../PW/src/libpw.a ../../../KS_Solvers/libks_solvers.a ../../../df
 LRMODS = ../../../LR_Modules/liblrmod.a
 QEMODS = $(BASEMODS)
 
+# see comments in file tldeps for explanations
+TLDEPS=pwlibs phlibs
+include $(BUILDDIR)/install/tldeps
+
 all : ZG.x disca.x pp_disca.x pp_spctrlfn.x bands_unfold.x epsilon_Gaus.x 
 
 ZG.x : ZG.o $(PHAUXOBJS) $(PHOBJS) $(PWOBJS) $(LRMODS) $(QEMODS)

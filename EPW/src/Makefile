@@ -93,9 +93,11 @@ LRMODS = ../../LR_Modules/liblrmod.a
 PWOBJS = ../../PW/src/libpw.a ../../KS_Solvers/libks_solvers.a ../../dft-d3/libdftd3qe.a
 QEMODS = $(BASEMODS)
 
-TLDEPS= pw ph pp w90
+# see comments in file tldeps for explanations
+TLDEPS=phlibs libw90 pp
+include $(BUILDDIR)/install/tldeps
 
-all : iodir utildir bindir pw ph pp wannier libepw.a epw.x nscf2supercond.x
+all : iodir utildir bindir libepw.a epw.x nscf2supercond.x
 
 libepw.a : $(EPWOBJS)
 	$(AR) $(ARFLAGS) $@ $?
@@ -123,21 +125,6 @@ utildir :
 bindir :
 	if test ! $(TOPDIR) -ef $(BUILDDIR) ; then \
 	cp -r $(TOPDIR)/EPW/bin $(BUILDDIR)/EPW/bin ; fi
-
-pw :
-	cd ../../ ; make pw
-
-ph :
-	cd ../../ ; make ph
-
-pp :
-	cd ../../ ; make pp
-
-wannier :
-	cd ../../ ; make w90
-
-ld1 :
-	cd ../../ ; make ld1
 
 clean :
 	- /bin/rm -f  *.o *~ *.d *.mod *.i io/*.mod io/*.o utilities/*.mod utilities/*.o libepw.a liblr.a

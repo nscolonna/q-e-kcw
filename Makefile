@@ -64,50 +64,50 @@ default :
 # Main targets
 ###########################################################
 
-# The syntax "( cd PW ; $(MAKE) TLDEPS= all || exit 1)" below
+# The syntax "( cd PW ; $(MAKE) all || exit 1)" below
 # guarantees that error code 1 is returned in case of error and make stops
 # If "|| exit 1" is not present, the error code from make in subdirectories
 # is not returned and make goes on even if compilation has failed
 
 pw : pwlibs
 	if test -d PW ; then \
-	( cd PW ; $(MAKE) TLDEPS= all || exit 1) ; fi
+	( cd PW ; $(MAKE) all || exit 1) ; fi
 
 cp : bindir mods
 	if test -d CPV ; then \
-	( cd CPV ; $(MAKE) TLDEPS= all || exit 1) ; fi
+	( cd CPV ; $(MAKE) all || exit 1) ; fi
 
 ph : phlibs
 	if test -d PHonon; then \
-	( cd PHonon; $(MAKE) TLDEPS= all || exit 1) ; fi
+	( cd PHonon; $(MAKE) all || exit 1) ; fi
 
 hp : hplibs
 	if test -d HP; then \
-	( cd HP; $(MAKE) TLDEPS= all || exit 1) ; fi
+	( cd HP; $(MAKE) all || exit 1) ; fi
 
 neb : pwlibs
 	if test -d NEB; then \
-	( cd NEB; $(MAKE) TLDEPS= all || exit 1) ; fi
+	( cd NEB; $(MAKE) all || exit 1) ; fi
 
 tddfpt : lrmods
 	if test -d TDDFPT; then \
-	( cd TDDFPT; $(MAKE) TLDEPS= all || exit 1) ; fi
+	( cd TDDFPT; $(MAKE) all || exit 1) ; fi
 
 pp : pwlibs
 	if test -d PP ; then \
-	( cd PP ; $(MAKE) TLDEPS= all || exit 1 ) ; fi
+	( cd PP ; $(MAKE) all || exit 1 ) ; fi
 
 pwcond : pwlibs
 	if test -d PWCOND ; then \
-	( cd PWCOND ; $(MAKE) TLDEPS= all || exit 1 ) ; fi
+	( cd PWCOND ; $(MAKE) all || exit 1 ) ; fi
 
 acfdt : phlibs
 	if test -d ACFDT ; then \
-	( cd ACFDT ; $(MAKE) TLDEPS= all || exit 1 ) ; fi
+	( cd ACFDT ; $(MAKE) all || exit 1 ) ; fi
 
 gwl : phlibs
 	if test -d GWW ; then \
-	( cd GWW ; $(MAKE) TLDEPS= all || exit 1 ) ; fi
+	( cd GWW ; $(MAKE) all || exit 1 ) ; fi
 
 gipaw : pwlibs
 	( cd install ; $(MAKE) -f plugins_makefile $@ || exit 1 )
@@ -117,17 +117,17 @@ d3q : phlibs
 
 ld1 : bindir mods
 	if test -d atomic ; then \
-	( cd atomic ; $(MAKE) TLDEPS= all || exit 1 ) ; fi
+	( cd atomic ; $(MAKE) all || exit 1 ) ; fi
 
 xspectra : pwlibs
 	if test -d XSpectra ; then \
-	( cd XSpectra ; $(MAKE) TLDEPS= all || exit 1 ) ; fi
+	( cd XSpectra ; $(MAKE) all || exit 1 ) ; fi
 
 couple : pw cp
 	if test -d COUPLE ; then \
-	( cd COUPLE ; $(MAKE) TLDEPS= all || exit 1 ) ; fi
+	( cd COUPLE ; $(MAKE) all || exit 1 ) ; fi
 
-epw: phlibs w90 pp
+epw: phlibs libw90 pp
 	if test -d EPW ; then \
 	( cd EPW ; $(MAKE) all || exit 1; \
 		cd ../bin; ln -fs ../EPW/bin/epw.x . ); fi
@@ -143,7 +143,7 @@ travis : pwall epw
 	if test -d test-suite ; then \
 	( cd test-suite ; make run-travis || exit 1 ) ; fi
 
-kcw : pwlibs lrmods pp 
+kcw : pwlibs lrmods kcwlib
 	if test -d KCW ; then \
 	( cd KCW ; $(MAKE) all || exit 1 ) ; fi
 
@@ -157,7 +157,7 @@ gui : bindir
 	else \
 	   if test -d GUI/PWgui ; then \
 	       cd GUI/PWgui ; \
-	       $(MAKE) TLDEPS= init; \
+	       $(MAKE) init; \
 	       echo ; \
 	       echo "  ------------------------------------------------------------"; \
 	       echo "  PWgui was built in ./GUI/PWgui/ and a link was made in bin/."; \
@@ -185,11 +185,11 @@ all   : pwall cp ld1 tddfpt hp xspectra gwl kcw pioud
 
 pwlibs: bindir mods libks_solvers dftd3
 	if test -d PW ; then \
-	( cd PW ; $(MAKE) pw-lib || exit 1) ; fi
+	( cd PW ; $(MAKE) pwlibs || exit 1) ; fi
 
 phlibs: pwlibs lrmods
 	if test -d PHonon; then \
-	( cd PHonon; $(MAKE) ph-lib || exit 1) ; fi
+	( cd PHonon; $(MAKE) phlibs || exit 1) ; fi
 
 hplibs: pwlibs lrmods
 	if test -d HP; then \
@@ -199,36 +199,40 @@ gwwlib : phlibs
 	if test -d GWW ; then \
 	( cd GWW ; $(MAKE) gwwa || exit 1 ) ; fi
 
+kcwlib : pwlibs lrmods
+	if test -d KCW ; then \
+	( cd KCW ; $(MAKE) kcwlib || exit 1 ) ; fi
+
 pw4gwwlib : phlibs
 	if test -d GWW ; then \
 	( cd GWW ; $(MAKE) pw4gwwa || exit 1 ) ; fi
 
 mods : $(FOX) libutil libla libfft libupf libmbd librxc
-	( cd Modules ; $(MAKE) TLDEPS= all || exit 1 )
+	( cd Modules ; $(MAKE) all || exit 1 )
 
 libks_solvers : libutil libla
-	( cd KS_Solvers ; $(MAKE) TLDEPS= all || exit 1 )
+	( cd KS_Solvers ; $(MAKE) all || exit 1 )
 
 libla : $(LAPACK) libutil libdevx
-	( cd LAXlib ; $(MAKE) TLDEPS= all || exit 1 )
+	( cd LAXlib ; $(MAKE) all || exit 1 )
 
 libfft : 
-	( cd FFTXlib ; $(MAKE) TLDEPS= all || exit 1 )
+	( cd FFTXlib ; $(MAKE) all || exit 1 )
 
 librxc : 
-	( cd XClib ; $(MAKE) TLDEPS= all || exit 1 )
+	( cd XClib ; $(MAKE) all || exit 1 )
 
 libutil : 
-	( cd UtilXlib ; $(MAKE) TLDEPS= all || exit 1 )
+	( cd UtilXlib ; $(MAKE) all || exit 1 )
 
 libupf : libutil libdevx
-	( cd upflib ; $(MAKE) TLDEPS= all || exit 1 )
+	( cd upflib ; $(MAKE) all || exit 1 )
 
 lrmods : mods pwlibs
-	( cd LR_Modules ; $(MAKE) TLDEPS= all || exit 1 )
+	( cd LR_Modules ; $(MAKE) all || exit 1 )
 
 dftd3 : mods
-	( cd dft-d3 ; $(MAKE) TLDEPS= all || exit 1 )
+	( cd dft-d3 ; $(MAKE) all || exit 1 )
 
 bindir :
 	test -d bin || mkdir bin
@@ -312,7 +316,7 @@ clean :
 	; do \
 	    if test -d $$dir ; then \
 		( cd $$dir ; \
-		$(MAKE) TLDEPS= clean ) \
+		$(MAKE) clean ) \
 	    fi \
 	done
 	- @(cd install ; $(MAKE) -f plugins_makefile clean)
@@ -362,7 +366,7 @@ tar-gui :
 	else \
 		if test -d GUI/PWgui ; then \
 		    cd GUI/PWgui ; \
-		    $(MAKE) TLDEPS= clean init pwgui-source; \
+		    $(MAKE) clean init pwgui-source; \
 		    mv PWgui-*.tgz ../.. ; \
 		else \
 		    echo ; \
@@ -377,7 +381,7 @@ tar-qe-modes :
 	else \
 		if test -d GUI/QE-modes ; then \
 		    cd GUI/QE-modes ; \
-		    $(MAKE) TLDEPS= veryclean tar; \
+		    $(MAKE) veryclean tar; \
 		    mv QE-modes-*.tar.gz ../.. ; \
 		else \
 		    echo ; \
@@ -396,18 +400,18 @@ doc :
 	   echo "make $@ not supported in out-of-source builds" ; \
 	else \
 	   if test -d Doc ; then \
-	   ( cd Doc ; $(MAKE) TLDEPS= all ) ; fi ;\
+	   ( cd Doc ; $(MAKE) all ) ; fi ;\
 	   for dir in */Doc; do \
 	   ( if test -f $$dir/Makefile ; then \
-	   ( cd $$dir; $(MAKE) TLDEPS= all ) ; fi ) ;  done ; \
+	   ( cd $$dir; $(MAKE) all ) ; fi ) ;  done ; \
 	fi
 
 doc_clean :
 	if test -d Doc ; then \
-	( cd Doc ; $(MAKE) TLDEPS= clean ) ; fi
+	( cd Doc ; $(MAKE) clean ) ; fi
 	for dir in */Doc; do \
 	( if test -f $$dir/Makefile ; then \
-	( cd $$dir; $(MAKE) TLDEPS= clean ) ; fi ) ;  done
+	( cd $$dir; $(MAKE) clean ) ; fi ) ;  done
 
 depend:
 	echo 'Checking dependencies...'

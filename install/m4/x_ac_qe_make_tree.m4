@@ -9,6 +9,7 @@ AC_CONFIG_FILES([install/extlibs_makefile:install/extlibs_makefile])
 AC_CONFIG_FILES([install/install_utils:install/install_utils])
 AC_CONFIG_FILES([install/plugins_makefile:install/plugins_makefile])
 AC_CONFIG_FILES([install/plugins_list:install/plugins_list])
+AC_CONFIG_FILES([install/tldeps:install/tldeps])
 
 AC_CONFIG_FILES([Makefile:Makefile])
 
