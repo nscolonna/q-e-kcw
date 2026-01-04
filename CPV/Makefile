@@ -3,7 +3,7 @@ sinclude ../make.inc
 
 # see comments in file tldeps for explanations
 TLDEPS=bindir mods
-include $(BUILDDIR)/install/tldeps
+include ../install/tldeps
 
 all:
 	( cd src ; $(MAKE) all || exit 1 )

@@ -3,7 +3,7 @@ sinclude ../make.inc
 
 # see comments in file tldeps for explanations
 TLDEPS=phlibs libw90 pp
-include $(BUILDDIR)/install/tldeps
+include ../install/tldeps
 
 all: epw
 

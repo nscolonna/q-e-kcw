@@ -230,7 +230,7 @@ MODULES += \
  
 # see comments in file tldeps for explanations
 TLDEPS= $(FOX) libla libfft libutil libmbd librxc libupf
-include $(BUILDDIR)/install/tldeps
+include ../install/tldeps
 
 all : libqemod.a
 

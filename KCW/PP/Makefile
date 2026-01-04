@@ -32,7 +32,7 @@ QEMODS = ../../Modules/libqemod.a ../../KS_Solvers/libks_solvers.a ../../upflib/
 # TLDEPS should contain the same list of dependencies as in the main Makefile
 TLDEPS= pwlibs lrmods kcwlib
 # Ensure that "make" run in this subdirectory builds the needed dependencies
-include $(BUILDDIR)/install/tldeps
+include ../../install/tldeps
 
 all : kcwpp_sh.x kcwpp_interp.x clean_partial merge_wann.x
 

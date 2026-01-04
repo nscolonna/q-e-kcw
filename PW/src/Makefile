@@ -287,7 +287,7 @@ QEMODS=../../KS_Solvers/libks_solvers.a ../../dft-d3/libdftd3qe.a $(BASEMODS)
 
 # see comments in file tldeps for explanations
 TLDEPS= bindir mods libks_solvers dftd3
-include $(BUILDDIR)/install/tldeps
+include ../../install/tldeps
 
 all : pw.x
 

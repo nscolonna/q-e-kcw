@@ -16,7 +16,7 @@ libqemod.o
 
 # see comments in file tldeps for explanations
 TLDEPS=pw cp
-include $(BUILDDIR)/install/tldeps
+include ../../install/tldeps
 
 all : libqecouple.a
 

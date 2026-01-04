@@ -75,7 +75,7 @@ QEMODS = ../../Modules/libqemod.a ../../KS_Solvers/libks_solvers.a ../../upflib/
 
 # see comments in file tldeps for explanations
 TLDEPS=pwlibs lrmods
-include $(BUILDDIR)/install/tldeps
+include ../../install/tldeps
 
 all : kcwlib kcw.x clean_partial
 

@@ -44,7 +44,7 @@ QEMODS=../../PHonon/PH/libph.a ../../LR_Modules/liblrmod.a \
 
 # see comments in file tldeps for explanations
 TLDEPS= pwlibs phlibs
-include $(BUILDDIR)/install/tldeps
+include ../../install/tldeps
 
 all : all_currents.x
 

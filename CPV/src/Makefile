@@ -118,7 +118,7 @@ QEMODS=$(BASEMODS)
 
 # see comments in file tldeps for explanations
 TLDEPS=bindir mods
-include $(BUILDDIR)/install/tldeps
+include ../../install/tldeps
 
 all : libcp.a manycp.x cp.x wfdd.x cppp.x
 

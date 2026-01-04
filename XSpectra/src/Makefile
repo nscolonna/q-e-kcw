@@ -43,7 +43,7 @@ PWOBJS = ../../PW/src/libpw.a ../../KS_Solvers/libks_solvers.a ../../dft-d3/libd
 
 # see comments in file tldeps for explanations
 TLDEPS=pwlibs
-include $(BUILDDIR)/install/tldeps
+include ../../install/tldeps
 
 all : xspectra.x spectra_correction.x molecularnexafs.x
 

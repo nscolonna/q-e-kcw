@@ -52,7 +52,7 @@ LIBMIN= ../minpack/minpacklib.a
 # TLDEPS should contain the same list of dependencies as in the main Makefile
 TLDEPS= phlibs
 # Ensure that "make" run in this subdirectory builds the needed dependencies
-include $(BUILDDIR)/install/tldeps
+include ../../install/tldeps
 
 all : gww.x gww_fit.x libgww.a
 

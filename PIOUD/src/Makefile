@@ -39,7 +39,7 @@ F90FLAGS += -pg
 LDFLAGS += -pg
 
 # see comments in file tldeps for explanations
-include $(BUILDDIR)/install/tldeps
+include ../../install/tldeps
 TLDEPS=pwlibs
 
 all : pioud.x

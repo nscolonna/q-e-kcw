@@ -52,7 +52,7 @@ PWOBJS = ../../PW/src/libpw.a ../../KS_Solvers/libks_solvers.a  ../../dft-d3/lib
 QEMODS = $(BASEMODS)
 
 # see comments in file tldeps for explanations
-include $(BUILDDIR)/install/tldeps
+include ../../install/tldeps
 TLDEPS=pwlibs
 
 all : pwcond.x
