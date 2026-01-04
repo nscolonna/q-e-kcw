@@ -74,7 +74,7 @@ lr_calc_dens_magnons.o
 
 # see comments in file tldeps for explanations
 TLDEPS=lrmods
-include $(BUILDDIR)/install/tldeps
+include ../../install/tldeps
 
 all : libtddfpt.a turbo_lanczos.x turbo_davidson.x turbo_eels.x turbo_magnon.x turbo_spectrum.x
 

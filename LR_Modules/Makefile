@@ -93,7 +93,7 @@ dfpt_kernels.o
 
 # see comments in file tldeps for explanations
 TLDEPS=mods pwlibs
-include $(BUILDDIR)/install/tldeps
+include ../install/tldeps
 
 all : liblrmod.a
 

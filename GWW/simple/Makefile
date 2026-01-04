@@ -31,7 +31,7 @@ GWWOBJ = ../gww/libgww.a
 # TLDEPS should contain the same list of dependencies as in the main Makefile
 TLDEPS= pwlibs gwwlib
 # Ensure that "make" run in this subdirectory builds the needed dependencies
-include $(BUILDDIR)/install/tldeps
+include ../../install/tldeps
 
 all : simple.x
 

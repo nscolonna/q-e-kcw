@@ -193,7 +193,7 @@ QEMODS = $(BASEMODS)
 
 # see comments in file tldeps for explanations
 TLDEPS=pwlibs lrmods
-include $(BUILDDIR)/install/tldeps
+include ../../install/tldeps
 
 all : phlibs ph.x dynmat.x matdyn.x q2r.x lambda.x fqha.x q2qstar.x \
 	alpha2f.x epa.x dvscf_q2r.x postahc.x

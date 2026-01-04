@@ -13,7 +13,7 @@ PWOBJS = ../src/libpw.a ../../KS_Solvers/libks_solvers.a
 
 # see comments in file tldeps for explanations
 TLDEPS= pwlibs
-include $(BUILDDIR)/install/tldeps
+include ../../install/tldeps
 
 all : ev.x kpoints.x pwi2xsf.x ibrav2cell.x cell2ibrav.x scan_ibrav.x rism1d.x
 

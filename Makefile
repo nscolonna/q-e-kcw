@@ -193,7 +193,7 @@ phlibs: pwlibs lrmods
 
 hplibs: pwlibs lrmods
 	if test -d HP; then \
-	( cd HP; $(MAKE) hp-lib || exit 1) ; fi
+	( cd HP; $(MAKE) hplibs || exit 1) ; fi
 
 gwwlib : phlibs
 	if test -d GWW ; then \
@@ -252,10 +252,10 @@ libw90:
 
 # next two targets are obsolescent if not obsolete
 liblapack: 
-	cd install ; $(MAKE) -f extlibs_makefile $@
+	cd install ; $(MAKE) -f oldlibs_makefile $@
 
 libfox: 
-	cd install ; $(MAKE) -f extlibs_makefile $@
+	cd install ; $(MAKE) -f oldlibs_makefile $@
 
 #########################################################
 # plugins
@@ -308,11 +308,9 @@ install :
 clean : 
 	touch make.inc 
 	for dir in \
-		CPV LAXlib FFTXlib XClib UtilXlib upflib Modules PP PW EPW KS_Solvers \
-		NEB ACFDT COUPLE GWW XSpectra PWCOND dft-d3 \
-		atomic LR_Modules upflib \
-		dev-tools extlibs Environ TDDFPT PHonon HP GWW Doc GUI \
-		QEHeat KCW PIOUD \
+		LAXlib FFTXlib XClib UtilXlib upflib Modules KS_Solvers dft-d3 \
+		LR_Modules PW CPV PHonon HP EPW NEB TDDFPT GWW XSpectra PWCOND \
+		atomic QEHeat KCW PIOUD COUPLE Doc GUI dev-tools ACFDT Environ \
 	; do \
 	    if test -d $$dir ; then \
 		( cd $$dir ; \
@@ -325,14 +323,18 @@ clean :
 
 # remove files produced by "configure" as well
 veryclean : clean
-	- @(cd install ; $(MAKE) -f plugins_makefile veryclean)
-	- @(cd install ; $(MAKE) -f extlibs_makefile veryclean)
+	-@if test ! $(TOPDIR) -ef $(BUILDDIR) ; then \
+	   echo "make $@ not supported in out-of-source builds" ; \
+	   echo "just re-create $(BUILDDIR) and re-run configure" ; \
+	else \
+	- @(cd install ; $(MAKE) -f plugins_makefile veryclean) ; \
 	- (cd install ; rm -rf config.log configure.msg config.status \
-		make_wannier90.inc autom4te.cache )
-	- rm -f espresso.tar.gz
-	- rm -rf make.inc
-	- rm -rf FoX
-	- rm -rf MBD 
+		make_wannier90.inc autom4te.cache ) ; \
+	- rm -f espresso.tar.gz ; \
+	- rm -rf make.inc ; \
+	- rm -rf MBD wannier90 devxlib ;\
+	- rm -rf FoX lapack ; \
+	fi
 # remove everything not in the original distribution
 # place deinit at the very end such that makefiles clean up as much as possible.
 distclean : veryclean

@@ -3,7 +3,7 @@ sinclude ../make.inc
 
 # see comments in file tldeps for explanations
 TLDEPS=bindir mods libks_solvers dftd3
-include $(BUILDDIR)/install/tldeps
+include ../install/tldeps
 
 all: pw pwtools
 

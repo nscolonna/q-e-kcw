@@ -1490,7 +1490,7 @@ SUBROUTINE exx_gs(nfi, c)
       CALL start_clock('getvofr')
       CALL getvofr_sphere( np_in_sp_me_s,np_in_sp_s,&
         hcub, rho_in_sp, vl, selfv(1,1,iobtl), selfv(1,2,iobtl),&
-        selfv(1,3,iobtl), .TRUE., 0.0, 0.0, 0.0, 0.0,cgstep)
+        selfv(1,3,iobtl), .TRUE., 0d0, 0d0, 0d0, 0d0,cgstep)
       !
       CALL stop_clock('getvofr')
       !

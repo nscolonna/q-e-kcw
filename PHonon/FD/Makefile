@@ -18,7 +18,7 @@ QEMODS = $(BASEMODS)
 
 # see comments in file tldeps for explanations
 TLDEPS=pwlibs
-include $(BUILDDIR)/install/tldeps
+include ../../install/tldeps
 
 all : fd.x fd_ifc.x fd_ef.x
 

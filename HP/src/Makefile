@@ -61,7 +61,7 @@ QEMODS = $(BASEMODS)
 
 # see comments in file tldeps for explanations
 TLDEPS=pwlibs lrmods
-include $(BUILDDIR)/install/tldeps
+include ../../install/tldeps
 
 all : hplibs hp.x 
 

@@ -113,7 +113,7 @@ QEMODS=$(BASEMODS)
 
 # see comments in file tldeps for explanations
 TLDEPS=mods
-include $(BUILDDIR)/install/tldeps
+include ../../install/tldeps
 
 all: ld1.x
 

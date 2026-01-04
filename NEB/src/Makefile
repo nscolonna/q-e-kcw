@@ -45,7 +45,7 @@ QEMODS = $(BASEMODS)
 
 # see comments in file tldeps for explanations
 TLDEPS=pwlibs
-include $(BUILDDIR)/install/tldeps
+include ../../install/tldeps
 
 all : neb.x path_interpolation.x
 

@@ -61,7 +61,7 @@ PHOBJS = ../../PHonon/Gamma/libphcg.a ../../LR_Modules/liblrmod.a
 # TLDEPS should contain the same list of dependencies as in the main Makefile
 TLDEPS= phlibs
 # Ensure that "make" run in this subdirectory builds the needed dependencies
-include $(BUILDDIR)/install/tldeps
+include ../../install/tldeps
 
 all : pw4gww.x
 

@@ -72,7 +72,7 @@ QEMODS = $(BASEMODS)
 MODULES = $(PWOBJS) $(QEMODS)
 
 # see comments in file tldeps for explanations
-include $(BUILDDIR)/install/tldeps
+include ../../install/tldeps
 TLDEPS=pwlibs
 
 all : open_grid.x average.x bands.x band_interpolation.x dos.x epsilon.x initial_state.x fs.x \

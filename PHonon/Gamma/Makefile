@@ -41,7 +41,7 @@ QEMODS = ../../LR_Modules/liblrmod.a $(BASEMODS)
 
 # see comments in file tldeps for explanations
 TLDEPS=pwlibs
-include $(BUILDDIR)/install/tldeps
+include ../../install/tldeps
 
 all : phcg.x
 

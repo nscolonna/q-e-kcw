@@ -41,7 +41,7 @@ qe_dft_refs.o
 
 # see comments in file tldeps for explanations
 TLDEPS= libupf
-include $(BUILDDIR)/install/tldeps
+include ../install/tldeps
 
 # "make all" is called from Makefile in the root directory
 all: xc_lib.a

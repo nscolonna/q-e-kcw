@@ -95,7 +95,7 @@ QEMODS = $(BASEMODS)
 
 # see comments in file tldeps for explanations
 TLDEPS=phlibs libw90 pp
-include $(BUILDDIR)/install/tldeps
+include ../../install/tldeps
 
 all : iodir utildir bindir libepw.a epw.x nscf2supercond.x
 
@@ -106,22 +106,21 @@ libepw.a : $(EPWOBJS)
 epw.x : epw.o libepw.a $(PHOBJS) $(LRMODS) $(PWOBJS) $(W90LIB) $(QEMODS)
 	$(LD) $(LDFLAGS) -o $@ \
 	epw.o  libepw.a	$(PHOBJS) $(LRMODS) $(W90LIB) $(PWOBJS) $(QEMODS) $(QELIBS)
-	- ( cd $(BUILDDIR)/EPW/bin ; ln -fs ../src/epw.x . )
+	- ( cd ../bin ; ln -fs ../src/epw.x . )
 
 nscf2supercond.x : utilities/nscf2supercond.o $(PWOBJS) $(QEMODS)
 	$(LD) $(LDFLAGS) -o $@ \
 	utilities/nscf2supercond.o ../../PP/src/libpp.a $(PWOBJS) $(QEMODS) $(QELIBS)
-	- ( cd $(BUILDDIR)/EPW/bin ; ln -fs ../src/$@ . )
-	- ( cd $(BUILDDIR)/bin ; ln -fs ../EPW/src/$@ . )
+	- ( cd ../bin ; ln -fs ../src/$@ . )
+	- ( cd ../../bin ; ln -fs ../EPW/src/$@ . )
 
 iodir :
-	if test ! $(TOPDIR) -ef $(BUILDDIR) ; then \
-	mkdir -p $(BUILDDIR)/EPW/src/io ; fi
+	if test ! -d io ; then mkdir io ; fi
 
 utildir :
-	if test ! $(TOPDIR) -ef $(BUILDDIR) ; then \
-	mkdir -p $(BUILDDIR)/EPW/src/utilities ; fi
+	if test ! -d utilities ; then mkdir utilities ; fi
 
+# for out-of-source build
 bindir :
 	if test ! $(TOPDIR) -ef $(BUILDDIR) ; then \
 	cp -r $(TOPDIR)/EPW/bin $(BUILDDIR)/EPW/bin ; fi

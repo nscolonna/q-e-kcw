@@ -3,7 +3,7 @@ sinclude ../make.inc
 
 # see comments in file tldeps for explanations
 TLDEPS=pwlibs
-include $(BUILDDIR)/install/tldeps
+include ../install/tldeps
 
 all:
 	if test -d src ; then \

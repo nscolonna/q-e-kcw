@@ -18,7 +18,7 @@ QEMODS = $(BASEMODS)
 
 # see comments in file tldeps for explanations
 TLDEPS=pwlibs phlibs
-include $(BUILDDIR)/install/tldeps
+include ../../../install/tldeps
 
 all : ZG.x disca.x pp_disca.x pp_spctrlfn.x bands_unfold.x epsilon_Gaus.x 
 

@@ -2,7 +2,7 @@
 sinclude ../make.inc
 
 # see comments in file tldeps for explanations
-include $(BUILDDIR)/install/tldeps
+include ../install/tldeps
 TLDEPS=pwlibs
 
 all:

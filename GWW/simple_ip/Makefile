@@ -26,7 +26,7 @@ LIBMIN=
 # TLDEPS should contain the same list of dependencies as in the main Makefile
 TLDEPS=pwlibs
 # Ensure that "make" run in this subdirectory builds the needed dependencies
-include $(BUILDDIR)/install/tldeps
+include ../../install/tldeps
 
 all : simple_ip.x  libsimple_ip.a
 
