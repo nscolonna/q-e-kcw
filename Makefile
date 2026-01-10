@@ -308,9 +308,10 @@ install :
 clean : 
 	touch make.inc 
 	for dir in \
-		LAXlib FFTXlib XClib UtilXlib upflib Modules KS_Solvers dft-d3 \
-		LR_Modules PW CPV PHonon HP EPW NEB TDDFPT GWW XSpectra PWCOND \
-		atomic QEHeat KCW PIOUD COUPLE Doc GUI dev-tools ACFDT Environ \
+		LAXlib FFTXlib XClib UtilXlib upflib Modules KS_Solvers \
+		dft-d3 LR_Modules PW CPV PP PHonon HP EPW NEB TDDFPT GWW \
+		XSpectra PWCOND atomic QEHeat KCW PIOUD COUPLE Doc GUI \
+		dev-tools ACFDT Environ \
 	; do \
 	    if test -d $$dir ; then \
 		( cd $$dir ; \
