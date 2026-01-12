@@ -826,52 +826,82 @@ FUNCTION k1d_term_gamma(w1, w2, psi, fac_in, ibnd, orbital) RESULT (psi_int)
   !
   INTEGER                  :: ibnd2, is, npw_, ngm_, nnr_
   INTEGER                  :: nrec
+  INTEGER                  :: i     
   !
   npw_=npwt
   ngm_=dfftt%ngm
   nnr_=dfftt%nnr
   !  
   ALLOCATE(psi_int(nnr_, nbnd))
-  psi_int = 0.d0
-  !
+  !$acc data create( vhart(1:nnr_,1:nspin) &
+  !$acc& ,pseudo_dens_c(1:nnr_),psitemp(1:nnr_)) &
+  !$acc& copyin(red_revc0(1:nnr_,:,1),fac_in(1:ngm_),orbital), &
+  !$acc& copyout(psi_int(1:nnr_,1:nbnd))
+  !$acc update device(psi) 
+
+  !$acc kernels 
+  psi_int(:,:) = 0.d0
+  !$acc end kernels 
   !
   IF (ibnd < nbnd) then
      !
+     !$acc kernels
      vhart(:,:) = (0.d0,0.d0)
-     pseudo_dens_c(:) = (0.d0,0.d0)
+     !$acc end kernels
      !
      ! calculate vhart for couples ibnd,ibnd and ibnd+1,ibnd
      !
+     !$acc kernels
      pseudo_dens_c(1:nnr_) = CMPLX( w1*DBLE(red_revc0(1:nnr_,ibnd,1)) *&
           & DBLE(red_revc0(1:nnr_,ibnd,1)), &
           & w2*AIMAG(red_revc0(1:nnr_,ibnd, 1)) *&
           & DBLE(red_revc0(1:nnr_,ibnd,1)), kind=DP )
+     !$acc end kernels
      !
+     
+     !$acc host_data use_device(pseudo_dens_c)
      CALL fwfft ('Rho', pseudo_dens_c, dfftt)
+     !$acc end host_data
+     
      !
      DO is = 1, nspin
            !
-           vhart(dfftt%nl(1:ngm_),is) =&
-                & pseudo_dens_c(dfftt%nl(1:ngm_)) *&
-                & fac_in(1:ngm_)
-           IF (gamma_only) vhart(dfftt%nlm(1:ngm_),is) = &
-                & pseudo_dens_c(dfftt%nlm(1:ngm_)) *&
-                & fac_in(1:ngm_)
+           !$acc parallel loop
+           do i=1,ngm_
+                vhart(dfftt%nl(i),is) =&
+                & pseudo_dens_c(dfftt%nl(i)) *&
+                & fac_in(i)
+           enddo
+           IF (gamma_only) THEN
+                   !$acc parallel loop
+                   do i=1,ngm_   
+                        vhart(dfftt%nlm(i),is) = &
+                        & pseudo_dens_c(dfftt%nlm(i)) *&
+                        & fac_in(i)
+                   enddo
+           ENDIF
            !
            !  and transformed back to real space
-           !
-           CALL invfft ('Rho', vhart (:, is), dfftt)
-     ENDDO
+           ! 
+           !$acc host_data use_device(vhart)
+           CALL invfft ('Rho', vhart(:,is), dfftt)
+           !$acc end host_data
+     ENDDO 
      !
      ! Finally return the interaction psi_int for terms:
      ! ibnd,   ibnd,   ibnd 
      ! ibnd+1, ibnd+1, ibnd 
      ! ibnd,   ibnd,   ibnd+1
-     !
+     !  
+     !$acc kernels
      psi_int(1:nnr_,ibnd) = psi_int(1:nnr_,ibnd) &
           & + DBLE(vhart(1:nnr_, 1)) * DBLE(psi(1:nnr_)) &
           & + AIMAG(vhart(1:nnr_,1)) * AIMAG(psi(1:nnr_))
+     !psi_int(1:nnr_,ibnd) = 2
      !
+     !$acc end kernels
+     !!$acc end data 
+     !$acc kernels
      psi_int(1:nnr_,ibnd+1) = psi_int(1:nnr_,ibnd+1) &
            & + AIMAG(vhart(1:nnr_,1)) * DBLE(psi(1:nnr_))
      !
@@ -882,71 +912,106 @@ FUNCTION k1d_term_gamma(w1, w2, psi, fac_in, ibnd, orbital) RESULT (psi_int)
      !
      pseudo_dens_c(1:nnr_) = CMPLX( w2*AIMAG(red_revc0(1:nnr_,ibnd,1)) *&
           & AIMAG(red_revc0(1:nnr_,ibnd,1)), 0.0d0, kind=DP )
-     !
+     !$acc end kernels
+     !!$acc end data
+     !$acc host_data use_device(pseudo_dens_c)
      CALL fwfft ('Rho', pseudo_dens_c, dfftt)
+     !$acc end host_data
      !
+     
      DO is = 1, nspin
            !
-           vhart(dfftt%nl(1:ngm_),is) =&
-                & pseudo_dens_c(dfftt%nl(1:ngm_)) *&
-                & fac_in(1:ngm_)
-           IF (gamma_only) vhart(dfftt%nlm(1:ngm_),is) = &
-                & pseudo_dens_c(dfftt%nlm(1:ngm_)) *&
-                & fac_in(1:ngm_)
+           !$acc parallel loop
+           do i = 1,ngm_
+                vhart(dfftt%nl(i),is) =&
+                & pseudo_dens_c(dfftt%nl(i)) *&
+                & fac_in(i)
+           enddo
+           IF (gamma_only) THEN
+                !$acc parallel loop   
+                do i = 1,ngm_   
+                     vhart(dfftt%nlm(i),is) = &
+                     & pseudo_dens_c(dfftt%nlm(i)) *&
+                     & fac_in(i)
+                enddo
+           ENDIF
            !
            !  and transformed back to real space
            !
+           !$acc host_data use_device(vhart)
            CALL invfft ('Rho', vhart (:, is), dfftt)
+           !$acc end host_data 
      ENDDO
      !
      ! Finally return the interaction psi_int for term:
      ! ibnd+1, ibnd+1, ibnd+1
      ! 
+     !$acc kernels
      psi_int(1:nnr_,ibnd+1) = psi_int(1:nnr_,ibnd+1) &
            & + DBLE(vhart(1:nnr_,1)) * AIMAG(psi(1:nnr_))
+     !$acc end kernels
      !
      !
      ! start second loop over bands
      !
+     !!$acc end data
      DO ibnd2=1,ibnd-1,1  
         !
         ! calculate vhart for couples ibnd,ibnd2 and ibnd+1,ibnd2
         !
+        !$acc kernels
         vhart(:,:) = (0.d0,0.d0)
         pseudo_dens_c(:) = (0.d0,0.d0)
+        !$acc end kernels
         !
         ! The following code is to check if the value of ibnd2 is even or odd
         ! and therefore whether the REAL or IMAGINARY part of red_revc0 is to be
         ! used. This is because red_revc0 is stored using gamma_tricks.
         !
         IF (MOD(ibnd2,2)==1) THEN
+           !$acc kernels
            pseudo_dens_c(1:nnr_) = CMPLX( w1*DBLE(red_revc0(1:nnr_,ibnd,1)) *&
                 & DBLE(red_revc0(1:nnr_,ibnd2,1)), &
                 & w2*AIMAG(red_revc0(1:nnr_,ibnd, 1)) *&
                 & DBLE(red_revc0(1:nnr_,ibnd2,1)), kind=DP )
+           !$acc end kernels
         ELSE
+           !$acc kernels
            pseudo_dens_c(1:nnr_) = CMPLX( w1*DBLE(red_revc0(1:nnr_,ibnd,1)) *&
                 &AIMAG(red_revc0(1:nnr_,ibnd2-1,1)),&
                 &w2*AIMAG(red_revc0(1:nnr_,ibnd,1)) *&
                 &AIMAG(red_revc0(1:nnr_,ibnd2-1,1)), kind=DP )
+           !$acc end kernels 
         ENDIF
         !
+        !$acc host_data use_device(pseudo_dens_c)
         CALL fwfft ('Rho', pseudo_dens_c, dfftt)
+        !$acc end host_data
         !
         ! hartree contribution is computed in reciprocal space
         !
         DO is = 1, nspin
            !
-           vhart(dfftt%nl(1:ngm_),is) =&
-                & pseudo_dens_c(dfftt%nl(1:ngm_)) *&
-                & fac_in(1:ngm_) 
-           IF (gamma_only) vhart(dfftt%nlm(1:ngm_),is) = &
-                & pseudo_dens_c(dfftt%nlm(1:ngm_)) *&
-                & fac_in(1:ngm_) 
+           !$acc parallel loop
+           do i = 1,ngm_
+           vhart(dfftt%nl(i),is) =&
+                & pseudo_dens_c(dfftt%nl(i)) *&
+                & fac_in(i) 
+           enddo
+           IF (gamma_only) THEN 
+                !$acc parallel loop
+                do i = 1,ngm_
+                     vhart(dfftt%nlm(i),is) = &
+                     & pseudo_dens_c(dfftt%nlm(i)) *&
+                     & fac_in(i) 
+                enddo 
+           ENDIF
            !
            !  and transformed back to real space
            !
+           !$acc host_data use_device(vhart)
            CALL invfft ('Rho', vhart (:, is), dfftt)
+           !$acc end host_data 
            !
         ENDDO
         !
@@ -956,52 +1021,72 @@ FUNCTION k1d_term_gamma(w1, w2, psi, fac_in, ibnd, orbital) RESULT (psi_int)
         ! ibnd2,  ibnd2,  ibnd
         ! ibnd2,  ibnd2,  ibnd+1
         !
+        !$acc kernels
         psi_int(1:nnr_,ibnd2) = psi_int(1:nnr_,ibnd2) &
              & + DBLE(vhart(1:nnr_, 1)) * DBLE(psi(1:nnr_)) &
              & + AIMAG(vhart(1:nnr_,1)) * AIMAG(psi(1:nnr_))
+        !$acc end  kernels
         !
+        !!$acc end data
         CALL invfft_orbital_ibnd2_gamma(orbital(:,:), psitemp, ibnd2, npw_, dfftt)
         !
         !
+        !$acc kernels
         psi_int(1:nnr_,ibnd) = psi_int(1:nnr_,ibnd) &
              & + DBLE(vhart(1:nnr_, 1)) * DBLE(psitemp(1:nnr_))
         !
         psi_int(1:nnr_,ibnd+1) = psi_int(1:nnr_,ibnd+1) &
              & + AIMAG(vhart(1:nnr_, 1)) * DBLE(psitemp(1:nnr_))
+        !$acc end kernels
         !
      ENDDO
-     !
+     !!$acc end data        
   ELSE
      !
      ! calculate vhart for couple ibnd,ibnd 
      !
-     vhart(:,:) = (0.d0,0.d0)
-     pseudo_dens_c(:) = (0.d0,0.d0)
+     !$acc kernels
+     vhart(:,:) = (0.d0,0.d0) 
      !
      pseudo_dens_c(1:nnr_) = CMPLX( w1*DBLE(red_revc0(1:nnr_,ibnd,1)) *&
           & DBLE(red_revc0(1:nnr_,ibnd,1)), 0.0d0, kind=DP )
+     !$acc end kernels
      !
+     !$acc host_data use_device(pseudo_dens_c)
      CALL fwfft ('Rho', pseudo_dens_c, dfftt)
+     !$acc end host_data 
      !
      DO is = 1, nspin
            !
-           vhart(dfftt%nl(1:ngm_),is) =&
-                & pseudo_dens_c(dfftt%nl(1:ngm_)) *&
-                & fac_in(1:ngm_)
-           IF (gamma_only) vhart(dfftt%nlm(1:ngm_),is) = &
-                & pseudo_dens_c(dfftt%nlm(1:ngm_)) *&
-                & fac_in(1:ngm_)
+           !$acc parallel loop
+           do i = 1,ngm_
+                vhart(dfftt%nl(i),is) =&
+                & pseudo_dens_c(dfftt%nl(i)) *&
+                & fac_in(i)
+           enddo
+           IF (gamma_only) THEN
+                !$acc parallel loop
+                do i = 1,ngm_
+                     vhart(dfftt%nlm(i),is) = &
+                     & pseudo_dens_c(dfftt%nlm(i)) *&
+                     & fac_in(i)
+                enddo
+           ENDIF
            !
            !  and transformed back to real space
            !
+           !$acc host_data use_device(vhart)
            CALL invfft ('Rho', vhart (:, is), dfftt)
+           !$acc end host_data 
      ENDDO
      !
      ! Finally return the interaction psi_int for term:
      ! ibnd,   ibnd,   ibnd
      ! 
+     !$acc kernels
      psi_int(1:nnr_,ibnd) = psi_int(1:nnr_,ibnd) &
            & + DBLE(vhart(1:nnr_,1)) * DBLE(psi(1:nnr_))
+     !$acc end kernels
      !
      ! start second loop over bands
      !
@@ -1011,37 +1096,54 @@ FUNCTION k1d_term_gamma(w1, w2, psi, fac_in, ibnd, orbital) RESULT (psi_int)
         ! Set up the pseudo density for this Hartree like interaction.
         ! calculate vhart for couple ibnd,ibnd2
         !
+        !$acc kernels
         vhart(:,:) = (0.d0,0.d0)
-        pseudo_dens_c(:) = (0.d0,0.d0)
+        !$acc end kernels
         !
         ! The following code is to check if the value of ibnd2 is even or odd
         ! and therefore whether the REAL or IMAGINARY part of red_revc0 is to be
         ! used. This is because red_revc0 is stored using gamma_tricks.
         !
         IF (MOD(ibnd2,2)==1) THEN
+           !$acc kernels
            pseudo_dens_c(1:nnr_) = CMPLX( w1*DBLE(red_revc0(1:nnr_,ibnd,1)) *&
                 & DBLE(red_revc0(1:nnr_,ibnd2,1)), 0.0d0, kind=DP )
+           !$acc end kernels
         ELSE
+           !$acc kernels
            pseudo_dens_c(1:nnr_) = CMPLX( w1*DBLE(red_revc0(1:nnr_,ibnd,1)) *&
                 & AIMAG(red_revc0(1:nnr_,ibnd2-1,1)), 0.0d0, kind=DP )
+           !$acc end kernels
         ENDIF
         !
+        !$acc host_data use_device(pseudo_dens_c)
         CALL fwfft ('Rho', pseudo_dens_c, dfftt)
+        !$acc end host_data 
         !
         ! hartree contribution is computed in reciprocal space
         !
         DO is = 1, nspin
            !
-           vhart(dfftt%nl(1:ngm_),is) =&
-                & pseudo_dens_c(dfftt%nl(1:ngm_)) *&
-                & fac_in(1:ngm_)
-           IF (gamma_only) vhart(dfftt%nlm(1:ngm_),is) = &
-                & pseudo_dens_c(dfftt%nlm(1:ngm_)) *&
-                & fac_in(1:ngm_)
+           !$acc parallel loop
+           do i = 1,ngm_
+                vhart(dfftt%nl(i),is) =&
+                & pseudo_dens_c(dfftt%nl(i)) *&
+                & fac_in(i)
+           enddo
+           IF (gamma_only) THEN 
+                !$acc parallel loop
+                do i = 1,ngm_
+                     vhart(dfftt%nlm(i),is) = &
+                     & pseudo_dens_c(dfftt%nlm(i)) *&
+                     & fac_in(i)
+                enddo 
+           ENDIF
            !
            !  and transformed back to real space
            !
+           !$acc host_data use_device(vhart)
            CALL invfft ('Rho', vhart (:, is), dfftt)
+           !$acc end host_data 
            !
         ENDDO
         !
@@ -1049,19 +1151,24 @@ FUNCTION k1d_term_gamma(w1, w2, psi, fac_in, ibnd, orbital) RESULT (psi_int)
         ! ibnd, ibnd,  ibnd2
         ! ibn2, ibnd2, ibnd
         !
+        !$acc kernels 
         psi_int(1:nnr_,ibnd2) = psi_int(1:nnr_,ibnd2) &
              & + DBLE(vhart(1:nnr_, 1)) * DBLE(psi(1:nnr_))
+        !$acc end kernels
         !
         CALL invfft_orbital_ibnd2_gamma(orbital(:,:), psitemp, ibnd2, npw_, dfftt)
         !
         !
+        !$acc kernels
         psi_int(1:nnr_,ibnd) = psi_int(1:nnr_,ibnd) &
              & + DBLE(vhart(1:nnr_, 1)) * DBLE(psitemp(1:nnr_))
+        !$acc end kernels
         !
      ENDDO
      !
   ENDIF
   !
+  !$acc end data
   RETURN
   !
 END FUNCTION k1d_term_gamma
@@ -1154,90 +1261,143 @@ FUNCTION k2d_term_gamma(w1, w2, psi, fac_in, ibnd, interaction) RESULT (psi_int)
   !
   ! Workspaces
   !
-  INTEGER                  :: ibnd2, is, npw_,ngm_, nnr_
+  INTEGER                  :: ibnd2, is, npw_,ngm_, nnr_,i
   !
   nnr_ = dfftt%nnr
   ngm_ = dfftt%ngm
   npw_ = npwt
   !
   ALLOCATE(psi_int(nnr_, nbnd))
+  !$acc data create( vhart(1:nnr_,1:nspin) &
+  !$acc& ,pseudo_dens_c(1:nnr_)) &
+  !$acc& copyin(red_revc0(1:nnr_,:,1),fac_in(1:ngm_)), &
+  !$acc& copyout(psi_int(1:nnr_,1:nbnd))
+
+  !$acc kernels
   psi_int = 0.d0
+  !$acc end kernels
   !
   !
   DO ibnd2=1,nbnd,1
      !
      ! Set up the pseudo density for this Hartree like interaction.
      !
+     !$acc kernels
      vhart(:,:) = (0.d0,0.d0)
      pseudo_dens_c(:) = (0.d0,0.d0)
+     !$acc end kernels
      !
      ! The following code is to check if the value of ibnd2 is even or odd
      ! and therefore whether the REAL or IMAGINARY part of red_revc0 is to be
      ! used. This is because red_revc0 is stored using gamma_tricks.
      !
      IF (MOD(ibnd2,2)==1) THEN
+        !$acc kernels     
         pseudo_dens_c(1:nnr_) = CMPLX( &
              & w1*DBLE(psi(1:nnr_))*DBLE(red_revc0(1:nnr_,ibnd2,1)),&
              & w2*AIMAG(psi(1:nnr_))*DBLE(red_revc0(1:nnr_,ibnd2,1)), kind=DP )
+        !$acc end kernels
         !
+        !$acc host_data use_device(pseudo_dens_c)
         CALL fwfft ('Rho', pseudo_dens_c, dfftt)
+        !$acc end host_data
         !
         ! hartree contribution is computed in reciprocal space
         !
         DO is = 1, nspin
            !
-           vhart(dfftt%nl(1:ngm_),is) = pseudo_dens_c(dfftt%nl(1:ngm_)) * fac_in(1:ngm_)
-           IF (gamma_only) vhart(dfftt%nlm(1:ngm_),is) = &
-                & pseudo_dens_c(dfftt%nlm(1:ngm_)) *&
-                & fac_in(1:ngm_)
+           !$acc parallel loop
+           do i = 1,ngm_
+              !
+              vhart(dfftt%nl(i),is) = pseudo_dens_c(dfftt%nl(i)) * fac_in(i)
+              !
+           enddo
+           !
+           IF (gamma_only) THEN
+                !
+                !$acc parallel loop
+                do i = 1,ngm_
+                   !   
+                   vhart(dfftt%nlm(i),is) = &
+                   & pseudo_dens_c(dfftt%nlm(i)) *&
+                   & fac_in(i)
+                   !
+                enddo
+           ENDIF     
            !
            !  and transformed back to real space
            !
+           !$acc host_data use_device(vhart)
            CALL invfft ('Rho', vhart (:, is), dfftt)
+           !$acc end host_data
            !
         ENDDO
         !
         !
         ! Finally return the interaction
         !
+        !$acc kernels
         psi_int(1:nnr_,ibnd2) = psi_int(1:nnr_,ibnd2) &
              & +DBLE(vhart(1:nnr_,1)) * DBLE(red_revc0(1:nnr_,ibnd,1)) &
              & +AIMAG(vhart(1:nnr_,1)) * AIMAG(red_revc0(1:nnr_,ibnd,1))
         !
-     ELSE
+        !$acc end kernels
+     ELSE     
+        !$acc kernels     
         pseudo_dens_c(1:nnr_) = CMPLX( &
              & w1*DBLE(psi(1:nnr_))*AIMAG(red_revc0(1:nnr_,ibnd2-1,1)),&
              & w2*AIMAG(psi(1:nnr_))*AIMAG(red_revc0(1:nnr_,ibnd2-1,1)), kind=DP )
+        !$acc end kernels
         !
+        !$acc host_data use_device(pseudo_dens_c)
         CALL fwfft ('Rho', pseudo_dens_c, dfftt)
+        !$acc end host_data
         !
         ! hartree contribution is computed in reciprocal space
         !
         DO is = 1, nspin
            !
-           vhart(dfftt%nl(1:ngm_),is) = pseudo_dens_c(dfftt%nl(1:ngm_)) * fac_in(1:ngm_)
-           IF (gamma_only) vhart(dfftt%nlm(1:ngm_),is) = &
-                & pseudo_dens_c(dfftt%nlm(1:ngm_)) *&
-                & fac_in(1:ngm_)
+           !$acc parallel loop
+           do i=1,ngm_
+           !
+           vhart(dfftt%nl(i),is) = pseudo_dens_c(dfftt%nl(i)) * fac_in(i)
+           !
+           enddo
+           IF (gamma_only) THEN
+                !
+                !$acc parallel loop   
+                do i = 1,ngm_
+                !
+                vhart(dfftt%nlm(i),is) = &
+                & pseudo_dens_c(dfftt%nlm(i)) *&
+                & fac_in(i)
+                !
+                enddo
+           ENDIF
            !
            !  and transformed back to real space
            !
+           !$acc host_data use_device(vhart)
            CALL invfft ('Rho', vhart (:, is), dfftt)
+           !$acc end host_data
            !
         ENDDO
         !
         !
         ! Finally return the interaction
         !
+        !$acc kernels
         psi_int(1:nnr_,ibnd2) = psi_int(1:nnr_,ibnd2) &
              & +DBLE(vhart(1:nnr_,1)) * DBLE(red_revc0(1:nnr_,ibnd,1)) &
              & +AIMAG(vhart(1:nnr_,1)) * AIMAG(red_revc0(1:nnr_,ibnd,1))
+        !$acc end kernels
         !
      ENDIF
      !
      !
   ENDDO
   !
+  !$acc end data
   RETURN
   !
 END FUNCTION k2d_term_gamma
@@ -1393,13 +1553,19 @@ SUBROUTINE invfft_orbital_ibnd2_gamma(orbital, psitemp, ibnd2, npwt, dfftt)
   TYPE(fft_type_descriptor), INTENT(IN)  :: dfftt
   COMPLEX(DP), INTENT(OUT)   :: psitemp(:) 
   !
-  psitemp=(0.0_dp, 0.0_dp)
+  !$acc data copyin(orbital(1:npwt,ibnd2)) copyout(psitemp)
+  !$acc kernels
+  psitemp=(0.0_dp, 0.0_dp) 
   !
   psitemp(dfftt%nl(1:npwt))  = orbital(1:npwt,ibnd2)
   psitemp(dfftt%nlm(1:npwt)) = CONJG(orbital(1:npwt,ibnd2))
+  !$acc end kernels
   !
+  !$acc host_data use_device(psitemp)
   CALL invfft ('Wave', psitemp, dfftt)
+  !$acc end host_data 
   !
+  !$acc end data
   RETURN
   !
 END SUBROUTINE invfft_orbital_ibnd2_gamma
