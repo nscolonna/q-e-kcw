@@ -394,15 +394,21 @@ CONTAINS
   SUBROUTINE diag_dense_diag(hmat, nbnd, npw, evc, et_k, notconv)
     !-----------------------------------------------------------------------
     !! Diagonalize the Hamiltonian matrix and distribute eigenvectors
-    !! Uses standard Hermitian eigensolver (no overlap matrix needed for NCPP)
+    !! Uses parallel (pdiagh) or serial (diagh) Hermitian eigensolver
+    !! depending on use_para_diag flag
     !
-    USE kinds,     ONLY : DP
-    USE io_global, ONLY : stdout
-    USE mp_bands,  ONLY : intra_bgrp_comm, me_bgrp, root_bgrp
-    USE LAXlib,    ONLY : diagh
-    USE wvfct,     ONLY : npwx
+    USE kinds,          ONLY : DP
+    USE io_global,      ONLY : stdout
+    USE mp_bands,       ONLY : intra_bgrp_comm, me_bgrp, root_bgrp
+    USE mp_bands_util,  ONLY : my_bgrp_id, root_bgrp_id, nbgrp, inter_bgrp_comm
+    USE mp,             ONLY : mp_bcast
+    USE LAXlib,         ONLY : diagh, pdiagh
+    USE control_flags,  ONLY : use_para_diag
+    USE wvfct,          ONLY : npwx
     !
     IMPLICIT NONE
+    !
+    include 'laxlib.fh'
     !
     COMPLEX(DP), INTENT(INOUT) :: hmat(ngk_g, ngk_g)
     !! Hamiltonian matrix
@@ -420,20 +426,101 @@ CONTAINS
     REAL(DP), ALLOCATABLE :: et_tmp(:)
     !! Temporary eigenvalue array (needed because diagh requires size ngk_g)
     COMPLEX(DP), ALLOCATABLE :: evc_global(:,:)
-    !! Global eigenvectors (ngk_g, nbnd)
+    !! Global eigenvectors (ngk_g, nbnd for diagh, ngk_g, ngk_g for pdiagh)
     INTEGER :: ibnd, ig
+    !
+    ! Variables for parallel diagonalization
+    INTEGER :: idesc(LAX_DESC_SIZE)
+    !! LAXlib descriptor for parallel diagonalization
+    INTEGER, ALLOCATABLE :: rank_ip(:,:)
+    !! Rank mapping for LAXlib
+    INTEGER, ALLOCATABLE :: idesc_ip(:,:,:)
+    !! Descriptor array for LAXlib
+    INTEGER :: nx
+    !! Leading dimension for distributed arrays
+    LOGICAL :: la_proc
+    !! True if this processor participates in linear algebra
+    LOGICAL :: do_distr_diag_inside_bgrp
+    !! Flag for distributed diagonalization inside band groups
+    INTEGER :: neig
+    !! Number of eigenvectors to allocate (nbnd for diagh, ngk_g for pdiagh)
     !
     CALL start_clock('dense_diag')
     WRITE(stdout,'(5X,"Diagonalizing",I5,"x",I5," matrix...")') ngk_g, ngk_g
     !
+    ! Determine number of eigenvectors to allocate
+    ! pdiagh returns all ngk_g eigenvectors, diagh returns only nbnd
+    !
+    IF ( use_para_diag ) THEN
+       neig = ngk_g
+       WRITE(stdout,'(5X,"Using parallel diagonalization (pdiagh)")')
+    ELSE
+       neig = nbnd
+       WRITE(stdout,'(5X,"Using serial diagonalization (diagh)")')
+    ENDIF
+    !
     ALLOCATE(et_tmp(ngk_g))
-    ALLOCATE(evc_global(ngk_g, nbnd))
+    ALLOCATE(evc_global(ngk_g, neig))
     !
-    ! Use standard Hermitian eigensolver (S=I for NCPP)
-    ! TODO: Use ScaLAPACK/ELPA parallel version (pdiagh) for large systems
+    ! Choose between parallel or serial diagonalization
     !
-    CALL diagh(ngk_g, nbnd, hmat, ngk_g, et_tmp, evc_global, &
-               me_bgrp, root_bgrp, intra_bgrp_comm)
+    IF ( use_para_diag ) THEN
+       !
+       ! Parallel diagonalization using pdiagh
+       ! Pattern follows:
+       !   - LAXlib/tests/test_diagh_4.f90 for pdiagh interface
+       !   - KS_Solvers/DENSE/rotate_wfc_k.f90 for band group logic
+       !
+       ! Get laxlib parallelization parameters
+       !
+       CALL laxlib_getval( do_distr_diag_inside_bgrp = do_distr_diag_inside_bgrp )
+       !
+       ! Initialize descriptor for parallel diagonalization
+       !
+       CALL desc_init( ngk_g, nx, la_proc, idesc, rank_ip, idesc_ip )
+       !
+       ! Print distributed matrix layout information
+       !
+       WRITE(stdout,'(5X,"Parallel diagonalization descriptor:")')
+       WRITE(stdout,'(5X,"  Matrix dimension (N)      =",I8)') idesc(LAX_DESC_N)
+       WRITE(stdout,'(5X,"  Local block dimension     =",I8)') nx
+       WRITE(stdout,'(5X,"  Processor grid            =",I4," x",I4)') &
+            idesc(LAX_DESC_NPR), idesc(LAX_DESC_NPC)
+       WRITE(stdout,'(5X,"  This processor position   = (",I3,",",I3,")")') &
+            idesc(LAX_DESC_MYR), idesc(LAX_DESC_MYC)
+       WRITE(stdout,'(5X,"  Active in diag?           =",L2)') la_proc
+       WRITE(stdout,'(5X,"  do_distr_diag_inside_bgrp =",L2)') do_distr_diag_inside_bgrp
+       !
+       ! Call parallel diagonalization with band group logic
+       !
+       IF ( do_distr_diag_inside_bgrp ) THEN
+          ! Only root band group diagonalizes
+          IF ( my_bgrp_id == root_bgrp_id ) THEN
+             CALL pdiagh( ngk_g, hmat, ngk_g, et_tmp, evc_global, idesc )
+          ENDIF
+          ! Broadcast results to other band groups
+          IF ( nbgrp > 1 ) THEN
+             CALL mp_bcast( evc_global, root_bgrp_id, inter_bgrp_comm )
+             CALL mp_bcast( et_tmp, root_bgrp_id, inter_bgrp_comm )
+          ENDIF
+       ELSE
+          ! All processors participate in diagonalization
+          CALL pdiagh( ngk_g, hmat, ngk_g, et_tmp, evc_global, idesc )
+       ENDIF
+       !
+       ! Clean up LAXlib arrays
+       !
+       IF ( ALLOCATED(rank_ip) )   DEALLOCATE( rank_ip )
+       IF ( ALLOCATED(idesc_ip) )  DEALLOCATE( idesc_ip )
+       !
+    ELSE
+       !
+       ! Use standard serial Hermitian eigensolver (S=I for NCPP)
+       !
+       CALL diagh(ngk_g, nbnd, hmat, ngk_g, et_tmp, evc_global, &
+                  me_bgrp, root_bgrp, intra_bgrp_comm)
+       !
+    ENDIF
     !
     et_k(1:nbnd) = et_tmp(1:nbnd)
     notconv = 0  ! Always converged (direct diagonalization)
