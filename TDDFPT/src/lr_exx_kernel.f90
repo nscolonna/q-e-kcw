@@ -838,7 +838,7 @@ FUNCTION k1d_term_gamma(w1, w2, psi, fac_in, ibnd, orbital) RESULT (psi_int)
   !$acc& copyin(red_revc0(1:nnr_,:,1),fac_in(1:ngm_),orbital), &
   !$acc& copyout(psi_int(1:nnr_,1:nbnd))
   !$acc update device(psi) 
-
+  !
   !$acc kernels 
   psi_int(:,:) = 0.d0
   !$acc end kernels 
@@ -858,11 +858,9 @@ FUNCTION k1d_term_gamma(w1, w2, psi, fac_in, ibnd, orbital) RESULT (psi_int)
           & DBLE(red_revc0(1:nnr_,ibnd,1)), kind=DP )
      !$acc end kernels
      !
-     
      !$acc host_data use_device(pseudo_dens_c)
      CALL fwfft ('Rho', pseudo_dens_c, dfftt)
      !$acc end host_data
-     
      !
      DO is = 1, nspin
            !
@@ -900,7 +898,6 @@ FUNCTION k1d_term_gamma(w1, w2, psi, fac_in, ibnd, orbital) RESULT (psi_int)
      !psi_int(1:nnr_,ibnd) = 2
      !
      !$acc end kernels
-     !!$acc end data 
      !$acc kernels
      psi_int(1:nnr_,ibnd+1) = psi_int(1:nnr_,ibnd+1) &
            & + AIMAG(vhart(1:nnr_,1)) * DBLE(psi(1:nnr_))
@@ -913,7 +910,6 @@ FUNCTION k1d_term_gamma(w1, w2, psi, fac_in, ibnd, orbital) RESULT (psi_int)
      pseudo_dens_c(1:nnr_) = CMPLX( w2*AIMAG(red_revc0(1:nnr_,ibnd,1)) *&
           & AIMAG(red_revc0(1:nnr_,ibnd,1)), 0.0d0, kind=DP )
      !$acc end kernels
-     !!$acc end data
      !$acc host_data use_device(pseudo_dens_c)
      CALL fwfft ('Rho', pseudo_dens_c, dfftt)
      !$acc end host_data
@@ -954,7 +950,7 @@ FUNCTION k1d_term_gamma(w1, w2, psi, fac_in, ibnd, orbital) RESULT (psi_int)
      !
      ! start second loop over bands
      !
-     !!$acc end data
+     
      DO ibnd2=1,ibnd-1,1  
         !
         ! calculate vhart for couples ibnd,ibnd2 and ibnd+1,ibnd2
@@ -1026,8 +1022,7 @@ FUNCTION k1d_term_gamma(w1, w2, psi, fac_in, ibnd, orbital) RESULT (psi_int)
              & + DBLE(vhart(1:nnr_, 1)) * DBLE(psi(1:nnr_)) &
              & + AIMAG(vhart(1:nnr_,1)) * AIMAG(psi(1:nnr_))
         !$acc end  kernels
-        !
-        !!$acc end data
+        ! 
         CALL invfft_orbital_ibnd2_gamma(orbital(:,:), psitemp, ibnd2, npw_, dfftt)
         !
         !
