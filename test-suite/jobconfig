@@ -89,6 +89,10 @@ inputs_args = ('scf-dos-1.in' ,'1'), ('scf-dos-2.in' ,'2')
 program = PW
 inputs_args = ('ncpp-k-1.in' ,'1'), ('ncpp-k-2.in' ,'2'), ('uspp-gamma-1.in' ,'1'), ('uspp-gamma-2.in' ,'2'), ('uspp-k-smearing-1.in' ,'1'), ('uspp-k-smearing-2.in' ,'2'), ('ncpp-gamma-restart-1.in','1'), ('ncpp-gamma-restart-2.in','2'), ('uspp-k-restart-1.in','1'), ('uspp-k-restart-2.in','2')
 
+[pw_diag_direct/]
+program = PW
+inputs_args = ('scf-davidson.in', ''), ('scf-direct.in', '')
+
 [ph_2d_metal/]
 program = PH
 inputs_args = ('scf.in', '1'), ('phG.in', '2')
@@ -159,7 +163,11 @@ inputs_args = ('scf_twochem.in', '1'), ('phG_twochem.in','11'), ('scf2.in', '1')
 
 [ph_multipole/]
 program = PH
-inputs_args = ('scf.in', '12'), ('ph.in.01','2'), ('ph.in.02', '2'), ('ph.in.03', '2'),  ('ph.in.04', '13')  
+inputs_args = ('scf.in', '12'), ('ph.in.01','2'), ('ph.in.02', '2'), ('ph.in.03', '2'),  ('ph.in.04', '13')
+
+[ph_diag_direct/]
+program = PH
+inputs_args = ('scf.in', '1'), ('ph-davidson.in', '2'), ('ph-direct.in', '2')
 
 [epw_base/]
 program = EPW
