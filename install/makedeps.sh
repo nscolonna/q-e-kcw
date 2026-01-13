@@ -82,27 +82,19 @@ for dir in $dirs; do
 	     $LEVEL1/UtilXlib $LEVEL1/upflib"
     DEPEND2="$LEVEL2/include $LEVEL2/FFTXlib/src $LEVEL2/LAXlib $LEVEL2/UtilXlib"
     DEPEND3="$DEPEND2 $LEVEL2/upflib $LEVEL2/XClib $LEVEL2/Modules"
-    # default for out-of-source build: needed to convert VPATH in Makefiles
-    LEVEL=$LEVEL3
     #
     case $DIR in
         LAXlib | UtilXlib )
-	     LEVEL=$LEVEL2
              DEPENDS="$LEVEL1/include" ;;
         upflib )
-	     LEVEL=$LEVEL2
              DEPENDS="$LEVEL1/include $LEVEL1/UtilXlib" ;;
         XClib )
-	     LEVEL=$LEVEL2
              DEPENDS="$LEVEL1/include $LEVEL1/upflib" ;;
         Modules )
-	     LEVEL=$LEVEL2
              DEPENDS="$DEPEND1" ;;
         dft-d3 )
-	     LEVEL=$LEVEL2
              DEPENDS="$LEVEL1/include $LEVEL1/UtilXlib $LEVEL1/Modules" ;;
         LR_Modules )
-	     LEVEL=$LEVEL2
              DEPENDS="$DEPEND1 $LEVEL1/Modules $LEVEL1/PW/src" ;;
         FFTXlib/src )
              DEPENDS="$LEVEL1/include" ;;
@@ -129,7 +121,6 @@ for dir in $dirs; do
         QEHeat/src )
              DEPENDS="$DEPEND3 $LEVEL2/PW/src $LEVEL2/LR_Modules $LEVEL2/PHonon/PH $LEVEL2/Modules" ;;
 	EPW/ZG/src )
-             LEVEL=../$LEVEL3
 	     DEPENDS="$LEVEL3/PW/src $LEVEL3/LR_Modules $LEVEL3/PHonon/PH $LEVEL3/Modules $LEVEL3/upflib $LEVEL3/UtilXlib" ;;
 	GWW/head )
 	     DEPENDS="$DEPEND3 $LEVEL2/PW/src $LEVEL2/PHonon/PH $LEVEL2/LR_Modules" ;;
