@@ -83,7 +83,7 @@ SUBROUTINE laxlib_cdiagh( n, m, h, ldh, e, v, me_bgrp, root_bgrp, intra_bgrp_com
            lwork = ( nb + 1 )*n
         END IF
         !
-        ! ... query optimal lwork for ZHEEVD
+        ! ... estimate workspace size for ZHEEVD
         !
         lwork = MAX( lwork, 2*n + n*n )
         !
@@ -243,8 +243,9 @@ SUBROUTINE laxlib_pcdiagh( n, h, ldh, e, v, idesc )
      !
      nx   = desc%nrcx
      !
-     IF( nx /= ldh ) &
-        CALL lax_error__(" pcdiagh ", " inconsistent leading dimension ", ldh )
+     ! Note: Unlike pdiaghg, we do not check ldh != nx because this routine
+     ! accepts replicated input (ldh can be any valid leading dimension) and
+     ! performs the distribution to block-cyclic format internally.
      !
      ! ... allocate distributed matrix
      !

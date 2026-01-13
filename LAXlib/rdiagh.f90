@@ -45,8 +45,6 @@ SUBROUTINE laxlib_rdiagh( n, m, h, ldh, e, v, me_bgrp, root_bgrp, intra_bgrp_com
   INTEGER               :: lwork, nb, mm, info, i, j
     ! mm = number of calculated eigenvectors
   REAL(DP)              :: abstol
-  REAL(DP), PARAMETER   :: one = 1_DP
-  REAL(DP), PARAMETER   :: zero = 0_DP
   INTEGER,  ALLOCATABLE :: iwork(:), ifail(:)
   REAL(DP), ALLOCATABLE :: work(:), v_temp(:,:)
   LOGICAL               :: all_eigenvalues
@@ -79,7 +77,7 @@ SUBROUTINE laxlib_rdiagh( n, m, h, ldh, e, v, me_bgrp, root_bgrp, intra_bgrp_com
            lwork = ( nb + 3 )*n
         END IF
         !
-        ! ... query optimal lwork for DSYEVD
+        ! ... estimate workspace size for DSYEVD
         !
         lwork = MAX( lwork, 1 + 6*n + 2*n*n )
         !
@@ -89,9 +87,9 @@ SUBROUTINE laxlib_rdiagh( n, m, h, ldh, e, v, me_bgrp, root_bgrp, intra_bgrp_com
         ! ... copy H to v_temp (will be overwritten with eigenvectors)
         !
         !$omp parallel do
-        do i = 1, n
+        DO i = 1, n
            v_temp(1:n,i) = h(1:n,i)
-        end do
+        END DO
         !$omp end parallel do
         !
         CALL DSYEVD( 'V', 'U', n, v_temp, ldh, e, work, lwork, &
@@ -122,9 +120,9 @@ SUBROUTINE laxlib_rdiagh( n, m, h, ldh, e, v, me_bgrp, root_bgrp, intra_bgrp_com
         ! ... copy H to v_temp (will be overwritten)
         !
         !$omp parallel do
-        do i = 1, n
+        DO i = 1, n
            v_temp(1:n,i) = h(1:n,i)
-        end do
+        END DO
         !$omp end parallel do
         !
         CALL DSYEVX( 'V', 'I', 'U', n, v_temp, ldh, &
@@ -139,9 +137,9 @@ SUBROUTINE laxlib_rdiagh( n, m, h, ldh, e, v, me_bgrp, root_bgrp, intra_bgrp_com
      ! ... copy first m eigenvectors to output
      !
      !$omp parallel do
-     do i = 1, m
+     DO i = 1, m
         v(1:ldh,i) = v_temp(1:ldh,i)
-     end do
+     END DO
      !$omp end parallel do
      !
      DEALLOCATE( v_temp )
@@ -236,8 +234,9 @@ SUBROUTINE laxlib_prdiagh( n, h, ldh, e, v, idesc )
      !
      nx   = desc%nrcx
      !
-     IF( nx /= ldh ) &
-        CALL lax_error__(" prdiagh ", " inconsistent leading dimension ", ldh )
+     ! Note: Unlike pdiaghg, we do not check ldh != nx because this routine
+     ! accepts replicated input (ldh can be any valid leading dimension) and
+     ! performs the distribution to block-cyclic format internally.
      !
      ! ... allocate distributed matrix
      !
