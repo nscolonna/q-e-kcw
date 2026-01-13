@@ -10,6 +10,9 @@ if test "`echo -e`" = "-e" ; then ECHO=echo ; else ECHO="echo -e" ; fi
 # run from directory where this script is
 cd `dirname $0`
 TOPDIR=`pwd`
+QEDIR=`(cd ..; pwd)`
+# directory QEDIR is the root directory of QE
+# directory TOPDIR=QEDIR/install is where this script is
 
 # this is the list of all directories for which we want to find dependencies
 # upon include files *.h or *.fh or modules. Note that libraries that are
@@ -160,9 +163,9 @@ for dir in $dirs; do
 
     # generate dependencies file (only for directories that are present)
 
-    if test -d $TOPDIR/../$DIR
+    if test -d $QEDIR/$DIR
     then
-	cd $TOPDIR/../$DIR
+	cd $QEDIR/$DIR
 
 cat > make.depend << EOF
 #####################################################################
@@ -205,10 +208,10 @@ EOF
 	    fi
 	    # copy Makefiles, move make.depend to the target directory
 	    mv make.depend $BUILDDIR/$DIR/make.depend
-	    sed "s?@srcdir@?$LEVEL/$DIR?" Makefile > $BUILDDIR/$DIR/Makefile
+	    sed "s?@srcdir@?$QEDIR/$DIR?" Makefile > $BUILDDIR/$DIR/Makefile
         fi
     else
-       $ECHO "\ndirectory $DIR : not present in $TOPDIR/.."
+       $ECHO "\ndirectory $DIR : not present in $QEDIR/"
     fi
 done
 if test "$notfound" = ""
