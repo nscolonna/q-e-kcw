@@ -391,23 +391,21 @@ CONTAINS
   !-----------------------------------------------------------------------
   !
   !-----------------------------------------------------------------------
-  SUBROUTINE diag_dense_diag(hmat, smat, nbnd, npw, evc, et_k, notconv)
+  SUBROUTINE diag_dense_diag(hmat, nbnd, npw, evc, et_k, notconv)
     !-----------------------------------------------------------------------
     !! Diagonalize the Hamiltonian matrix and distribute eigenvectors
-    !! TODO: Use Hermitian eigensolver instead of generalized one (planned, not implemented)
+    !! Uses standard Hermitian eigensolver (no overlap matrix needed for NCPP)
     !
     USE kinds,     ONLY : DP
     USE io_global, ONLY : stdout
     USE mp_bands,  ONLY : intra_bgrp_comm, me_bgrp, root_bgrp
-    USE LAXlib,    ONLY : diaghg
+    USE LAXlib,    ONLY : diagh
     USE wvfct,     ONLY : npwx
     !
     IMPLICIT NONE
     !
     COMPLEX(DP), INTENT(INOUT) :: hmat(ngk_g, ngk_g)
     !! Hamiltonian matrix
-    COMPLEX(DP), INTENT(INOUT) :: smat(ngk_g, ngk_g)
-    !! Overlap matrix
     INTEGER, INTENT(IN) :: nbnd
     !! number of bands
     INTEGER, INTENT(IN) :: npw
@@ -420,7 +418,7 @@ CONTAINS
     !! number of non-converged bands (always 0 for direct method)
     !
     REAL(DP), ALLOCATABLE :: et_tmp(:)
-    !! Temporary eigenvalue array (needed because diaghg requires size ngk_g)
+    !! Temporary eigenvalue array (needed because diagh requires size ngk_g)
     COMPLEX(DP), ALLOCATABLE :: evc_global(:,:)
     !! Global eigenvectors (ngk_g, nbnd)
     INTEGER :: ibnd, ig
@@ -431,10 +429,11 @@ CONTAINS
     ALLOCATE(et_tmp(ngk_g))
     ALLOCATE(evc_global(ngk_g, nbnd))
     !
-    ! TODO: Use Scalapack or ELPA
+    ! Use standard Hermitian eigensolver (S=I for NCPP)
+    ! TODO: Use ScaLAPACK/ELPA parallel version (pdiagh) for large systems
     !
-    CALL diaghg(ngk_g, nbnd, hmat, smat, ngk_g, et_tmp, evc_global, &
-                me_bgrp, root_bgrp, intra_bgrp_comm)
+    CALL diagh(ngk_g, nbnd, hmat, ngk_g, et_tmp, evc_global, &
+               me_bgrp, root_bgrp, intra_bgrp_comm)
     !
     et_k(1:nbnd) = et_tmp(1:nbnd)
     notconv = 0  ! Always converged (direct diagonalization)
@@ -499,8 +498,8 @@ CONTAINS
     !! memory estimate
     COMPLEX(DP), ALLOCATABLE :: hmat(:,:)
     !! Hamiltonian matrix (npw, npw) - local
-    COMPLEX(DP), ALLOCATABLE :: hmat_global(:,:), smat_global(:,:)
-    !! Global Hamiltonian and overlap matrices (ngk_g, ngk_g)
+    COMPLEX(DP), ALLOCATABLE :: hmat_global(:,:)
+    !! Global Hamiltonian matrix (ngk_g, ngk_g)
     !
     CALL start_clock('diag_dense')
     !
@@ -538,10 +537,8 @@ CONTAINS
     WRITE(stdout,'(/,5X,"Collecting Hamiltonian columns from all processors...")')
     ALLOCATE(hmat_global(ngk_g, ngk_g), STAT=ierr)
     IF ( ierr /= 0 ) CALL errore('diag_dense_run_k', 'hmat_global allocation failed', ierr)
-    ALLOCATE(smat_global(ngk_g, ngk_g), STAT=ierr)
-    IF ( ierr /= 0 ) CALL errore('diag_dense_run_k', 'smat_global allocation failed', ierr)
     !
-    CALL diag_dense_collect_matrices(hmat, npw, hmat_global, smat_global)
+    CALL diag_dense_collect_matrices(hmat, npw, hmat_global)
     !
     ! Verification against h_psi
     !
@@ -551,13 +548,12 @@ CONTAINS
     ! Diagonalize global matrix and distribute eigenvectors
     !
     WRITE(stdout,'(/,5X,"Diagonalizing global Hamiltonian...")')
-    CALL diag_dense_diag(hmat_global, smat_global, nbnd, npw, evc, et_k, notconv)
+    CALL diag_dense_diag(hmat_global, nbnd, npw, evc, et_k, notconv)
     !
     ! Deallocate
     !
     DEALLOCATE(hmat)
     DEALLOCATE(hmat_global)
-    DEALLOCATE(smat_global)
     DEALLOCATE(igk_l2g_kdip)
     DEALLOCATE(mill_k_global)
     !
@@ -684,9 +680,9 @@ CONTAINS
   !-----------------------------------------------------------------------
   !
   !-----------------------------------------------------------------------
-  SUBROUTINE diag_dense_collect_matrices(hmat, npw, hmat_global, smat_global)
+  SUBROUTINE diag_dense_collect_matrices(hmat, npw, hmat_global)
     !-----------------------------------------------------------------------
-    !! Collect local matrix columns to global matrices
+    !! Collect local matrix columns to global matrix
     !!
     !! Each processor has hmat(ngk_g, npw) - full rows, local columns
     !! Gather to hmat_global(ngk_g, ngk_g) - full matrix on all processors
@@ -705,14 +701,12 @@ CONTAINS
     !! Number of local plane waves
     COMPLEX(DP), INTENT(OUT) :: hmat_global(ngk_g, ngk_g)
     !! Global Hamiltonian matrix
-    COMPLEX(DP), INTENT(OUT) :: smat_global(ngk_g, ngk_g)
-    !! Global overlap matrix
     !
     INTEGER :: ig, ig_global
     !
     CALL start_clock('dense_collect')
     !
-    ! Initialize global matrices to zero
+    ! Initialize global matrix to zero
     hmat_global(:,:) = (0.0_DP, 0.0_DP)
     !
     ! Collect H matrix: each processor contributes its local columns
@@ -724,14 +718,7 @@ CONTAINS
     ! Sum H matrix across all processors (non-overlapping contributions)
     CALL mp_sum(hmat_global, intra_bgrp_comm)
     !
-    ! Build S matrix as identity directly (more efficient for NCPP)
-    ! S is guaranteed to be identity - enforced at line 167-168 in diag_dense_check_compat
-    smat_global(:,:) = (0.0_DP, 0.0_DP)
-    DO ig_global = 1, ngk_g
-       smat_global(ig_global, ig_global) = (1.0_DP, 0.0_DP)
-    ENDDO
-    !
-    ! Note: We skip mp_sum for smat_global since it's just identity
+    ! Note: No S matrix needed for NCPP (S=I handled by diagh eigensolver)
     !
     CALL stop_clock('dense_collect')
     !
