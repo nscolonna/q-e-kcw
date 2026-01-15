@@ -650,7 +650,7 @@ subroutine set_asr ( asr, axis, nat, tau, dyn, zeu )
      enddo
      !
      ! Projection of the dyn. "vector" on the orthogonal of the
-     ! subspace of the vectors verifying the sum rules and symmetry constraints
+     ! subspace of the vectors verifying the sum rules and symmetry contraints
      !
      w(:,:,:,:)=0.0d0
      do l=1,m

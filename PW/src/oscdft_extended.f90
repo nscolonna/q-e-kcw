@@ -9,7 +9,7 @@ SUBROUTINE oscdft_nsg3 (nsg, nsnew)
    !
    !! This routine copies the diagonal components of the complex 
    !! generalized occupation matrix nsg to a real array nsnew
-   !! that is used to build the constraint - replaces oscdft_nsg(iflag=3)
+   !! that is used to build the contraint - replaces oscdft_nsg(iflag=3)
    !
    USE kinds,           ONLY : DP
    USE parameters,      ONLY : ntypx
@@ -63,9 +63,11 @@ SUBROUTINE oscdft_nsg (lflag,nsg)
    !! This routine adjusts (modifies) the nsg based on constraints
    !! If lflag=1, then copy ctx%inp%occupation to nsg
    !! If lflag=2, then copy nsg to ctx%inp%occupation
+   !! If lflag=3, then copy the diagonal components of the complex 
+   !!             generalized occupation matrix nsg to a real array 
+   !!             nsnew that is used to build the contraint - OBSOLETE
    !! If lflag=4, like lflag=1 but it does not nullify the occupations for 
    !!             Hubbard atoms atoms to which we do not apply the constraints
-   !! Case lflag=3 implemented in oscdft_nsg3, no longer here
    !
    USE kinds,           ONLY : DP
    USE parameters,      ONLY : ntypx
