@@ -120,7 +120,11 @@ SUBROUTINE lr_calc_dens( evc1, response_calc )
   !
   IF (gamma_only) THEN
      !
-     IF (lr_exx) revc_int = 0.0d0
+     IF (lr_exx) THEN 
+        !$acc kernels
+        revc_int = 0.0d0
+        !$acc end kernels
+     ENDIF
      !
      CALL lr_calc_dens_gamma()
      !
@@ -520,10 +524,8 @@ CONTAINS
           !
           ! End of real space stuff
           !
-          IF (lr_exx) THEN
-          !$acc update host(evc1,psic)
-          CALL lr_exx_kernel_int ( evc1(:,:,1), ibnd, nbnd, 1 )
-          !$acc update device(evc1,psic)
+          IF (lr_exx) THEN 
+          CALL lr_exx_kernel_int ( evc1(:,:,1), ibnd, nbnd, 1 ) 
           ENDIF
           !
        ENDIF

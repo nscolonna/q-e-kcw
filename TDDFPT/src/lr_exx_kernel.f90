@@ -122,6 +122,9 @@ CONTAINS
   !
   IF (gamma_only) THEN
      ALLOCATE (revc_int(nrxxs,nbnd))
+     !$acc enter data create(vhart(1:nrxxs,1:nspin), &
+     !$acc&  pseudo_dens_c(1:nrxxs), red_revc0(1:nrxxs,1:nbnd,1:nkqs), & 
+     !$acc&  revc_int(1:nrxxs,1:nbnd))
   ELSE
      ALLOCATE(revc_int_c(nrxxs,nbnd,nks))
      ALLOCATE(k2q(nks)) 
@@ -133,14 +136,16 @@ END SUBROUTINE lr_exx_alloc
 SUBROUTINE lr_exx_dealloc()
 
   IMPLICIT NONE
-
-  DEALLOCATE(pseudo_dens_c, vhart, red_revc0)
   !
   IF (gamma_only) THEN
-     DEALLOCATE(revc_int)
+     !$acc exit data delete(vhart, pseudo_dens_c, &
+     !$acc& red_revc0, revc_int)
+     DEALLOCATE(revc_int) 
   ELSE
      DEALLOCATE(revc_int_c, k2q)
   ENDIF
+  !
+  DEALLOCATE(pseudo_dens_c, vhart, red_revc0) 
   !
 END SUBROUTINE lr_exx_dealloc
 !
@@ -150,7 +155,9 @@ SUBROUTINE lr_exx_sum_int()
 
   CALL start_clock('lr_exx_sum')
 
+  !$acc host_data use_device(revc_int)  
   CALL mp_sum(revc_int, inter_bgrp_comm)
+  !$acc end host_data
 
   CALL stop_clock('lr_exx_sum')
 
@@ -192,23 +199,32 @@ SUBROUTINE lr_exx_apply_revc_int(psi, ibnd, nbnd, ik)
      !
      ALLOCATE ( tempphic(dffts%nnr,2),temppsic(dffts%nnr,2),&
           & psi_t(dffts%nnr) ) 
+     !$acc data create(temppsic, tempphic, psi_t) copyin(psi)
+     !
+     !$acc kernels
      tempphic = (0.0_dp, 0.0_dp)
      temppsic = (0.0_dp, 0.0_dp)
      psi_t    = (0.0_dp, 0.0_dp)
-
+     !$acc end kernels
+     !
      IF (ibnd < nbnd) THEN
         !
         ! We need to do two bands at a time as per gamma tricks.
         !
+        !$acc kernels
         tempphic(1:nrxxs,1)= 0.5d0 * CMPLX( revc_int(1:nrxxs,ibnd),&
              & revc_int(1:nrxxs,ibnd+1), kind=dp ) 
+        !$acc end kernels
         !
         ! To g-space
         !
+        !$acc host_data use_device(tempphic)
         CALL fwfft ('Wave', tempphic(:,1), dfftt)
+        !$acc end host_data
         !
         ! Now separate the two bands and apply the correct nl mapping
         !
+        !$acc parallel loop
         DO j = 1, npw
            fp = (tempphic(dfftt%nl(j),1) + &
                  tempphic(dfftt%nlm(j),1))*0.5d0 
@@ -217,34 +233,49 @@ SUBROUTINE lr_exx_apply_revc_int(psi, ibnd, nbnd, ik)
            temppsic( j, 1) = CMPLX( DBLE(fp), AIMAG(fm),kind=DP)
            temppsic( j, 2) = CMPLX(AIMAG(fp),- DBLE(fm),kind=DP)
         ENDDO
-
-        psi_t(dffts%nl(1:npw))= temppsic(1:npw,1)+ (0.0_dp,1.0_dp)&
-             &*temppsic(1:npw,2) 
-        psi_t(dffts%nlm(1:npw))= CONJG(temppsic(1:npw,1)- (0.0_dp,1.0_dp)&
-             &*temppsic(1:npw,2))
+        ! 
+        !
+        !$acc parallel loop
+        do j=1,npw
+           psi_t(dffts%nl(j))= temppsic(j,1)+ (0.0_dp,1.0_dp)&
+                &*temppsic(j,2)
+           psi_t(dffts%nlm(j))= CONJG(temppsic(j,1)- (0.0_dp,1.0_dp)&
+                &*temppsic(j,2))
+        enddo
+        !
      ELSE
+        !$acc kernels     
         tempphic(1:nrxxs,1) = 0.5d0 * CMPLX( revc_int(1:nrxxs,ibnd),&
              & 0.0_dp, kind=dp ) 
+        !$acc end kernels
         !
         ! To g-space
         !
+        !$acc host_data use_device(tempphic)
         CALL fwfft ('Wave', tempphic(:,1), dfftt)
+        !$acc end host_data
         !
         ! Correct the nl mapping for the two grids.
         !
-        temppsic(1:npw,1)=tempphic(dfftt%nl(1:npw),1)
-        psi_t(dffts%nl(1:npw))=temppsic(1:npw,1)
-        psi_t(dffts%nlm(1:npw))=CONJG(temppsic(1:npw,1))
+        !$acc parallel loop
+        do j=1,npw
+           temppsic(j,1)=tempphic(dfftt%nl(j),1)
+           psi_t(dffts%nl(j))=temppsic(j,1)
+           psi_t(dffts%nlm(j))=CONJG(temppsic(j,1))
+        enddo
         !
-     ENDIF
+     ENDIF 
      !
-     DEALLOCATE ( tempphic, temppsic )
-     !
+     !$acc host_data use_device(psi_t)
      CALL invfft ('Wave', psi_t, dffts)
+     !$acc end host_data
      !
+     !$acc kernels
      psi(:) = psi(:) + psi_t(:)    
+     !$acc end kernels
      !
-     DEALLOCATE ( psi_t )
+     !$acc end data
+     DEALLOCATE ( psi_t,tempphic, temppsic )
      !
   ELSE
      !
@@ -287,13 +318,18 @@ SUBROUTINE lr_exx_revc0_init(orbital, ik)
      !
      nnr_= dfftt%nnr
      !
+     !$acc data copyin(orbital)
+     !
      DO ibnd=1,nbnd,2
         !
         CALL invfft_orbital_custom_gamma(orbital(:,:,1), ibnd, nbnd, &
              npwt, dfftt)
+        !$acc kernels
         red_revc0(1:nnr_,ibnd,1)=psic(1:nnr_)
+        !$acc end kernels
         !
      ENDDO
+     !$acc end data
   ELSE
      nxxs=dffts%nr1x * dffts%nr2x * dffts%nr3x
      nrxxs=dffts%nnr
@@ -390,6 +426,7 @@ SUBROUTINE lr_exx_kernel_noint ( evc, int_vect )
   INTEGER :: iq, ikq, isym, ikk
   REAL(DP) :: xk_cryst(3), sxk(3), xkq(3)
   COMPLEX(DP), ALLOCATABLE :: psic_all(:), temppsic_all(:), temppsic(:)
+  real(dp), allocatable :: k1d(:,:), k2d(:,:)
   !
   INTEGER   :: ibnd_start_gamma, ibnd_end_gamma
 
@@ -407,6 +444,7 @@ SUBROUTINE lr_exx_kernel_noint ( evc, int_vect )
   IF(gamma_only) THEN
      ALLOCATE( fac(dfftt%ngm) )
      nrxxs= dfftt%nnr
+     allocate(k1d(nrxxs,nbnd), k2d(nrxxs,nbnd))
   ELSE
      ALLOCATE( fac(ngm) )
      nxxs=dffts%nr1x * dffts%nr2x * dffts%nr3x
@@ -432,9 +470,21 @@ SUBROUTINE lr_exx_kernel_noint ( evc, int_vect )
      !
      ALLOCATE(revc_int(nrxxs,nbnd))
      !
+     !$acc data create(k1d(1:nrxxs,1:nbnd),k2d(1:nrxxs,1:nbnd), revc_int(1:nrxxs,1:nbnd), &
+     !$acc& vhart(1:nrxxs,1:nspin), pseudo_dens_c(1:nrxxs)) &
+     !$acc& copy(psic) &
+     !$acc& copyin(red_revc0(1:nrxxs,:,1), evc(:,:,1), &
+     !$acc& fac) &
+     !$acc& copyout(int_vect(1:npwx,1:nbnd,1:nks))
+     ! 
+     
+     !$acc kernels
      revc_int=0.d0
      int_vect=(0.d0,0.d0)
-     !
+     k1d=0.d0
+     k2d=0.d0
+     !$acc end kernels
+     ! 
      !
      ! If ibnd_start is even offset it so bands aren't skipped/double counted
      ! when we use gamma_tricks.
@@ -456,36 +506,57 @@ SUBROUTINE lr_exx_kernel_noint ( evc, int_vect )
            w2=0.0d0
         ENDIF
         ! Update the container with the actual interaction for this band(s).
+        call k1d_term_gamma_sr(w1,w2,psic,fac,ibnd,evc(:,:,1),k1d) 
+        call k2d_term_gamma_sr(w1,w2,psic,fac,ibnd,.false.,k2d) 
+        !$acc kernels
         revc_int(1:dfftt%nnr,:)= revc_int(1:dfftt%nnr,:) &
-             & -1.d0 * scale * k1d_term_gamma(w1,w2,psic,fac,ibnd,evc(:,:,1)) & 
-             & +1.d0 * scale * k2d_term_gamma(w1,w2,psic,fac,ibnd,.false.)
-        !
+             & -1.d0 * scale * k1d(1:nrxxs,:) & 
+             & +1.d0 * scale * k2d(1:nrxxs,:)
+        !$acc end kernels
+        ! 
      ENDDO
      !
+     !$acc host_data use_device(revc_int)
      CALL mp_sum( revc_int(:,:), inter_bgrp_comm )
+     !$acc end host_data
      !
      ! Put the constructed interaction into the psic workspace and
      ! then on to int_vec. 
      !
      DO ibnd=ibnd_start_gamma,ibnd_end_gamma,2!1,nbnd,2
         !
+        !$acc kernels
         psic=(0.0_dp, 0.0_dp)
+        !$acc end kernels
         !
-        IF (ibnd<nbnd) psic(1:nrxxs)=CMPLX(revc_int(1:nrxxs,ibnd),&
-             & revc_int(1:nrxxs,ibnd+1),dp)
-        IF (ibnd==nbnd) psic(1:nrxxs)=CMPLX(revc_int(1:nrxxs,ibnd)&
-             &,0.d0,dp)
+        IF (ibnd<nbnd) THEN
+           !$acc kernels   
+           psic(1:nrxxs)=CMPLX(revc_int(1:nrxxs,ibnd),&
+           & revc_int(1:nrxxs,ibnd+1),dp)
+           !$acc end kernels
+        ELSE IF (ibnd==nbnd) THEN 
+                !$acc kernels
+                psic(1:nrxxs)=CMPLX(revc_int(1:nrxxs,ibnd)&
+                &,0.d0,dp)
+                !$acc end kernels
+        ENDIF
         !
         CALL fwfft_orbital_custom_gamma (int_vect(:,:,1), ibnd, nbnd, &
              npwt, dfftt) 
         !
      ENDDO
      !
+     !$acc host_data use_device(int_vect)
      CALL mp_sum( int_vect(:,:,1), inter_bgrp_comm )
+     !$acc end host_data
      !
+     !$acc kernels
+     int_vect=int_vect*0.5d0
+     !$acc end kernels
+     !$acc end data  
      DEALLOCATE(revc_int, fac)
-     !
-     int_vect=int_vect*0.5d0 
+     DEALLOCATE(k1d, k2d)
+     ! 
      !
   ELSE
      !
@@ -651,6 +722,7 @@ SUBROUTINE lr_exx_kernel_int ( orbital, ibnd, nbnd, ikk )
   INTEGER :: iq, ikq, isym, ik
   REAL(DP) :: xk_cryst(3), sxk(3), xkq(3)
   COMPLEX(DP), ALLOCATABLE :: psic_all(:), temppsic_all(:), temppsic(:)
+  real(dp), allocatable :: k1d(:,:), k2d(:,:)
 
   CALL start_clock('lr_exx_int')
   IF (lr_verbosity > 5 ) WRITE(stdout,'("<lr_exx_kernel_int>")')
@@ -658,6 +730,7 @@ SUBROUTINE lr_exx_kernel_int ( orbital, ibnd, nbnd, ikk )
   IF(gamma_only) THEN
      ALLOCATE( fac(dfftt%ngm) )
      nrxxs= dfftt%nnr
+     allocate(k2d(nrxxs,nbnd),k1d(nrxxs,nbnd))
   ELSE
      ALLOCATE( fac(ngm) )
      nxxs=dffts%nr1x * dffts%nr2x * dffts%nr3x
@@ -685,12 +758,19 @@ SUBROUTINE lr_exx_kernel_int ( orbital, ibnd, nbnd, ikk )
         w2=0.0d0
      ENDIF
      !
-     CALL g2_convolution(dfftt%ngm, gt,xk(:,1), xk(:,1), fac)
+     CALL g2_convolution(dfftt%ngm, gt,xk(:,1), xk(:,1), fac) 
+     !
+     !$acc data create(k1d(1:nrxxs,1:nbnd),k2d(1:nrxxs,1:nbnd)) & 
+     !$acc& copyin(fac)  
      !
      IF (.NOT.ltammd) THEN
+        call k1d_term_gamma_sr(w1,w2,psic,fac,ibnd,orbital,k1d)
+        call k2d_term_gamma_sr(w1,w2,psic,fac,ibnd,.true.,k2d)
+        !$acc kernels
         revc_int(1:dfftt%nnr,:)= revc_int(1:dfftt%nnr,:)&
-             & -1.d0 * scale * k1d_term_gamma(w1,w2,psic,fac,ibnd,orbital) &
-             & -1.d0 * scale * k2d_term_gamma(w1,w2,psic,fac,ibnd,.true.)
+             & -1.d0 * scale * k1d(1:nrxxs,:) &
+             & -1.d0 * scale * k2d(1:nrxxs,:)
+        !$acc end kernels
      ELSE
         !
         ! Slightly different interaction in the Tamm--Dancoff case.
@@ -698,10 +778,15 @@ SUBROUTINE lr_exx_kernel_int ( orbital, ibnd, nbnd, ikk )
         ! scales the *whole interaction term* by a factor of 0.5 in the TD
         ! case.
         !
+        call k1d_term_gamma_sr(w1,w2,psic,fac,ibnd,orbital,k1d)
+        !$acc kernels
         revc_int(1:dfftt%nnr,:)= revc_int(1:dfftt%nnr,:)&
-             & -2.d0 * scale * k1d_term_gamma(w1,w2,psic,fac,ibnd,orbital)
+             & -2.d0 * scale * k1d(1:nrxxs,:)
+        !$acc end kernels
      ENDIF
      !
+     !$acc end data
+     deallocate(k1d,k2d)
   ELSE
      !
      CALL invfft_orbital_k (orbital(:,:), ibnd, nbnd, ikk)
@@ -791,7 +876,7 @@ SUBROUTINE lr_exx_kernel_int ( orbital, ibnd, nbnd, ikk )
   
 END SUBROUTINE lr_exx_kernel_int
 !
-FUNCTION k1d_term_gamma(w1, w2, psi, fac_in, ibnd, orbital) RESULT (psi_int)
+SUBROUTINE k1d_term_gamma_sr(w1, w2, psi, fac_in, ibnd, orbital, psi_int)
   !------------------------------------------------------------------
   !
   !   This routine computes the  K^1d term, Eq (21) from Eq Ref (1).
@@ -826,18 +911,15 @@ FUNCTION k1d_term_gamma(w1, w2, psi, fac_in, ibnd, orbital) RESULT (psi_int)
   !
   INTEGER                  :: ibnd2, is, npw_, ngm_, nnr_
   INTEGER                  :: nrec
-  INTEGER                  :: i     
+  INTEGER                  :: i,j     
   !
   npw_=npwt
   ngm_=dfftt%ngm
   nnr_=dfftt%nnr
-  !  
-  ALLOCATE(psi_int(nnr_, nbnd))
+  !   
   !$acc data create( vhart(1:nnr_,1:nspin) &
-  !$acc& ,pseudo_dens_c(1:nnr_),psitemp(1:nnr_)) &
-  !$acc& copyin(red_revc0(1:nnr_,:,1),fac_in(1:ngm_),orbital), &
-  !$acc& copyout(psi_int(1:nnr_,1:nbnd))
-  !$acc update device(psi) 
+  !$acc& ,pseudo_dens_c(1:nnr_),psitemp(1:nnr_),psi_int(1:nnr_,1:nbnd)) &
+  !$acc& copyin(red_revc0(1:nnr_,:,1),fac_in(1:ngm_),orbital)  
   !
   !$acc kernels 
   psi_int(:,:) = 0.d0
@@ -847,6 +929,7 @@ FUNCTION k1d_term_gamma(w1, w2, psi, fac_in, ibnd, orbital) RESULT (psi_int)
      !
      !$acc kernels
      vhart(:,:) = (0.d0,0.d0)
+     pseudo_dens_c(:)=(0.d0,0.d0)
      !$acc end kernels
      !
      ! calculate vhart for couples ibnd,ibnd and ibnd+1,ibnd
@@ -894,11 +977,8 @@ FUNCTION k1d_term_gamma(w1, w2, psi, fac_in, ibnd, orbital) RESULT (psi_int)
      !$acc kernels
      psi_int(1:nnr_,ibnd) = psi_int(1:nnr_,ibnd) &
           & + DBLE(vhart(1:nnr_, 1)) * DBLE(psi(1:nnr_)) &
-          & + AIMAG(vhart(1:nnr_,1)) * AIMAG(psi(1:nnr_))
-     !psi_int(1:nnr_,ibnd) = 2
-     !
-     !$acc end kernels
-     !$acc kernels
+          & + AIMAG(vhart(1:nnr_,1)) * AIMAG(psi(1:nnr_)) 
+     ! 
      psi_int(1:nnr_,ibnd+1) = psi_int(1:nnr_,ibnd+1) &
            & + AIMAG(vhart(1:nnr_,1)) * DBLE(psi(1:nnr_))
      !
@@ -949,8 +1029,7 @@ FUNCTION k1d_term_gamma(w1, w2, psi, fac_in, ibnd, orbital) RESULT (psi_int)
      !
      !
      ! start second loop over bands
-     !
-     
+     !  
      DO ibnd2=1,ibnd-1,1  
         !
         ! calculate vhart for couples ibnd,ibnd2 and ibnd+1,ibnd2
@@ -1034,8 +1113,7 @@ FUNCTION k1d_term_gamma(w1, w2, psi, fac_in, ibnd, orbital) RESULT (psi_int)
              & + AIMAG(vhart(1:nnr_, 1)) * DBLE(psitemp(1:nnr_))
         !$acc end kernels
         !
-     ENDDO
-     !!$acc end data        
+     ENDDO 
   ELSE
      !
      ! calculate vhart for couple ibnd,ibnd 
@@ -1163,10 +1241,10 @@ FUNCTION k1d_term_gamma(w1, w2, psi, fac_in, ibnd, orbital) RESULT (psi_int)
      !
   ENDIF
   !
-  !$acc end data
-  RETURN
+  
+  !$acc end data 
   !
-END FUNCTION k1d_term_gamma
+END SUBROUTINE k1d_term_gamma_sr
 !
 FUNCTION k1d_term_k(w1, psi, fac_in, ibnd, ik,ikq) RESULT (psi_int)
   !------------------------------------------------------------------
@@ -1232,7 +1310,7 @@ FUNCTION k1d_term_k(w1, psi, fac_in, ibnd, ik,ikq) RESULT (psi_int)
   !
 END FUNCTION k1d_term_k
 !
-FUNCTION k2d_term_gamma(w1, w2, psi, fac_in, ibnd, interaction) RESULT (psi_int)
+SUBROUTINE k2d_term_gamma_sr(w1, w2, psi, fac_in, ibnd, interaction, psi_int)
   !------------------------------------------------------------------
   !
   !   This routine computes the  K^2d term, Eq (22) from Eq Ref (1).
@@ -1261,13 +1339,12 @@ FUNCTION k2d_term_gamma(w1, w2, psi, fac_in, ibnd, interaction) RESULT (psi_int)
   nnr_ = dfftt%nnr
   ngm_ = dfftt%ngm
   npw_ = npwt
-  !
-  ALLOCATE(psi_int(nnr_, nbnd))
+  ! 
   !$acc data create( vhart(1:nnr_,1:nspin) &
-  !$acc& ,pseudo_dens_c(1:nnr_)) &
-  !$acc& copyin(red_revc0(1:nnr_,:,1),fac_in(1:ngm_)), &
-  !$acc& copyout(psi_int(1:nnr_,1:nbnd))
-
+  !$acc& ,pseudo_dens_c(1:nnr_),psi_int(1:nnr_,1:nbnd)) &
+  !$acc& copyin(red_revc0(1:nnr_,:,1),fac_in(1:ngm_))  
+  
+  !
   !$acc kernels
   psi_int = 0.d0
   !$acc end kernels
@@ -1392,10 +1469,9 @@ FUNCTION k2d_term_gamma(w1, w2, psi, fac_in, ibnd, interaction) RESULT (psi_int)
      !
   ENDDO
   !
-  !$acc end data
-  RETURN
+  !$acc end data 
   !
-END FUNCTION k2d_term_gamma
+END SUBROUTINE k2d_term_gamma_sr
 !
 FUNCTION k2d_term_k(w1, psi, fac_in, ibnd, ik, ikq) RESULT (psi_int)
   !------------------------------------------------------------------
@@ -1476,24 +1552,35 @@ SUBROUTINE invfft_orbital_custom_gamma(orbital, ibnd, nbnd, npwt, dfftt)
   INTEGER, INTENT(IN)        :: ibnd, nbnd, npwt
   TYPE(fft_type_descriptor), INTENT(IN)  :: dfftt
   !
+  !$acc data copyin(orbital) copy(psic)
+  !
+  !$acc kernels
   psic=(0.0_dp, 0.0_dp)
+  !$acc end kernels
   !
   IF (ibnd < nbnd) THEN
      !
+     !$acc kernels
      psic(dfftt%nl(1:npwt)) = orbital(1:npwt,ibnd) + &
           &(0.0_dp, 1.0_dp) * orbital(1:npwt,ibnd+1) 
      psic(dfftt%nlm(1:npwt)) = CONJG(orbital(1:npwt,ibnd) - &   
           &(0.0_dp, 1.0_dp) * orbital(1:npwt,ibnd+1))
+     !$acc end kernels
      !
   ELSE
      !
+     !$acc kernels
      psic(dfftt%nl(1:npwt))  = orbital(1:npwt,ibnd)
      psic(dfftt%nlm(1:npwt)) =CONJG(orbital(1:npwt,ibnd))
+     !$acc end kernels
      !
   ENDIF
   !
+  !$acc host_data use_device(psic)
   CALL invfft ('Wave', psic, dfftt)
+  !$acc end host_data
   !
+  !$acc end data
   RETURN
   !
 END SUBROUTINE invfft_orbital_custom_gamma
@@ -1514,11 +1601,16 @@ SUBROUTINE fwfft_orbital_custom_gamma(orbital, ibnd, nbnd, npwt, dfftt)
   ! Counters
   INTEGER :: j
   !
+  !$acc data copyin(psic) copy(orbital)
+  !
+  !$acc host_data use_device(psic)
   CALL fwfft ('Wave', psic(:), dfftt)
+  !$acc end host_data
   !
   IF (ibnd < nbnd) THEN
      !
      ! two ffts at the same time
+     !$acc parallel loop
      DO j = 1, npwt
         fp = (psic(dfftt%nl(j)) + psic(dfftt%nlm(j)))*0.5d0
         fm = (psic(dfftt%nl(j)) - psic(dfftt%nlm(j)))*0.5d0
@@ -1527,10 +1619,14 @@ SUBROUTINE fwfft_orbital_custom_gamma(orbital, ibnd, nbnd, npwt, dfftt)
      ENDDO
      !
   ELSE
-     !
-     orbital(1:npwt,ibnd)=psic(dfftt%nl(1:npwt))
+     ! 
+     !$acc parallel loop
+     do j=1,npwt
+        orbital(j,ibnd)=psic(dfftt%nl(j))
+     enddo 
      !
   ENDIF
+  !$acc end data
   !
   RETURN
   !
