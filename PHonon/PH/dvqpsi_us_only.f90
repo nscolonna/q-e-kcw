@@ -7,7 +7,7 @@
 !
 !
 !----------------------------------------------------------------------
-subroutine dvqpsi_us_only (ik, uact, becp1, alphap)
+SUBROUTINE dvqpsi_us_only (ik, uact, becp1, alphap)
    !----------------------------------------------------------------------
    !! This routine calculates \(\text{dV_bare}/\text{dtau}\cdot\text{psi}\)
    !! for one perturbation with a given q.  
@@ -37,7 +37,7 @@ subroutine dvqpsi_us_only (ik, uact, becp1, alphap)
    USE eqv,        ONLY : dvpsi
    USE control_lr, ONLY : lgamma
 
-   implicit none
+   IMPLICIT NONE
    !
    integer :: ik
    !! input: the k point
@@ -79,11 +79,14 @@ subroutine dvqpsi_us_only (ik, uact, becp1, alphap)
    ! temporary buffers for alphap and becp1
    real(DP), allocatable :: temp_reduction (:)
    ! temporary buffer for reduction operations
+   complex(DP), allocatable :: temp_ps2_values (:), temp_ps2_nc_values (:,:)
+   complex(DP), allocatable :: temp_dvpsi (:)
+   ! temporary buffers for ps2 values and dvpsi
 
    logical :: ok
 
    call start_clock ('dvqpsi_us_on')
-   if (noncolin) then
+   IF (noncolin) THEN
       allocate (ps1_nc(nkb , npol, nbnd))
       allocate (ps2_nc(nkb , npol, nbnd , 3))
       allocate (deff_nc(nhm, nhm, nat, nspin))
@@ -91,7 +94,7 @@ subroutine dvqpsi_us_only (ik, uact, becp1, alphap)
       allocate (temp_ps2_nc(nkb, npol, 3))
       allocate (temp_alphap_nc(nkb, npol))
       allocate (temp_becp1_nc(nkb, npol))
-   else
+   ELSE
       allocate (ps1 ( nkb , nbnd))
       allocate (ps2 ( nkb , nbnd , 3))
       allocate (deff(nhm, nhm, nat))
@@ -99,58 +102,64 @@ subroutine dvqpsi_us_only (ik, uact, becp1, alphap)
       allocate (temp_ps2(nkb, 3))
       allocate (temp_alphap_k(nkb))
       allocate (temp_becp1_k(nkb))
-   end if
+   END IF
    allocate (aux ( npwx))
    allocate (temp_reduction(nbnd))
+   IF (noncolin) THEN
+      allocate (temp_ps2_nc_values(nbnd, npol))
+   ELSE
+      allocate (temp_ps2_values(nbnd))
+   END IF
+   allocate (temp_dvpsi(npwx))
    ikk = ikks(ik)
    ikq = ikqs(ik)
-   if (lsda) current_spin = isk (ikk)
+   IF (lsda) current_spin = isk (ikk)
    !
    !   we first compute the coefficients of the vectors
    !
-   if (noncolin) then
+   IF (noncolin) THEN
       ps1_nc(:,:,:)   = (0.d0, 0.d0)
       ps2_nc(:,:,:,:) = (0.d0, 0.d0)
-   else
+   ELSE
       ps1(:,:)   = (0.d0, 0.d0)
       ps2(:,:,:) = (0.d0, 0.d0)
-   end if
-   do ibnd = 1, nbnd
+   END IF
+   DO ibnd = 1, nbnd
       ! Initialize temporary buffers
-      if (noncolin) then
+      IF (noncolin) THEN
          temp_ps1_nc(:,:) = (0.d0, 0.d0)
          temp_ps2_nc(:,:,:) = (0.d0, 0.d0)
          temp_becp1_nc(:,:) = becp1(ik)%nc(:,:,ibnd)
-      else
+      ELSE
          temp_ps1(:) = (0.d0, 0.d0)
          temp_ps2(:,:) = (0.d0, 0.d0)
          temp_becp1_k(:) = becp1(ik)%k(:,ibnd)
-      end if
+      END IF
       
       IF (noncolin) THEN
          CALL compute_deff_nc(deff_nc,et(ibnd,ikk))
       ELSE
          CALL compute_deff(deff,et(ibnd,ikk))
       ENDIF
-      do na = 1, nat
+      DO na = 1, nat
          ijkb0 = ofsbeta(na) 
          nt = ityp(na) 
          mu = 3 * (na - 1)
          ! First loop: deff calculation
-         if ( abs (uact (mu + 1) ) + &
+         IF ( abs (uact (mu + 1) ) + &
               abs (uact (mu + 2) ) + &
-              abs (uact (mu + 3) ) > eps) then
-            do ih = 1, nh (nt)
+              abs (uact (mu + 3) ) > eps) THEN
+            DO ih = 1, nh (nt)
                ikb = ijkb0 + ih
-               do jh = 1, nh (nt)
+               DO jh = 1, nh (nt)
                   jkb = ijkb0 + jh
-                  do ipol = 1, 3
+                  DO ipol = 1, 3
                      ! Copy alphap for current ipol and ibnd
-                     if (noncolin) then
+                     IF (noncolin) THEN
                         temp_alphap_nc(:,:) = alphap(ipol, ik)%nc(:,:,ibnd)
-                     else
+                     ELSE
                         temp_alphap_k(:) = alphap(ipol, ik)%k(:,ibnd)
-                     end if
+                     END IF
                      
                      IF (noncolin) THEN
                         ijs=0
@@ -193,26 +202,26 @@ subroutine dvqpsi_us_only (ik, uact, becp1, alphap)
                              temp_becp1_k(jkb) ) * uact (mu +ipol)
                         END IF
                      END IF
-                  enddo ! ipol
-               enddo ! jh
-            enddo ! ih
+                  ENDDO ! ipol
+               ENDDO ! jh
+            ENDDO ! ih
          END IF  ! uact>0
       enddo  ! na
       ! Second loop: okvan nb loop
-      if (okvan) then
-         do nb = 1, nat
+      IF (okvan) THEN
+         DO nb = 1, nat
             nu = 3 * (nb - 1)
-            if ( abs (uact (nu + 1) ) + &
+            IF ( abs (uact (nu + 1) ) + &
                  abs (uact (nu + 2) ) + &
-                 abs (uact (nu + 3) ) > eps) then
-               do na = 1, nat
+                 abs (uact (nu + 3) ) > eps) THEN
+               DO na = 1, nat
                   ijkb0 = ofsbeta(na) 
                   nt = ityp(na) 
-                  do ih = 1, nh (nt)
+                  DO ih = 1, nh (nt)
                      ikb = ijkb0 + ih
-                     do jh = 1, nh (nt)
+                     DO jh = 1, nh (nt)
                         jkb = ijkb0 + jh
-                        do ipol = 1, 3
+                        DO ipol = 1, 3
                            IF (noncolin) THEN
                               IF (lspinorb) THEN
                                  ijs=0
@@ -237,41 +246,41 @@ subroutine dvqpsi_us_only (ik, uact, becp1, alphap)
                                   (int2 (ih, jh, ipol, nb, na) * &
                                    temp_becp1_k(jkb) ) * uact (nu + ipol)
                            END IF
-                        enddo ! ipol
-                     enddo ! jh
-                  enddo ! ih
-               enddo  ! na
+                        ENDDO ! ipol
+                     ENDDO ! jh
+                  ENDDO ! ih
+               ENDDO  ! na
             END IF  ! uact>0
-         enddo  ! nb
-      endif  ! okvan
+         ENDDO  ! nb
+      ENDIF  ! okvan
       
       ! Assign temporary buffers to original arrays
-      if (noncolin) then
+      IF (noncolin) THEN
          ps1_nc(:,:,ibnd) = temp_ps1_nc(:,:)
          ps2_nc(:,:,ibnd,:) = temp_ps2_nc(:,:,:)
-      else
+      ELSE
          ps1(:,ibnd) = temp_ps1(:)
          ps2(:,ibnd,:) = temp_ps2(:,:)
-      end if
-   enddo ! nbnd
+      END IF
+   ENDDO ! nbnd
    !
    !      This term is proportional to beta(k+q+G)
    ! 
    npwq = ngk(ikq)
-   if (nkb.gt.0) then
-      if (noncolin) then
+   IF (nkb.gt.0) THEN
+      IF (noncolin) THEN
          call zgemm ('N', 'N', npwq, nbnd*npol, nkb, &
           (1.d0, 0.d0), vkb, npwx, ps1_nc, nkb, (1.d0, 0.d0) , dvpsi, npwx)
-      else
+      ELSE
          call zgemm ('N', 'N', npwq, nbnd, nkb, &
           (1.d0, 0.d0) , vkb, npwx, ps1, nkb, (1.d0, 0.d0) , dvpsi, npwx)
-      end if
-   end if
+      END IF
+   END IF
    !
    !      This term is proportional to (k+q+G)_\alpha*beta(k+q+G)
    !
-   do ipol = 1, 3
-      do ikb = 1, nkb
+   DO ipol = 1, 3
+      DO ikb = 1, nkb
          ok = .false.
          IF (noncolin) THEN
             ! Copy data to contiguous buffer for reduction
@@ -280,31 +289,57 @@ subroutine dvqpsi_us_only (ik, uact, becp1, alphap)
             if (.not. ok) then
                temp_reduction(1:nbnd) = abs(ps2_nc(ikb, 2, 1:nbnd, ipol))
                ok = any(temp_reduction(1:nbnd) .gt. eps)
-            endif
+            ENDIF
          ELSE
             ! Copy data to contiguous buffer for reduction
             temp_reduction(1:nbnd) = abs(ps2(ikb, 1:nbnd, ipol))
             ok = any(temp_reduction(1:nbnd) .gt. eps)
          ENDIF
-         if (ok) then
-            do ig = 1, npwq
+         IF (ok) THEN
+            DO ig = 1, npwq
                igg = igk_k (ig,ikq)
                aux (ig) =  vkb(ig, ikb) * (xk(ipol, ikq) + g(ipol, igg) )
-            enddo
-            do ibnd = 1, nbnd
+            ENDDO
+            
+            ! Copy ps2 values to contiguous buffer
+            IF (noncolin) THEN
+               temp_ps2_nc_values(1:nbnd, 1) = ps2_nc(ikb, 1, 1:nbnd, ipol)
+               temp_ps2_nc_values(1:nbnd, 2) = ps2_nc(ikb, 2, 1:nbnd, ipol)
+            ELSE
+               temp_ps2_values(1:nbnd) = ps2(ikb, 1:nbnd, ipol)
+            END IF
+            
+            DO ibnd = 1, nbnd
+               ! Initialize temp_dvpsi to zero for each band
+               temp_dvpsi(1:npwq) = (0.0_DP, 0.0_DP)
+               
                IF (noncolin) THEN
-                  call zaxpy(npwq,ps2_nc(ikb,1,ibnd,ipol),aux,1,dvpsi(1,ibnd),1)
-                  call zaxpy(npwq,ps2_nc(ikb,2,ibnd,ipol),aux,1, &
-                                                          dvpsi(1+npwx,ibnd),1)
+                  call zaxpy(npwq, temp_ps2_nc_values(ibnd,1), aux, 1, temp_dvpsi, 1)
+                  ! Copy temp_dvpsi to dvpsi for first spin component
+                  dvpsi(1:npwq, ibnd) = dvpsi(1:npwq, ibnd) + temp_dvpsi(1:npwq)
+                  
+                  ! Reset temp_dvpsi for second spin component
+                  temp_dvpsi(1:npwq) = (0.0_DP, 0.0_DP)
+                  call zaxpy(npwq, temp_ps2_nc_values(ibnd,2), aux, 1, temp_dvpsi, 1)
+                  ! Copy temp_dvpsi to dvpsi for second spin component
+                  dvpsi(1+npwx:npwx+npwq, ibnd) = dvpsi(1+npwx:npwx+npwq, ibnd) + temp_dvpsi(1:npwq)
                ELSE
-                  call zaxpy (npwq, ps2(ikb,ibnd,ipol), aux, 1, dvpsi(1,ibnd), 1)
+                  call zaxpy(npwq, temp_ps2_values(ibnd), aux, 1, temp_dvpsi, 1)
+                  ! Copy temp_dvpsi to dvpsi
+                  dvpsi(1:npwq, ibnd) = dvpsi(1:npwq, ibnd) + temp_dvpsi(1:npwq)
                END IF
-            enddo
-         endif
-      enddo
-   enddo
+            ENDDO
+         ENDIF
+      ENDDO
+   ENDDO
    deallocate (aux)
    deallocate (temp_reduction)
+   if (noncolin) then
+      deallocate (temp_ps2_nc_values)
+   else
+      deallocate (temp_ps2_values)
+   end if
+   deallocate (temp_dvpsi)
    IF (noncolin) THEN
       deallocate (ps2_nc)
       deallocate (ps1_nc)
@@ -324,5 +359,5 @@ subroutine dvqpsi_us_only (ik, uact, becp1, alphap)
    END IF
 
    call stop_clock ('dvqpsi_us_on')
-   return
-end subroutine dvqpsi_us_only
+   RETURN
+END SUBROUTINE dvqpsi_us_only
