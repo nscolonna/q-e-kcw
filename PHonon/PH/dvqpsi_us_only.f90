@@ -28,7 +28,7 @@ subroutine dvqpsi_us_only (ik, uact, becp1, alphap)
   USE lsda_mod,  ONLY : lsda, current_spin, isk, nspin
   USE wvfct,     ONLY : nbnd, npwx, et
   USE noncollin_module, ONLY : noncolin, npol, lspinorb
-  USE uspp, ONLY: okvan, nkb, vkb
+  USE uspp, ONLY: okvan, nkb, vkb, ofsbeta
   USE uspp_param, ONLY: nh, nhm
   USE phus,      ONLY : int1, int1_nc, int2, int2_so
 
@@ -104,97 +104,96 @@ subroutine dvqpsi_us_only (ik, uact, becp1, alphap)
      ELSE
         CALL compute_deff(deff,et(ibnd,ikk))
      ENDIF
-     ijkb0 = 0
-     do nt = 1, ntyp
-        do na = 1, nat
-           if (ityp (na) .eq.nt) then
-              mu = 3 * (na - 1)
-              do ih = 1, nh (nt)
-                 ikb = ijkb0 + ih
-                 do jh = 1, nh (nt)
-                    jkb = ijkb0 + jh
-                    do ipol = 1, 3
-                       if ( abs (uact (mu + 1) ) + &
-                            abs (uact (mu + 2) ) + &
-                            abs (uact (mu + 3) ) > eps) then
+     do na = 1, nat
+        ijkb0 = ofsbeta(na) 
+        nt = ityp(na) 
+        !if (ityp (na) .eq.nt) then
+           mu = 3 * (na - 1)
+           do ih = 1, nh (nt)
+              ikb = ijkb0 + ih
+              do jh = 1, nh (nt)
+                 jkb = ijkb0 + jh
+                 do ipol = 1, 3
+                    if ( abs (uact (mu + 1) ) + &
+                         abs (uact (mu + 2) ) + &
+                         abs (uact (mu + 3) ) > eps) then
+                       IF (noncolin) THEN
+                          ijs=0
+                          DO is=1,npol
+                             DO js=1,npol
+                                ijs=ijs+1
+                                ps1_nc(ikb,is,ibnd)=ps1_nc(ikb,is,ibnd) +  &
+                                   deff_nc(ih,jh,na,ijs) * &
+                                   alphap(ipol, ik)%nc(jkb,js,ibnd)* &
+                                    uact(mu + ipol)
+                                ps2_nc(ikb,is,ibnd,ipol)=               &
+                                       ps2_nc(ikb,is,ibnd,ipol)+        &
+                                       deff_nc(ih,jh,na,ijs) *          &
+                                       becp1(ik)%nc(jkb,js,ibnd) *      &
+                                       (0.d0,-1.d0) * uact(mu+ipol) * tpiba
+                             END DO
+                          END DO
+                       ELSE
+                          ps1 (ikb, ibnd) = ps1 (ikb, ibnd) +      &
+                                     deff(ih, jh, na) *            &
+                             alphap(ipol, ik)%k(jkb, ibnd) * uact (mu + ipol)
+                          ps2 (ikb, ibnd, ipol) = ps2 (ikb, ibnd, ipol) +&
+                               deff(ih,jh,na)*becp1(ik)%k (jkb, ibnd) *  &
+                               (0.0_DP,-1.0_DP) * uact (mu + ipol) * tpiba
+                       ENDIF
+                       IF (okvan) THEN
                           IF (noncolin) THEN
                              ijs=0
                              DO is=1,npol
                                 DO js=1,npol
                                    ijs=ijs+1
-                                   ps1_nc(ikb,is,ibnd)=ps1_nc(ikb,is,ibnd) +  &
-                                      deff_nc(ih,jh,na,ijs) * &
-                                      alphap(ipol, ik)%nc(jkb,js,ibnd)* &
-                                       uact(mu + ipol)
-                                   ps2_nc(ikb,is,ibnd,ipol)=               &
-                                          ps2_nc(ikb,is,ibnd,ipol)+        &
-                                          deff_nc(ih,jh,na,ijs) *          &
-                                          becp1(ik)%nc(jkb,js,ibnd) *      &
-                                          (0.d0,-1.d0) * uact(mu+ipol) * tpiba
+                                   ps1_nc(ikb,is,ibnd)=ps1_nc(ikb,is,ibnd)+ &
+                                      int1_nc(ih,jh,ipol,na,ijs) *     &
+                                      becp1(ik)%nc(jkb,js,ibnd)*uact(mu+ipol)
                                 END DO
                              END DO
                           ELSE
-                             ps1 (ikb, ibnd) = ps1 (ikb, ibnd) +      &
-                                        deff(ih, jh, na) *            &
-                                alphap(ipol, ik)%k(jkb, ibnd) * uact (mu + ipol)
-                             ps2 (ikb, ibnd, ipol) = ps2 (ikb, ibnd, ipol) +&
-                                  deff(ih,jh,na)*becp1(ik)%k (jkb, ibnd) *  &
-                                  (0.0_DP,-1.0_DP) * uact (mu + ipol) * tpiba
-                          ENDIF
-                          IF (okvan) THEN
-                             IF (noncolin) THEN
+                             ps1 (ikb, ibnd) = ps1 (ikb, ibnd) + &
+                               (int1 (ih, jh, ipol,na, current_spin) * &
+                               becp1(ik)%k (jkb, ibnd) ) * uact (mu +ipol)
+                          END IF
+                       END IF
+                    END IF  ! uact>0
+                    if (okvan) then
+                       do nb = 1, nat
+                          nu = 3 * (nb - 1)
+                          IF (noncolin) THEN
+                             IF (lspinorb) THEN
                                 ijs=0
                                 DO is=1,npol
                                    DO js=1,npol
                                       ijs=ijs+1
-                                      ps1_nc(ikb,is,ibnd)=ps1_nc(ikb,is,ibnd)+ &
-                                         int1_nc(ih,jh,ipol,na,ijs) *     &
-                                         becp1(ik)%nc(jkb,js,ibnd)*uact(mu+ipol)
+                                      ps1_nc(ikb,is,ibnd)= &
+                                                ps1_nc(ikb,is,ibnd)+ &
+                                      int2_so(ih,jh,ipol,nb,na,ijs)* &
+                                       becp1(ik)%nc(jkb,js,ibnd)*uact(nu+ipol)
                                    END DO
                                 END DO
                              ELSE
-                                ps1 (ikb, ibnd) = ps1 (ikb, ibnd) + &
-                                  (int1 (ih, jh, ipol,na, current_spin) * &
-                                  becp1(ik)%k (jkb, ibnd) ) * uact (mu +ipol)
+                                DO is=1,npol
+                                   ps1_nc(ikb,is,ibnd)=ps1_nc(ikb,is,ibnd)+ &
+                                      int2(ih,jh,ipol,nb,na) * &
+                                      becp1(ik)%nc(jkb,is,ibnd)*uact(nu+ipol)
+                                END DO
                              END IF
+                          ELSE
+                             ps1 (ikb, ibnd) = ps1 (ikb, ibnd) + &
+                                 (int2 (ih, jh, ipol, nb, na) * &
+                                  becp1(ik)%k (jkb, ibnd) ) * uact (nu + ipol)
                           END IF
-                       END IF  ! uact>0
-                       if (okvan) then
-                          do nb = 1, nat
-                             nu = 3 * (nb - 1)
-                             IF (noncolin) THEN
-                                IF (lspinorb) THEN
-                                   ijs=0
-                                   DO is=1,npol
-                                      DO js=1,npol
-                                         ijs=ijs+1
-                                         ps1_nc(ikb,is,ibnd)= &
-                                                   ps1_nc(ikb,is,ibnd)+ &
-                                         int2_so(ih,jh,ipol,nb,na,ijs)* &
-                                          becp1(ik)%nc(jkb,js,ibnd)*uact(nu+ipol)
-                                      END DO
-                                   END DO
-                                ELSE
-                                   DO is=1,npol
-                                      ps1_nc(ikb,is,ibnd)=ps1_nc(ikb,is,ibnd)+ &
-                                         int2(ih,jh,ipol,nb,na) * &
-                                         becp1(ik)%nc(jkb,is,ibnd)*uact(nu+ipol)
-                                   END DO
-                                END IF
-                             ELSE
-                                ps1 (ikb, ibnd) = ps1 (ikb, ibnd) + &
-                                    (int2 (ih, jh, ipol, nb, na) * &
-                                     becp1(ik)%k (jkb, ibnd) ) * uact (nu + ipol)
-                             END IF
-                          enddo
-                       endif  ! okvan
-                    enddo ! ipol
-                 enddo ! jh
-              enddo ! ih
-              ijkb0 = ijkb0 + nh (nt)
-           endif
-        enddo  ! na
-     enddo ! nt
+                       enddo
+                    endif  ! okvan
+                 enddo ! ipol
+              enddo ! jh
+           enddo ! ih
+           !ijkb0 = ijkb0 + nh (nt)
+        !endif
+     enddo  ! na
   enddo ! nbnd
   !
   !      This term is proportional to beta(k+q+G)
