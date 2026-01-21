@@ -77,6 +77,8 @@ subroutine dvqpsi_us_only (ik, uact, becp1, alphap)
    complex(DP), allocatable :: temp_alphap_nc (:,:), temp_becp1_nc (:,:)
    complex(DP), allocatable :: temp_alphap_k (:), temp_becp1_k (:)
    ! temporary buffers for alphap and becp1
+   real(DP), allocatable :: temp_reduction (:)
+   ! temporary buffer for reduction operations
 
    logical :: ok
 
@@ -99,6 +101,7 @@ subroutine dvqpsi_us_only (ik, uact, becp1, alphap)
       allocate (temp_becp1_k(nkb))
    end if
    allocate (aux ( npwx))
+   allocate (temp_reduction(nbnd))
    ikk = ikks(ik)
    ikq = ikqs(ik)
    if (lsda) current_spin = isk (ikk)
@@ -267,18 +270,21 @@ subroutine dvqpsi_us_only (ik, uact, becp1, alphap)
    !
    !      This term is proportional to (k+q+G)_\alpha*beta(k+q+G)
    !
-   do ikb = 1, nkb
-      do ipol = 1, 3
+   do ipol = 1, 3
+      do ikb = 1, nkb
          ok = .false.
          IF (noncolin) THEN
-            do ibnd = 1, nbnd
-               ok = ok.or.(abs (ps2_nc (ikb, 1, ibnd, ipol) ).gt.eps).or. &
-                          (abs (ps2_nc (ikb, 2, ibnd, ipol) ).gt.eps)
-            end do
+            ! Copy data to contiguous buffer for reduction
+            temp_reduction(1:nbnd) = abs(ps2_nc(ikb, 1, 1:nbnd, ipol))
+            ok = any(temp_reduction(1:nbnd) .gt. eps)
+            if (.not. ok) then
+               temp_reduction(1:nbnd) = abs(ps2_nc(ikb, 2, 1:nbnd, ipol))
+               ok = any(temp_reduction(1:nbnd) .gt. eps)
+            endif
          ELSE
-            do ibnd = 1, nbnd
-               ok = ok.or. (abs (ps2 (ikb, ibnd, ipol) ) .gt.eps)
-            enddo
+            ! Copy data to contiguous buffer for reduction
+            temp_reduction(1:nbnd) = abs(ps2(ikb, 1:nbnd, ipol))
+            ok = any(temp_reduction(1:nbnd) .gt. eps)
          ENDIF
          if (ok) then
             do ig = 1, npwq
@@ -296,9 +302,9 @@ subroutine dvqpsi_us_only (ik, uact, becp1, alphap)
             enddo
          endif
       enddo
-
    enddo
    deallocate (aux)
+   deallocate (temp_reduction)
    IF (noncolin) THEN
       deallocate (ps2_nc)
       deallocate (ps1_nc)
