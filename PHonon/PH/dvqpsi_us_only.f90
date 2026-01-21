@@ -71,6 +71,9 @@ subroutine dvqpsi_us_only (ik, uact, becp1, alphap)
    real(DP), allocatable :: deff(:,:,:)
    complex(DP), allocatable :: ps1_nc (:,:,:), ps2_nc (:,:,:,:)
    ! work space
+   complex(DP), allocatable :: temp_ps1 (:), temp_ps2 (:,:)
+   complex(DP), allocatable :: temp_ps1_nc (:,:), temp_ps2_nc (:,:,:)
+   ! temporary buffers
 
    logical :: ok
 
@@ -79,10 +82,14 @@ subroutine dvqpsi_us_only (ik, uact, becp1, alphap)
       allocate (ps1_nc(nkb , npol, nbnd))
       allocate (ps2_nc(nkb , npol, nbnd , 3))
       allocate (deff_nc(nhm, nhm, nat, nspin))
+      allocate (temp_ps1_nc(nkb, npol))
+      allocate (temp_ps2_nc(nkb, npol, 3))
    else
       allocate (ps1 ( nkb , nbnd))
       allocate (ps2 ( nkb , nbnd , 3))
       allocate (deff(nhm, nhm, nat))
+      allocate (temp_ps1(nkb))
+      allocate (temp_ps2(nkb, 3))
    end if
    allocate (aux ( npwx))
    ikk = ikks(ik)
@@ -99,6 +106,15 @@ subroutine dvqpsi_us_only (ik, uact, becp1, alphap)
       ps2(:,:,:) = (0.d0, 0.d0)
    end if
    do ibnd = 1, nbnd
+      ! Initialize temporary buffers
+      if (noncolin) then
+         temp_ps1_nc(:,:) = (0.d0, 0.d0)
+         temp_ps2_nc(:,:,:) = (0.d0, 0.d0)
+      else
+         temp_ps1(:) = (0.d0, 0.d0)
+         temp_ps2(:,:) = (0.d0, 0.d0)
+      end if
+      
       IF (noncolin) THEN
          CALL compute_deff_nc(deff_nc,et(ibnd,ikk))
       ELSE
@@ -122,22 +138,22 @@ subroutine dvqpsi_us_only (ik, uact, becp1, alphap)
                         DO is=1,npol
                            DO js=1,npol
                               ijs=ijs+1
-                              ps1_nc(ikb,is,ibnd)=ps1_nc(ikb,is,ibnd) +  &
+                              temp_ps1_nc(ikb,is)=temp_ps1_nc(ikb,is) +  &
                                  deff_nc(ih,jh,na,ijs) * &
                                  alphap(ipol, ik)%nc(jkb,js,ibnd)* &
                                   uact(mu + ipol)
-                              ps2_nc(ikb,is,ibnd,ipol)=               &
-                                     ps2_nc(ikb,is,ibnd,ipol)+        &
+                              temp_ps2_nc(ikb,is,ipol)=               &
+                                     temp_ps2_nc(ikb,is,ipol)+        &
                                      deff_nc(ih,jh,na,ijs) *          &
                                      becp1(ik)%nc(jkb,js,ibnd) *      &
                                      (0.d0,-1.d0) * uact(mu+ipol) * tpiba
                            END DO
                         END DO
                      ELSE
-                        ps1 (ikb, ibnd) = ps1 (ikb, ibnd) +      &
+                        temp_ps1 (ikb) = temp_ps1 (ikb) +      &
                                    deff(ih, jh, na) *            &
                            alphap(ipol, ik)%k(jkb, ibnd) * uact (mu + ipol)
-                        ps2 (ikb, ibnd, ipol) = ps2 (ikb, ibnd, ipol) +&
+                        temp_ps2 (ikb, ipol) = temp_ps2 (ikb, ipol) +&
                              deff(ih,jh,na)*becp1(ik)%k (jkb, ibnd) *  &
                              (0.0_DP,-1.0_DP) * uact (mu + ipol) * tpiba
                      ENDIF
@@ -147,13 +163,13 @@ subroutine dvqpsi_us_only (ik, uact, becp1, alphap)
                            DO is=1,npol
                               DO js=1,npol
                                  ijs=ijs+1
-                                 ps1_nc(ikb,is,ibnd)=ps1_nc(ikb,is,ibnd)+ &
+                                 temp_ps1_nc(ikb,is)=temp_ps1_nc(ikb,is)+ &
                                     int1_nc(ih,jh,ipol,na,ijs) *     &
                                     becp1(ik)%nc(jkb,js,ibnd)*uact(mu+ipol)
                               END DO
                            END DO
                         ELSE
-                           ps1 (ikb, ibnd) = ps1 (ikb, ibnd) + &
+                           temp_ps1 (ikb) = temp_ps1 (ikb) + &
                              (int1 (ih, jh, ipol,na, current_spin) * &
                              becp1(ik)%k (jkb, ibnd) ) * uact (mu +ipol)
                         END IF
@@ -184,21 +200,21 @@ subroutine dvqpsi_us_only (ik, uact, becp1, alphap)
                                  DO is=1,npol
                                     DO js=1,npol
                                        ijs=ijs+1
-                                       ps1_nc(ikb,is,ibnd)= &
-                                                 ps1_nc(ikb,is,ibnd)+ &
+                                       temp_ps1_nc(ikb,is)= &
+                                                 temp_ps1_nc(ikb,is)+ &
                                        int2_so(ih,jh,ipol,nb,na,ijs)* &
                                         becp1(ik)%nc(jkb,js,ibnd)*uact(nu+ipol)
                                     END DO
                                  END DO
                               ELSE
                                  DO is=1,npol
-                                    ps1_nc(ikb,is,ibnd)=ps1_nc(ikb,is,ibnd)+ &
+                                    temp_ps1_nc(ikb,is)=temp_ps1_nc(ikb,is)+ &
                                        int2(ih,jh,ipol,nb,na) * &
-                                       becp1(ik)%nc(jkb,is,ibnd)*uact(nu+ipol)
+                                       becp1(ik)%nc(jkb,js,ibnd)*uact(nu+ipol)
                                  END DO
                               END IF
                            ELSE
-                              ps1 (ikb, ibnd) = ps1 (ikb, ibnd) + &
+                              temp_ps1 (ikb) = temp_ps1 (ikb) + &
                                   (int2 (ih, jh, ipol, nb, na) * &
                                    becp1(ik)%k (jkb, ibnd) ) * uact (nu + ipol)
                            END IF
@@ -209,6 +225,15 @@ subroutine dvqpsi_us_only (ik, uact, becp1, alphap)
             END IF  ! uact>0
          enddo  ! nb
       endif  ! okvan
+      
+      ! Assign temporary buffers to original arrays
+      if (noncolin) then
+         ps1_nc(:,:,ibnd) = temp_ps1_nc(:,:)
+         ps2_nc(:,:,ibnd,:) = temp_ps2_nc(:,:,:)
+      else
+         ps1(:,ibnd) = temp_ps1(:)
+         ps2(:,ibnd,:) = temp_ps2(:,:)
+      end if
    enddo ! nbnd
    !
    !      This term is proportional to beta(k+q+G)
@@ -262,10 +287,14 @@ subroutine dvqpsi_us_only (ik, uact, becp1, alphap)
       deallocate (ps2_nc)
       deallocate (ps1_nc)
       deallocate (deff_nc)
+      deallocate (temp_ps1_nc)
+      deallocate (temp_ps2_nc)
    ELSE
       deallocate (ps2)
       deallocate (ps1)
       deallocate (deff)
+      deallocate (temp_ps1)
+      deallocate (temp_ps2)
    END IF
 
    call stop_clock ('dvqpsi_us_on')
