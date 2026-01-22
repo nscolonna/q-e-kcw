@@ -97,6 +97,10 @@ MODULE exx_base
   LOGICAL, ALLOCATABLE :: coulomb_done(:,:)
   !! list of which Coulomb factors have been calculated already
   !
+  CHARACTER(len=80) :: exx_bgrp_type = 'standard'
+  !! see input keyword 'exx_bgrp_type'
+  !! exx band parallelism schemes: "standard" ... regular computations
+  !!                               "massive"  ... very large systems (useful when the local DFT part becomes relevant)
  CONTAINS
   !
   !------------------------------------------------------------------------

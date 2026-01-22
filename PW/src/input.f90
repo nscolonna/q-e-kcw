@@ -2116,7 +2116,7 @@ SUBROUTINE exx_iosys ( ecutwfc, ecutrho )
                               exxdiv_treatment, yukawa, ecutvcut,          &
                               gau_parameter, localization_thr, scdm, ace,  &
                               scdmden, scdmgrd, nscdm, n_proj,             & 
-                              exx_fraction, screening_parameter, ecutfock 
+                              exx_fraction, exx_bgrp_type, screening_parameter, ecutfock 
   USE io_global,     ONLY : stdout
   USE klist,         ONLY : tot_charge
   USE ions_base,     ONLY : nat, ityp, zv
@@ -2126,7 +2126,8 @@ SUBROUTINE exx_iosys ( ecutwfc, ecutrho )
                             nq1, nq2, nq3, &
                             exxdiv_treatment_ => exxdiv_treatment, &
                             yukawa_           => yukawa, &
-                            ecutvcut_         => ecutvcut
+                            ecutvcut_         => ecutvcut, &
+                            exx_bgrp_type_    => exx_bgrp_type 
   USE exx,          ONLY :  ecutfock_         => ecutfock, &
                             use_ace, nbndproj, local_thr 
   USE loc_scdm,      ONLY : use_scdm, scdm_den, scdm_grd, n_scdm
@@ -2176,6 +2177,11 @@ SUBROUTINE exx_iosys ( ecutwfc, ecutrho )
   !
   IF (screening_parameter >= 0.0_DP) &
         & CALL set_screening_parameter(screening_parameter)
+  !
+  exx_bgrp_type_ = exx_bgrp_type
+  write(stdout, '(/,5x,"Exact exchange band parallelism type set to ",A/)' ) trim(exx_bgrp_type_)
+  IF (trim(exx_bgrp_type_).ne.'standard' .and. trim(exx_bgrp_type_).ne.'massive' ) &
+        & CALL errore('input','Invalid value of exx_bgrp_type (standard or massive)',1)
   !
 END SUBROUTINE exx_iosys
 

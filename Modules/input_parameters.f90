@@ -472,6 +472,9 @@ MODULE input_parameters
 
           ! next group of variables PWSCF ONLY
           ! 
+        CHARACTER(len=80) :: exx_bgrp_type = 'standard'
+        !! exx band parallelism schemes: "standard" ... regular computations
+        !!                               "massive"  ... very large systems (useful when the local DFT part becomes relevant)
           !
         REAL(DP) :: exx_fraction = -1.0_DP
         !! exact exchange fraction. If negative, use defaults
@@ -693,7 +696,7 @@ MODULE input_parameters
              nqx1, nqx2, nqx3, ecutfock, localization_thr, scdm, ace,         &
              scdmden, scdmgrd, nscdm, n_proj,                                 &
              exxdiv_treatment, x_gamma_extrapolation, yukawa, ecutvcut,       &
-             exx_fraction, screening_parameter, ref_alat,                     &
+             exx_fraction, exx_bgrp_type, screening_parameter, ref_alat,      &
              noncolin, lspinorb, starting_spin_angle, lambda, angle1, angle2, &
              report, lforcet,                                                 &
              constrained_magnetization, B_field, fixed_magnetization,         &
