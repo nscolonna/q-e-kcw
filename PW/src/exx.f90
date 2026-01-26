@@ -489,8 +489,6 @@ MODULE exx
        ENDDO
     ENDDO
     !
-!civn 
-    !IF (nbndproj == 0) nbndproj = nbnd
     IF(use_ace) THEN 
       IF (present(nbndproj_)) THEN 
        nbndproj = nbndproj_
@@ -500,7 +498,6 @@ MODULE exx
       WRITE(stdout, '(5X,A,2(I5,A))') "ACE projected onto ", nbndproj, " (nbndproj) and applied to ", &
                                                                               nbnd, " (nbnd) bands"
     END IF 
-!
     !
     CALL divide( inter_egrp_comm, x_nbnd_occ, ibnd_start, ibnd_end )
     CALL init_index_over_band( inter_egrp_comm, nbnd, nbnd )
