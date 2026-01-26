@@ -241,7 +241,7 @@ MODULE read_namelists_module
        ! ... EXX
        !
        ace=.TRUE.
-       exx_bgrp_type = 'standard'
+       exx_bgrp_type = 'massive'
        n_proj = 0    
        localization_thr = 0.0_dp
        scdm=.FALSE.

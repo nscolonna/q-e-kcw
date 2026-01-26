@@ -472,7 +472,7 @@ MODULE input_parameters
 
           ! next group of variables PWSCF ONLY
           ! 
-        CHARACTER(len=80) :: exx_bgrp_type = 'standard'
+        CHARACTER(len=80) :: exx_bgrp_type = 'massive'
         !! exx band parallelism schemes: "standard" ... regular computations
         !!                               "massive"  ... very large systems (useful when the local DFT part becomes relevant)
           !
