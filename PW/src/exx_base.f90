@@ -101,6 +101,9 @@ MODULE exx_base
   !! see input keyword 'exx_bgrp_type'
   !! exx band parallelism schemes: "standard" ... regular computations
   !!                               "massive"  ... very large systems (useful when the local DFT part becomes relevant)
+  LOGICAL :: exx_bgrp_standard = .true.
+  !! a logical flag to quickly distiguish bgrp types in EXX
+  !
  CONTAINS
   !
   !------------------------------------------------------------------------
