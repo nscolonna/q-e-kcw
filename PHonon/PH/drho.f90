@@ -48,7 +48,7 @@ subroutine drho
   implicit none
 
   integer :: mode, is, ir, irr, iper, npe, nrstot, nu_i, nu_j, ik, &
-             ipol
+             ipol, irr_batch, irr_end, npe_total, npe_offset, mode_batch_start
   ! counter on modes
   ! counter on atoms and polarizations
   ! counter on atoms
@@ -193,7 +193,7 @@ subroutine drho
   !
   !    add the augmentation term to the charge density and save it
   !
-  allocate (drhoust(dfftp%nnr, nspin_mag , npertx))
+  allocate (drhoust(dfftp%nnr, nspin_mag , 8*npertx))
   drhoust=(0.d0,0.d0)
   !
   !  The calculation of dbecsum is distributed across processors (see addusdbec)
@@ -209,26 +209,48 @@ subroutine drho
 
   mode = 0
   if (okpaw) becsumort=(0.0_DP,0.0_DP)
-  do irr = 1, nirr
-     npe = npert (irr)
-     if (doublegrid) then
-        do is = 1, nspin_mag
-           do iper = 1, npe
-              call fft_interpolate (dffts, drhous(:,is,mode+iper), dfftp, drhoust(:,is,iper))
+  
+  ! Process irr values in batches of 8
+  do irr_batch = 1, nirr, 8
+     irr_end = min(irr_batch + 7, nirr)
+     
+     ! Calculate total perturbations in this batch
+     npe_total = 0
+     do irr = irr_batch, irr_end
+        npe_total = npe_total + npert(irr)
+     enddo
+     
+     ! Process all irr values in current batch
+     npe_offset = 0
+     do irr = irr_batch, irr_end
+        npe = npert(irr)
+        if (doublegrid) then
+           do is = 1, nspin_mag
+              do iper = 1, npe
+                 call fft_interpolate (dffts, drhous(:,is,mode+iper), dfftp, &
+                                     drhoust(:,is,npe_offset+iper))
+              enddo
            enddo
-        enddo
-     else
-        call zcopy (dfftp%nnr*nspin_mag*npe, drhous(1,1,mode+1), 1, drhoust, 1)
-     endif
-
-     call dscal (2*dfftp%nnr*nspin_mag*npe, 0.5d0, drhoust, 1)
-
-     call addusddens (drhoust, dbecsum(1,1,1,mode+1), mode, npe)
-     do iper = 1, npe
-        nu_i = mode+iper
+        else
+           call zcopy (dfftp%nnr*nspin_mag*npe, drhous(1,1,mode+1), 1, &
+                      drhoust(1,1,npe_offset+1), 1)
+        endif
+        npe_offset = npe_offset + npe
+        mode = mode + npe
+     enddo
+     
+     ! Scale the density for all perturbations in batch
+     call dscal (2*dfftp%nnr*nspin_mag*npe_total, 0.5d0, drhoust, 1)
+     
+     ! Process augmentation density for entire batch
+     mode_batch_start = mode - npe_total
+     call addusddens (drhoust, dbecsum(1,1,1,mode_batch_start+1), mode_batch_start, npe_total)
+     
+     ! Save buffers for all perturbations in batch
+     do iper = 1, npe_total
+        nu_i = mode_batch_start + iper
         call save_buffer (drhoust (1, 1, iper), lrdrhous, iudrhous, nu_i)
      enddo
-     mode = mode+npe
   enddo
    !
    !  Collect the sum over k points in different pools.
