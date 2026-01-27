@@ -70,7 +70,7 @@ subroutine addusddens (drhop, dbecsum, mode0, npe)
   ! the values of q+G
   ! the spherical harmonics
 
-  complex(DP) :: fact, zsum, bb, alpha, u1, u2, u3
+  complex(DP) :: fact, zsum, bb, alpha, u1, u2, u3, fact_alpha_bb
   ! auxiliary variables
   complex(DP), allocatable ::  sk (:), qgm(:), aux (:,:,:)
   ! the structure factor
@@ -78,6 +78,8 @@ subroutine addusddens (drhop, dbecsum, mode0, npe)
   ! auxiliary variable for drho(G)
   
   ! Arrays to store pre-computed mode-independent quantities  
+  complex(DP), allocatable :: alpha_array(:)
+  ! pre-computed alpha values for vectorization  
   complex(DP), allocatable :: qgm_all(:,:)
   integer, allocatable :: ijh_map(:,:)
   integer :: n_entries, ientry
@@ -105,6 +107,7 @@ subroutine addusddens (drhop, dbecsum, mode0, npe)
   !
   ! Allocate arrays for pre-computed quantities
   allocate (aux(  ngm , nspin_mag , npe))
+  allocate (alpha_array(ngm))
   allocate (qgm_all(ngm, n_entries))
   allocate (ijh_map(2, n_entries))  ! stores (nt, ijh)
   allocate (sk (  ngm))
@@ -170,13 +173,16 @@ subroutine addusddens (drhop, dbecsum, mode0, npe)
            ! Process perturbations - preliminary sums approach
            !
            do ipert = 1, npe
+              mode = mode0 + ipert
+              u1 = u (mu + 1, mode)
+              u2 = u (mu + 2, mode)
+              u3 = u (mu + 3, mode)
+              ! Pre-compute alpha array once per perturbation (mode-dependent, not spin-dependent)
+              alpha_array(1:ngm) = qpg(1,1:ngm)*u1 + qpg(2,1:ngm)*u2 + qpg(3,1:ngm)*u3
+              
               do is = 1, nspin_mag
-                 mode = mode0 + ipert
                  zsum = dbecsum (ijh, na, is, ipert)
                  !
-                 u1 = u (mu + 1, mode)
-                 u2 = u (mu + 2, mode)
-                 u3 = u (mu + 3, mode)
                  ! Drop the check on u1,u2,u3 and always compute
                  bb = becsum (ijh, na, is)
                  zsum = zsum + &
@@ -185,8 +191,7 @@ subroutine addusddens (drhop, dbecsum, mode0, npe)
                       + alphasum (ijh, 3, na, is) * u3)
                  !
                  do ig = 1, ngm
-                    alpha = qpg(1,ig)*u1 + qpg(2,ig)*u2 + qpg(3,ig)*u3
-                    aux(ig,is,ipert) = aux(ig,is,ipert) + fact * alpha * bb * sk(ig)
+                    aux(ig,is,ipert) = aux(ig,is,ipert) + fact_alpha_bb * alpha_array(ig) * sk(ig)
                  enddo
                  call zaxpy (ngm, zsum, sk, 1, aux(1,is,ipert), 1)
                  IF (okpaw) becsumort(ijh,na,is,mode) = zsum
@@ -214,6 +219,7 @@ subroutine addusddens (drhop, dbecsum, mode0, npe)
   deallocate (ylmk0)
   deallocate (sk)
   deallocate (aux)
+  deallocate (alpha_array)
   deallocate (qgm_all)
   deallocate (ijh_map)
   !
