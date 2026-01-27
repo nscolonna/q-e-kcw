@@ -177,22 +177,34 @@ subroutine addusddens (drhop, dbecsum, mode0, npe)
               u1 = u (mu + 1, mode)
               u2 = u (mu + 2, mode)
               u3 = u (mu + 3, mode)
-              ! Pre-compute alpha array once per perturbation (mode-dependent, not spin-dependent)
-              alpha_array(1:ngm) = qpg(1,1:ngm)*u1 + qpg(2,1:ngm)*u2 + qpg(3,1:ngm)*u3
+              
+              ! Check if displacement is significant for u-dependent terms
+              if (abs(u1) + abs(u2) + abs(u3) >= 1.0E-12_DP) then
+                 ! Pre-compute alpha array only if displacement is significant
+                 alpha_array(1:ngm) = qpg(1,1:ngm)*u1 + qpg(2,1:ngm)*u2 + qpg(3,1:ngm)*u3
+              endif
               
               do is = 1, nspin_mag
                  zsum = dbecsum (ijh, na, is, ipert)
                  !
-                 ! Drop the check on u1,u2,u3 and always compute
                  bb = becsum (ijh, na, is)
-                 zsum = zsum + &
-                      ( alphasum (ijh, 1, na, is) * u1 &
-                      + alphasum (ijh, 2, na, is) * u2 &
-                      + alphasum (ijh, 3, na, is) * u3)
+                 
+                 ! Add u-dependent terms only if displacement is significant
+                 if (abs(u1) + abs(u2) + abs(u3) >= 1.0E-12_DP) then
+                    zsum = zsum + &
+                         ( alphasum (ijh, 1, na, is) * u1 &
+                         + alphasum (ijh, 2, na, is) * u2 &
+                         + alphasum (ijh, 3, na, is) * u3)
+                 endif
                  !
-                 do ig = 1, ngm
-                    aux(ig,is,ipert) = aux(ig,is,ipert) + fact_alpha_bb * alpha_array(ig) * sk(ig)
-                 enddo
+                 call start_clock('compute_auxiliary')
+                 ! Vectorized update of aux array - only if displacement is significant
+                 if (abs(u1) + abs(u2) + abs(u3) >= 1.0E-12_DP) then
+                    fact_alpha_bb = fact * bb
+                    do ig = 1, ngm
+                       aux(ig,is,ipert) = aux(ig,is,ipert) + fact_alpha_bb * alpha_array(ig) * sk(ig)
+                    enddo
+                 endif
                  call zaxpy (ngm, zsum, sk, 1, aux(1,is,ipert), 1)
                  IF (okpaw) becsumort(ijh,na,is,mode) = zsum
               enddo
