@@ -130,6 +130,7 @@ MODULE qes_read_module
     MODULE PROCEDURE qes_read_cp_cellNose
     MODULE PROCEDURE qes_read_scalmags
     MODULE PROCEDURE qes_read_d3mags
+    MODULE PROCEDURE qes_read_pseudoPath
     MODULE PROCEDURE qes_read_integerMatrix
     MODULE PROCEDURE qes_read_scalarQuantity
     MODULE PROCEDURE qes_read_rism3d
@@ -2524,15 +2525,7 @@ MODULE qes_read_module
     !
     tmp_node => item(tmp_node_list, 0)
     IF (ASSOCIATED(tmp_node))&
-       CALL extractDataContent(tmp_node, obj%pseudo_file, IOSTAT = iostat_ )
-    IF ( iostat_ /= 0 ) THEN
-       IF ( PRESENT (ierr ) ) THEN
-          CALL infomsg("qes_read:speciesType","error reading pseudo_file")
-          ierr = ierr + 1
-       ELSE
-          CALL errore ("qes_read:speciesType","error reading pseudo_file",10)
-       END IF
-    END IF
+       CALL qes_read_pseudoPath(tmp_node, obj%pseudo_file, ierr )
     !
     tmp_node_list => getElementsByTagname(xml_node, "starting_magnetization")
     tmp_node_list_size = getLength(tmp_node_list)
@@ -13393,6 +13386,62 @@ MODULE qes_read_module
        END IF
     END IF
     !
+    tmp_node_list => getElementsByTagname(xml_node, "num_of_atomic_wfc")
+    tmp_node_list_size = getLength(tmp_node_list)
+    !
+    IF (tmp_node_list_size > 1) THEN
+        IF (PRESENT(ierr) ) THEN
+           CALL infomsg("qes_read:band_structureType","num_of_atomic_wfc: too many occurrences")
+           ierr = ierr + 1
+        ELSE
+           CALL errore("qes_read:band_structureType","num_of_atomic_wfc: too many occurrences",10)
+        END IF
+    END IF
+    !
+    IF (tmp_node_list_size>0) THEN
+      obj%num_of_atomic_wfc_ispresent = .TRUE.
+      tmp_node => item(tmp_node_list, 0)
+      CALL extractDataContent(tmp_node, obj%num_of_atomic_wfc , IOSTAT = iostat_)
+      IF ( iostat_ /= 0 ) THEN
+         IF ( PRESENT (ierr ) ) THEN
+            CALL infomsg("qes_read:band_structureType","error reading num_of_atomic_wfc")
+            ierr = ierr + 1
+         ELSE
+            CALL errore ("qes_read:band_structureType","error reading num_of_atomic_wfc",10)
+         END IF
+      END IF
+    ELSE
+       obj%num_of_atomic_wfc_ispresent = .FALSE.
+    END IF
+    !
+    tmp_node_list => getElementsByTagname(xml_node, "wf_collected")
+    tmp_node_list_size = getLength(tmp_node_list)
+    !
+    IF (tmp_node_list_size > 1) THEN
+        IF (PRESENT(ierr) ) THEN
+           CALL infomsg("qes_read:band_structureType","wf_collected: too many occurrences")
+           ierr = ierr + 1
+        ELSE
+           CALL errore("qes_read:band_structureType","wf_collected: too many occurrences",10)
+        END IF
+    END IF
+    !
+    IF (tmp_node_list_size>0) THEN
+      obj%wf_collected_ispresent = .TRUE.
+      tmp_node => item(tmp_node_list, 0)
+      CALL extractDataContent(tmp_node, obj%wf_collected , IOSTAT = iostat_)
+      IF ( iostat_ /= 0 ) THEN
+         IF ( PRESENT (ierr ) ) THEN
+            CALL infomsg("qes_read:band_structureType","error reading wf_collected")
+            ierr = ierr + 1
+         ELSE
+            CALL errore ("qes_read:band_structureType","error reading wf_collected",10)
+         END IF
+      END IF
+    ELSE
+       obj%wf_collected_ispresent = .FALSE.
+    END IF
+    !
     tmp_node_list => getElementsByTagname(xml_node, "fermi_energy")
     tmp_node_list_size = getLength(tmp_node_list)
     !
@@ -14817,6 +14866,57 @@ MODULE qes_read_module
     obj%lwrite = .TRUE.
     !
   END SUBROUTINE qes_read_d3mags
+  !
+  !
+  SUBROUTINE qes_read_pseudoPath(xml_node, obj, ierr )
+    !
+    IMPLICIT NONE
+    !
+    TYPE(Node), INTENT(IN), POINTER                 :: xml_node
+    TYPE(pseudoPath_type), INTENT(OUT) :: obj
+    INTEGER, OPTIONAL, INTENT(INOUT)                  :: ierr
+    !
+    TYPE(Node), POINTER :: tmp_node
+    TYPE(NodeList), POINTER :: tmp_node_list
+    INTEGER :: tmp_node_list_size, index, iostat_
+    !
+    obj%tagname = getTagName(xml_node)
+    ! 
+    IF (hasAttribute(xml_node, "Zval")) THEN
+      CALL extractDataAttribute(xml_node, "Zval", obj%Zval)
+      obj%Zval_ispresent = .TRUE.
+    ELSE
+      obj%Zval_ispresent = .FALSE.
+    END IF
+    ! 
+    IF (hasAttribute(xml_node, "mesh")) THEN
+      CALL extractDataAttribute(xml_node, "mesh", obj%mesh)
+      obj%mesh_ispresent = .TRUE.
+    ELSE
+      obj%mesh_ispresent = .FALSE.
+    END IF
+    ! 
+    IF (hasAttribute(xml_node, "nbeta")) THEN
+      CALL extractDataAttribute(xml_node, "nbeta", obj%nbeta)
+      obj%nbeta_ispresent = .TRUE.
+    ELSE
+      obj%nbeta_ispresent = .FALSE.
+    END IF
+    ! 
+    IF (hasAttribute(xml_node, "l")) THEN
+      CALL extractDataAttribute(xml_node, "l", obj%l)
+      obj%l_ispresent = .TRUE.
+    ELSE
+      obj%l_ispresent = .FALSE.
+    END IF
+    !
+    !
+    !
+    CALL extractDataContent(xml_node, obj%pseudoPath )
+    !
+    obj%lwrite = .TRUE.
+    !
+  END SUBROUTINE qes_read_pseudoPath
   !
   !
   SUBROUTINE qes_read_integerMatrix(xml_node, obj, ierr )
