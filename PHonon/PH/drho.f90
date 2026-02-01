@@ -6,6 +6,13 @@
 ! or http://www.gnu.org/copyleft/gpl.txt .
 !
 !-----------------------------------------------------------------------
+!
+! Define batch size for perturbations processing
+! Can be overridden with -DPERTS_PER_BATCH=N at compile time
+#ifndef PERTS_PER_BATCH
+#define PERTS_PER_BATCH 8
+#endif
+!
 subroutine drho
   !-----------------------------------------------------------------------
   !! Here we compute, for each mode the change of the charge density
@@ -16,7 +23,7 @@ subroutine drho
   !
   !
   USE kinds,      ONLY : DP
-  USE gvecs,         ONLY : doublegrid
+  USE gvecs,      ONLY : doublegrid
   USE fft_base,   ONLY : dfftp, dffts
   USE lsda_mod,   ONLY : nspin
   USE cell_base,  ONLY : omega
@@ -193,7 +200,7 @@ subroutine drho
   !
   !    add the augmentation term to the charge density and save it
   !
-  allocate (drhoust(dfftp%nnr, nspin_mag , 8*npertx))
+  allocate (drhoust(dfftp%nnr, nspin_mag , PERTS_PER_BATCH*npertx))
   drhoust=(0.d0,0.d0)
   !
   !  The calculation of dbecsum is distributed across processors (see addusdbec)
@@ -210,9 +217,9 @@ subroutine drho
   mode = 0
   if (okpaw) becsumort=(0.0_DP,0.0_DP)
   
-  ! Process irr values in batches of 8
-  do irr_batch = 1, nirr, 8
-     irr_end = min(irr_batch + 7, nirr)
+  ! Process irr values in batches of PERTS_PER_BATCH
+  do irr_batch = 1, nirr, PERTS_PER_BATCH
+     irr_end = min(irr_batch + PERTS_PER_BATCH - 1, nirr)
      
      ! Calculate total perturbations in this batch
      npe_total = 0
