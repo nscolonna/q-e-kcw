@@ -338,13 +338,13 @@ MODULE pw_restart_new
          IF (noncolin) THEN
             CALL qexsd_init_atomic_species(output_obj%atomic_species, nsp, atm, psfile, &
                  amass, STARTING_MAGNETIZATION = starting_magnetization, &
-                 ANGLE1=angle1, ANGLE2=angle2)
+                 ANGLE1=angle1, ANGLE2=angle2, Zval=zv)
          ELSE IF (nspin==2) THEN 
             CALL qexsd_init_atomic_species(output_obj%atomic_species, nsp, atm, psfile, &
-                 amass, STARTING_MAGNETIZATION=starting_magnetization)
+                 amass, STARTING_MAGNETIZATION=starting_magnetization, Zval=zv)
          ELSE 
             CALL qexsd_init_atomic_species(output_obj%atomic_species, nsp, atm,psfile, &
-                 amass)
+                 amass, Zval=zv)
          END IF
          output_obj%atomic_species%pseudo_dir = TRIM(pseudo_dir)
          output_obj%atomic_species%pseudo_dir_ispresent = .TRUE.
