@@ -18,7 +18,9 @@ MODULE diag_dense
   !! RESTRICTIONS: NCPP only, no special features, serial only
   !!              (see diag_dense_check_compat)
   !!
-  !! Inspired by the ParaBands code in BerkeleyGW
+  !! This module is inspired by the ParaBands code, part of the BerkeleyGW package,
+  !! distributed under a 3-Clause BSD license:
+  !! BerkeleyGW, Copyright (c) 2011, The Regents of the University of California.
   !
   USE kinds,     ONLY : DP
   USE io_global, ONLY : stdout
@@ -621,7 +623,6 @@ CONTAINS
     ! Each processor has hmat(ngk_g, npw) - full rows, local columns
     ! Need to gather to hmat_global(ngk_g, ngk_g) - full matrix
     !
-    WRITE(stdout,'(/,5X,"Collecting Hamiltonian columns from all processors...")')
     ALLOCATE(hmat_global(ngk_g, ngk_g), STAT=ierr)
     IF ( ierr /= 0 ) CALL errore('diag_dense_run_k', 'hmat_global allocation failed', ierr)
     !
@@ -629,12 +630,10 @@ CONTAINS
     !
     ! Verification against h_psi
     !
-    WRITE(stdout,'(/,5X,"Verifying H matrix against h_psi...")')
     CALL diag_dense_test_hamiltonian(hmat_global, npw)
     !
     ! Diagonalize global matrix and distribute eigenvectors
     !
-    WRITE(stdout,'(/,5X,"Diagonalizing global Hamiltonian...")')
     CALL diag_dense_diag(hmat_global, nbnd, npw, evc, et_k, notconv)
     !
     ! Deallocate
@@ -646,16 +645,16 @@ CONTAINS
     !
     CALL stop_clock('diag_dense')
     !
-    ! Print timing breakdown
+    ! Uncomment for profiling:
     !
-    WRITE(stdout,'(/,5X,"Timing breakdown for dense H construction:")')
-    CALL print_clock('dense_kin')
-    CALL print_clock('dense_vloc')
-    CALL print_clock('dense_vnl')
-    CALL print_clock('dense_collect')
-    CALL print_clock('dense_check')
-    CALL print_clock('dense_diag')
-    CALL print_clock('diag_dense')
+    ! WRITE(stdout,'(/,5X,"Timing breakdown for dense H construction:")')
+    ! CALL print_clock('dense_kin')
+    ! CALL print_clock('dense_vloc')
+    ! CALL print_clock('dense_vnl')
+    ! CALL print_clock('dense_collect')
+    ! CALL print_clock('dense_check')
+    ! CALL print_clock('dense_diag')
+    ! CALL print_clock('diag_dense')
     !
   END SUBROUTINE diag_dense_run_k
   !
@@ -754,10 +753,10 @@ CONTAINS
     !
     ! Report results
     !
-    WRITE(stdout,'(5X,"max |H_mat*v - h_psi(v)| =",E12.4)') max_error
-    WRITE(stdout,'(5X,"RMS |H_mat*v - h_psi(v)| =",E12.4)') rms_error
-    print*, 'sum(abs(hv_mat_global)) = ', sum(abs(hv_mat_global))
-    print*, 'sum(abs(hv_hpsi_global)) = ', sum(abs(hv_hpsi_global))
+    IF (max_error > 1.d-10) THEN
+      WRITE(stdout,'(5X,"max |H_mat*v - h_psi(v)| =",E12.4)') max_error
+      WRITE(stdout,'(5X,"RMS |H_mat*v - h_psi(v)| =",E12.4)') rms_error
+    ENDIF
     !
     DEALLOCATE( v, v_global, hv_mat_global, hv_hpsi_global, rand_vec, hv_hpsi )
     !

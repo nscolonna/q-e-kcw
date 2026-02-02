@@ -253,8 +253,11 @@ SUBROUTINE laxlib_pcdiagh( n, h, ldh, e, v, idesc )
      !
      ! ... distribute replicated H matrix to block-cyclic format
      !
+     CALL start_clock( 'cdiagh-1' )
      CALL laxlib_zsqmdst_x( n, h, ldh, h_dist, nx, desc )
+     CALL stop_clock( 'cdiagh-1' )
      !
+     CALL start_clock( 'cdiagh-2' )
      ! ... diagonalize using ScaLAPACK/ELPA
      !
 #if defined(__SCALAPACK)
@@ -270,9 +273,13 @@ SUBROUTINE laxlib_pcdiagh( n, h, ldh, e, v, idesc )
      !
 #endif
      !
+     CALL stop_clock( 'cdiagh-2' )
+     !
      ! ... collect distributed eigenvectors back to replicated format
      !
+     CALL start_clock( 'cdiagh-3' )
      CALL laxlib_zsqmcll_x( n, h_dist, nx, v, ldh, desc, desc%comm )
+     CALL stop_clock( 'cdiagh-3' )
      !
      DEALLOCATE( h_dist )
      !
