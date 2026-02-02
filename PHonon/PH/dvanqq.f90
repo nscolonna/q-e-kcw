@@ -53,7 +53,7 @@ subroutine dvanqq
   integer  ::  nat_l
   ! effective number of atoms to do when nat_todo_input > 0 
   integer,allocatable :: atomo_l(:)
-  integer :: nt, na, nb, ig, nta, ntb, ir, ih, jh, ijh, ipol, jpol, is, na_l, nb_l 
+  integer :: nt, na, nb, ig, nta, ntb, ir, ih, jh, ijh, ipol, jpol, is, na_l, nb_l, i 
   ! counters
 
   real(DP), allocatable :: qmod (:), qmodg (:), qpg (:,:), &
@@ -66,6 +66,7 @@ subroutine dvanqq
   complex(DP) :: fact, fact1,z9aux(9)
   complex(DP), allocatable :: aux1 (:), aux2 (:),&
        aux3 (:), aux5 (:), aux35(:,:), veff (:,:), sk(:)
+  complex(DP) :: temp_aux35(1:9,64)
   ! work space
   complex(DP), allocatable, target :: qgm(:)
   ! the augmentation function at G
@@ -178,12 +179,19 @@ subroutine dvanqq
                        ! 
                        ! FIXME: replace zgemv with zgemm
                        !
-                       !$omp parallel do default(shared) private(ig)
-                       do ig =1, ngm 
-                          aux35(1:3,ig) = conjg(sk(ig)) * (g(1:3,ig) + xq (1:3))
-                          aux35(4:6,ig) = aux35(1,ig) *  (g(1:3,ig) + xq (1:3))
-                          aux35(7:8,ig) = aux35(2,ig) *  (g(2:3,ig) + xq (2:3))
-                          aux35(9,ig)  =  aux35(3,ig) *  (g(3,ig) + xq (3))
+                       !$omp parallel do default(shared) private(ig,temp_aux35)
+                       do ig = 1, ngm, 64
+                          ! Batch computation in temp_aux35
+                          do i = 1, min(64, ngm-ig+1)
+                             temp_aux35(1:3,i) = conjg(sk(ig+i-1)) * (g(1:3,ig+i-1) + xq (1:3))
+                             temp_aux35(4:6,i) = temp_aux35(1,i) *  (g(1:3,ig+i-1) + xq (1:3))
+                             temp_aux35(7:8,i) = temp_aux35(2,i) *  (g(2:3,ig+i-1) + xq (2:3))
+                             temp_aux35(9,i)   = temp_aux35(3,i) *  (g(3,ig+i-1) + xq (3))
+                          end do
+                          ! Copy to aux35
+                          do i = 1, min(64, ngm-ig+1)
+                             aux35(1:9,ig+i-1) = temp_aux35(1:9,i)
+                          end do
                        end do 
                        call zgemv('N', 9,ngm,cmplx(1._dp, 0._dp,kind=dp),aux35,9,aux1,1,(0._dp,0._dp),z9aux,1)
                        z9aux(4:9) = conjg(fact)*tpiba2*omega*z9aux(4:9)
@@ -207,12 +215,19 @@ subroutine dvanqq
                        enddo
                     endif
                     do is = 1, nspin_mag
-                       !$omp parallel do default(shared) private(ig)
-                       do ig = 1, ngm 
-                          aux35(1:3,ig) = conjg(veff (dfftp%nl (ig), is)) * g (1:3, ig)
-                          aux35(4:6,ig) = aux35(1,ig) * g(1:3,ig)
-                          aux35(7:8,ig) = aux35(2,ig) * g(2:3,ig)
-                          aux35(9,ig)   = aux35(3,ig) * g(3,ig) 
+                       !$omp parallel do default(shared) private(ig,temp_aux35,i)
+                       do ig = 1, ngm, 64
+                          ! Batch computation in temp_aux35
+                          do i = 1, min(64, ngm-ig+1)
+                             temp_aux35(1:3,i) = conjg(veff (dfftp%nl (ig+i-1), is)) * g (1:3, ig+i-1)
+                             temp_aux35(4:6,i) = temp_aux35(1,i) * g(1:3,ig+i-1)
+                             temp_aux35(7:8,i) = temp_aux35(2,i) * g(2:3,ig+i-1)
+                             temp_aux35(9,i)   = temp_aux35(3,i) * g(3,ig+i-1) 
+                          end do
+                          ! Copy to aux35
+                          do i = 1, min(64, ngm-ig+1)
+                             aux35(1:9,ig+i-1) = temp_aux35(1:9,i)
+                          end do
                        end do 
                        call zgemv('N',9,ngm,cmplx(1._dp, 0._dp,kind=dp), aux35,9,aux1,1,(0._dp,0._dp),z9aux,1)
                        !
