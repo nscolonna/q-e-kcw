@@ -219,7 +219,7 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
   !
   USE control_flags,        ONLY : scissor
   USE sci_mod,              ONLY : evcc
-  USE diag_dense,           ONLY : diag_dense_run_k
+  USE diag_direct,          ONLY : diag_direct_run_k
 #if defined (__OSCDFT)
   USE plugin_flags,     ONLY : use_oscdft
   USE oscdft_base,      ONLY : oscdft_ctx
@@ -719,7 +719,7 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
        !
        ! ... Full-band diagonalization with an explicit, dense H matrix
        !
-       CALL diag_dense_run_k(ik, npw, nbnd, evc, et(1,ik), notconv)
+       CALL diag_direct_run_k(ik, npw, nbnd, evc, et(1,ik), notconv)
        !
        avg_iter = avg_iter + 1.0_DP
        !

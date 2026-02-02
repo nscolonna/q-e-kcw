@@ -45,7 +45,7 @@ set(src_pw
    src/Coul_cut_2D.f90 
    src/d_matrix.f90 
    src/data_structure.f90
-   src/diag_dense.f90
+   src/diag_direct.f90
    src/divide_class.f90 
    src/divide_class_so.f90 
    src/divide_et_impera.f90 

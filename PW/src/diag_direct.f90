@@ -6,7 +6,7 @@
 ! or http://www.gnu.org/copyleft/gpl.txt .
 !
 !----------------------------------------------------------------------------
-MODULE diag_dense
+MODULE diag_direct
   !----------------------------------------------------------------------------
   !!
   !! Direct diagonalization of the dense Hamiltonian matrix H(G,G').
@@ -16,7 +16,7 @@ MODULE diag_dense
   !! H(G,G') = δ_GG' × (k+G)² + V_loc(G-G') + Σ_ij |β_i(G)⟩ D_ij ⟨β_j(G')|
   !!
   !! RESTRICTIONS: NCPP only, no special features, serial only
-  !!              (see diag_dense_check_compat)
+  !!              (see diag_direct_check_compat)
   !!
   !! This module is inspired by the ParaBands code, part of the BerkeleyGW package,
   !! distributed under a 3-Clause BSD license:
@@ -29,9 +29,9 @@ MODULE diag_dense
   !
   PRIVATE
   !
-  PUBLIC :: diag_dense_check_compat
-  PUBLIC :: diag_dense_run_k
-  PUBLIC :: diag_dense_test_hamiltonian
+  PUBLIC :: diag_direct_check_compat
+  PUBLIC :: diag_direct_run_k
+  PUBLIC :: diag_direct_test_hamiltonian
   !
   INTEGER :: ngk_g
   !! global total number of k+G vectors at this k point
@@ -142,7 +142,7 @@ CONTAINS
   END SUBROUTINE build_mill_lookup_table
   !
   !-----------------------------------------------------------------------
-  SUBROUTINE diag_dense_check_compat()
+  SUBROUTINE diag_direct_check_compat()
     !-----------------------------------------------------------------------
     !! Check if calculation settings are compatible with full-band diagonalization
     !!
@@ -162,37 +162,37 @@ CONTAINS
     !
     ! Check for incompatible features
     !
-    IF ( okvan ) CALL errore('diag_dense_check_compat', &
+    IF ( okvan ) CALL errore('diag_direct_check_compat', &
        'Full-band diagonalization requires NCPP (no USPP/PAW)', 1)
     !
-    IF ( gamma_only ) CALL errore('diag_dense_check_compat', &
+    IF ( gamma_only ) CALL errore('diag_direct_check_compat', &
        'gamma_only not supported in full-band diagonalization', 1)
     !
-    IF ( real_space ) CALL errore('diag_dense_check_compat', &
+    IF ( real_space ) CALL errore('diag_direct_check_compat', &
        'real_space algorithms not supported in full-band diagonalization', 1)
     !
-    IF ( noncolin ) CALL errore('diag_dense_check_compat', &
+    IF ( noncolin ) CALL errore('diag_direct_check_compat', &
        'non-collinear calculation not supported in full-band diagonalization', 1)
     !
-    IF ( xclib_dft_is('meta') ) CALL errore('diag_dense_check_compat', &
+    IF ( xclib_dft_is('meta') ) CALL errore('diag_direct_check_compat', &
        'meta-GGA functionals not supported in full-band diagonalization', 1)
     !
-    IF ( lda_plus_u ) CALL errore('diag_dense_check_compat', &
+    IF ( lda_plus_u ) CALL errore('diag_direct_check_compat', &
        'DFT+U not supported in full-band diagonalization', 1)
     !
-    IF ( exx_is_active() ) CALL errore('diag_dense_check_compat', &
+    IF ( exx_is_active() ) CALL errore('diag_direct_check_compat', &
        'Exact exchange/hybrid functionals not supported in full-band diagonalization', 1)
     !
-    IF ( lelfield ) CALL errore('diag_dense_check_compat', &
+    IF ( lelfield ) CALL errore('diag_direct_check_compat', &
        'Electric field (Berry phase) not supported in full-band diagonalization', 1)
     !
-    IF ( dffts%has_task_groups ) CALL errore('diag_dense_check_compat', &
+    IF ( dffts%has_task_groups ) CALL errore('diag_direct_check_compat', &
        'Task groups not supported in full-band diagonalization', 1)
     !
-  END SUBROUTINE diag_dense_check_compat
+  END SUBROUTINE diag_direct_check_compat
   !
   !-----------------------------------------------------------------------
-  SUBROUTINE diag_dense_hamiltonian_kinetic(hmat, npw)
+  SUBROUTINE diag_direct_hamiltonian_kinetic(hmat, npw)
     !-----------------------------------------------------------------------
     !! Build kinetic energy contribution (diagonal) for local columns
     !! Matrix is hmat(ngk_g, npw) - full rows, local columns
@@ -209,7 +209,7 @@ CONTAINS
     !
     INTEGER :: ig, ig_global
     !
-    CALL start_clock('dense_kin')
+    CALL start_clock('direct_kin')
     !
     ! Build kinetic energy diagonal for local columns
     ! For column ig (local), diagonal element is at row ig_global
@@ -218,12 +218,12 @@ CONTAINS
        hmat(ig_global, ig) = CMPLX(g2kin(ig), 0.0_DP, KIND=DP)
     ENDDO
     !
-    CALL stop_clock('dense_kin')
+    CALL stop_clock('direct_kin')
     !
-  END SUBROUTINE diag_dense_hamiltonian_kinetic
+  END SUBROUTINE diag_direct_hamiltonian_kinetic
   !
   !-----------------------------------------------------------------------
-  SUBROUTINE diag_dense_hamiltonian_vloc(hmat, npw)
+  SUBROUTINE diag_direct_hamiltonian_vloc(hmat, npw)
     !-----------------------------------------------------------------------
     !! Build local potential contribution V_loc(G-G') for local columns
     !! Matrix is hmat(ngk_g, npw) - full rows, local columns
@@ -254,7 +254,7 @@ CONTAINS
     INTEGER :: ig, jg_local, jg_global, ig_global, igg
     INTEGER :: mill_diff(3)
     !
-    CALL start_clock('dense_vloc')
+    CALL start_clock('direct_vloc')
     !
     ALLOCATE(vrs_g(ngm_g))
     ALLOCATE(vrs_aux(dffts%nnr))
@@ -297,12 +297,12 @@ CONTAINS
     DEALLOCATE(vrs_aux)
     DEALLOCATE(mill_lookup%map)
     !
-    CALL stop_clock('dense_vloc')
+    CALL stop_clock('direct_vloc')
     !
-  END SUBROUTINE diag_dense_hamiltonian_vloc
+  END SUBROUTINE diag_direct_hamiltonian_vloc
   !
   !-----------------------------------------------------------------------
-  SUBROUTINE diag_dense_hamiltonian_vnl(hmat, npw)
+  SUBROUTINE diag_direct_hamiltonian_vnl(hmat, npw)
     !-----------------------------------------------------------------------
     !! Build nonlocal pseudopotential contribution (NOT IMPLEMENTED for distributed PWs)
     !! H(G,G') += Σ_ij |β_i(G)⟩ D_ij ⟨β_j(G')|
@@ -338,7 +338,7 @@ CONTAINS
     !
     IF (nkb == 0) RETURN
     !
-    CALL start_clock('dense_vnl')
+    CALL start_clock('direct_vnl')
     !
     ALLOCATE(vkb_global(ngk_g, nkb))
     ALLOCATE(dmat(nkb, nkb))
@@ -387,13 +387,13 @@ CONTAINS
     DEALLOCATE(dmat)
     DEALLOCATE(tmp)
     !
-    CALL stop_clock('dense_vnl')
+    CALL stop_clock('direct_vnl')
     !
-  END SUBROUTINE diag_dense_hamiltonian_vnl
+  END SUBROUTINE diag_direct_hamiltonian_vnl
   !-----------------------------------------------------------------------
   !
   !-----------------------------------------------------------------------
-  SUBROUTINE diag_dense_diag(hmat, nbnd, npw, evc, et_k, notconv)
+  SUBROUTINE diag_direct_diag(hmat, nbnd, npw, evc, et_k, notconv)
     !-----------------------------------------------------------------------
     !! Diagonalize the Hamiltonian matrix and distribute eigenvectors
     !! Uses parallel (pdiagh) or serial (diagh) Hermitian eigensolver
@@ -447,7 +447,7 @@ CONTAINS
     INTEGER :: neig
     !! Number of eigenvectors to allocate (nbnd for diagh, ngk_g for pdiagh)
     !
-    CALL start_clock('dense_diag')
+    CALL start_clock('direct_diag')
     WRITE(stdout,'(5X,"Diagonalizing",I5,"x",I5," matrix...")') ngk_g, ngk_g
     !
     ! Determine number of eigenvectors to allocate
@@ -529,23 +529,23 @@ CONTAINS
     !
     ! Distribute eigenvectors to local format
     !
-    CALL start_clock('dense_distrib')
+    CALL start_clock('direct_distrib')
     evc(:,:) = (0.0_DP, 0.0_DP)
     DO ibnd = 1, nbnd
        DO ig = 1, npw
           evc(ig, ibnd) = evc_global(igk_l2g_kdip(ig), ibnd)
        END DO
     END DO
-    CALL stop_clock('dense_distrib')
+    CALL stop_clock('direct_distrib')
     !
     DEALLOCATE(et_tmp, evc_global)
     !
-    CALL stop_clock('dense_diag')
+    CALL stop_clock('direct_diag')
     !
-  END SUBROUTINE diag_dense_diag
+  END SUBROUTINE diag_direct_diag
   !
   !-----------------------------------------------------------------------
-  SUBROUTINE diag_dense_run_k(ik, npw, nbnd, evc, et_k, notconv)
+  SUBROUTINE diag_direct_run_k(ik, npw, nbnd, evc, et_k, notconv)
     !-----------------------------------------------------------------------
     !! Construct and diagonalize explicit Hamiltonian matrix for k-point ik
     !!
@@ -590,11 +590,11 @@ CONTAINS
     COMPLEX(DP), ALLOCATABLE :: hmat_global(:,:)
     !! Global Hamiltonian matrix (ngk_g, ngk_g)
     !
-    CALL start_clock('diag_dense')
+    CALL start_clock('diag_direct')
     !
     ! Setup global G-vector mapping for this k-point
     !
-    CALL diag_dense_setup_gmap(npw, ik)
+    CALL diag_direct_setup_gmap(npw, ik)
     !
     ! Report memory requirements (full rows, local columns)
     !
@@ -607,7 +607,7 @@ CONTAINS
     ! Each processor builds H(ngk_g, npw) - full rows for local columns
     !
     ALLOCATE( hmat(ngk_g, npw), STAT=ierr )
-    IF ( ierr /= 0 ) CALL errore('diag_dense_run_k', 'H matrix allocation failed', ierr)
+    IF ( ierr /= 0 ) CALL errore('diag_direct_run_k', 'H matrix allocation failed', ierr)
     !
     ! Initialize matrices
     !
@@ -615,26 +615,26 @@ CONTAINS
     !
     ! Build Hamiltonian terms (full rows for local columns)
     !
-    CALL diag_dense_hamiltonian_kinetic(hmat, npw)
-    CALL diag_dense_hamiltonian_vloc(hmat, npw)
-    CALL diag_dense_hamiltonian_vnl(hmat, npw)
+    CALL diag_direct_hamiltonian_kinetic(hmat, npw)
+    CALL diag_direct_hamiltonian_vloc(hmat, npw)
+    CALL diag_direct_hamiltonian_vnl(hmat, npw)
     !
     ! Collect Hamiltonian columns from all processors to global matrix
     ! Each processor has hmat(ngk_g, npw) - full rows, local columns
     ! Need to gather to hmat_global(ngk_g, ngk_g) - full matrix
     !
     ALLOCATE(hmat_global(ngk_g, ngk_g), STAT=ierr)
-    IF ( ierr /= 0 ) CALL errore('diag_dense_run_k', 'hmat_global allocation failed', ierr)
+    IF ( ierr /= 0 ) CALL errore('diag_direct_run_k', 'hmat_global allocation failed', ierr)
     !
-    CALL diag_dense_collect_matrices(hmat, npw, hmat_global)
+    CALL diag_direct_collect_matrices(hmat, npw, hmat_global)
     !
     ! Verification against h_psi
     !
-    CALL diag_dense_test_hamiltonian(hmat_global, npw)
+    CALL diag_direct_test_hamiltonian(hmat_global, npw)
     !
     ! Diagonalize global matrix and distribute eigenvectors
     !
-    CALL diag_dense_diag(hmat_global, nbnd, npw, evc, et_k, notconv)
+    CALL diag_direct_diag(hmat_global, nbnd, npw, evc, et_k, notconv)
     !
     ! Deallocate
     !
@@ -643,23 +643,23 @@ CONTAINS
     DEALLOCATE(igk_l2g_kdip)
     DEALLOCATE(mill_k_global)
     !
-    CALL stop_clock('diag_dense')
+    CALL stop_clock('diag_direct')
     !
     ! Uncomment for profiling:
     !
     ! WRITE(stdout,'(/,5X,"Timing breakdown for dense H construction:")')
-    ! CALL print_clock('dense_kin')
-    ! CALL print_clock('dense_vloc')
-    ! CALL print_clock('dense_vnl')
-    ! CALL print_clock('dense_collect')
-    ! CALL print_clock('dense_check')
-    ! CALL print_clock('dense_diag')
-    ! CALL print_clock('diag_dense')
+    ! CALL print_clock('direct_kin')
+    ! CALL print_clock('direct_vloc')
+    ! CALL print_clock('direct_vnl')
+    ! CALL print_clock('direct_collect')
+    ! CALL print_clock('direct_check')
+    ! CALL print_clock('direct_diag')
+    ! CALL print_clock('diag_direct')
     !
-  END SUBROUTINE diag_dense_run_k
+  END SUBROUTINE diag_direct_run_k
   !
   !-----------------------------------------------------------------------
-  SUBROUTINE diag_dense_test_hamiltonian(h, npw)
+  SUBROUTINE diag_direct_test_hamiltonian(h, npw)
     !-----------------------------------------------------------------------
     !! Verify constructed H matrix by comparing H*v with h_psi(v)
     !! for a random test vector v
@@ -695,7 +695,7 @@ CONTAINS
     EXTERNAL :: h_psi
     ! subroutine h_psi(lda,n,m,psi,hpsi)
     !
-    CALL start_clock('dense_check')
+    CALL start_clock('direct_check')
     !
     ! Allocate arrays
     !
@@ -760,13 +760,13 @@ CONTAINS
     !
     DEALLOCATE( v, v_global, hv_mat_global, hv_hpsi_global, rand_vec, hv_hpsi )
     !
-    CALL stop_clock('dense_check')
+    CALL stop_clock('direct_check')
     !
-  END SUBROUTINE diag_dense_test_hamiltonian
+  END SUBROUTINE diag_direct_test_hamiltonian
   !-----------------------------------------------------------------------
   !
   !-----------------------------------------------------------------------
-  SUBROUTINE diag_dense_collect_matrices(hmat, npw, hmat_global)
+  SUBROUTINE diag_direct_collect_matrices(hmat, npw, hmat_global)
     !-----------------------------------------------------------------------
     !! Collect local matrix columns to global matrix
     !!
@@ -790,7 +790,7 @@ CONTAINS
     !
     INTEGER :: ig, ig_global
     !
-    CALL start_clock('dense_collect')
+    CALL start_clock('direct_collect')
     !
     ! Initialize global matrix to zero
     hmat_global(:,:) = (0.0_DP, 0.0_DP)
@@ -806,13 +806,13 @@ CONTAINS
     !
     ! Note: No S matrix needed for NCPP (S=I handled by diagh eigensolver)
     !
-    CALL stop_clock('dense_collect')
+    CALL stop_clock('direct_collect')
     !
-  END SUBROUTINE diag_dense_collect_matrices
+  END SUBROUTINE diag_direct_collect_matrices
   !-----------------------------------------------------------------------
   !
   !-----------------------------------------------------------------------
-  SUBROUTINE diag_dense_setup_gmap(npw, ik)
+  SUBROUTINE diag_direct_setup_gmap(npw, ik)
      !-----------------------------------------------------------------------
      !! Setup the mapping of the local to global list of k+G vectors.
      !! ngk_g is the size of the Hamiltonian at the given k point.
@@ -881,7 +881,7 @@ CONTAINS
      ENDDO
      CALL mp_sum(mill_k_global, intra_bgrp_comm)
      !
-  END SUBROUTINE diag_dense_setup_gmap
+  END SUBROUTINE diag_direct_setup_gmap
   !-----------------------------------------------------------------------
   !
-END MODULE diag_dense
+END MODULE diag_direct

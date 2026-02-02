@@ -66,7 +66,7 @@ SUBROUTINE setup()
   USE control_flags,      ONLY : tr2, ethr, lscf, lbfgs, lmd, david, lecrpa,  &
                                  isolve, niter, noinv, ts_vdw, tstress, &
                                  lbands, gamma_only, restart, use_spinflip, symm_by_label
-  USE diag_dense,         ONLY : diag_dense_check_compat
+  USE diag_direct,        ONLY : diag_direct_check_compat
   USE cellmd,             ONLY : calc
   USE upf_ions,           ONLY : n_atom_wfc
   USE uspp_param,         ONLY : upf
@@ -467,7 +467,7 @@ SUBROUTINE setup()
   !
   ! ... Check compatibility for dense H direct diagonalization
   !
-  IF ( isolve == 5 ) CALL diag_dense_check_compat()
+  IF ( isolve == 5 ) CALL diag_direct_check_compat()
   !
   ! ... Set the units in real and reciprocal space
   !
