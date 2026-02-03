@@ -22,6 +22,7 @@ MODULE exx
   !
   USE control_flags,        ONLY : gamma_only, tqr, use_gpu, many_fft
   USE fft_types,            ONLY : fft_type_descriptor
+  USE exx_base,             ONLY : exx_bgrp_standard
   !
   IMPLICIT NONE
   !
@@ -189,7 +190,7 @@ MODULE exx
     !
     ! ... set up fft descriptors, including parallel stuff: sticks, planes, etc.
     !
-    IF (negrp == 1) THEN
+    IF (negrp == 1 .or. exx_bgrp_standard) THEN
        !
        ! ... no band parallelization: exx grid is a subgrid of general grid
        !
@@ -477,8 +478,10 @@ MODULE exx
                                            &implemented', 1 )
     ENDIF 
     !
-    !$acc update device(evc)
-    CALL transform_evc_to_exx( 2 )
+    if(.not.exx_bgrp_standard) then
+      !$acc update device(evc)
+      CALL transform_evc_to_exx( 2 )
+    endif
     !
     CALL exx_fft_create()
     !
@@ -490,6 +493,7 @@ MODULE exx
     ! Note that nxxs is not the same as nrxxs in parallel case
     nxxs = dfftt%nr1x * dfftt%nr2x * dfftt%nr3x
     nrxxs = dfftt%nnr
+    !
 #if defined(__MPI)
     IF (noncolin) THEN
        ALLOCATE( psic_all_nc(nxxs,npol), temppsic_all_nc(nxxs,npol) )
