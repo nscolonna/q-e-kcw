@@ -252,7 +252,6 @@ MODULE exx
     !
   END SUBROUTINE exx_fft_create
   !
-  !
   !------------------------------------------------------------------------
   SUBROUTINE exx_gvec_reinit( at_old )
     !----------------------------------------------------------------------
@@ -409,44 +408,6 @@ MODULE exx
     INTEGER :: ibnd_exx, evc_offset
     !
     CALL start_clock ('exxinit')
-    IF ( Doloc ) THEN
-        WRITE(stdout,'(/,5X,"Using localization algorithm with threshold: ",&
-                & D10.2)') local_thr
-        ! IF (.NOT.gamma_only) CALL errore('exxinit','SCDM with K-points NYI',1)
-        IF (okvan .OR. okpaw) CALL errore( 'exxinit','SCDM with USPP/PAW not &
-                                           &implemented', 1 )
-    ENDIF 
-    IF ( use_ace ) &
-        WRITE(stdout,'(/,5X,"Using ACE for calculation of exact exchange")') 
-    !
-    !$acc update device(evc)
-    CALL transform_evc_to_exx( 2 )
-    !
-    ! ... prepare the symmetry matrices for the spin part
-    !
-    IF (noncolin) THEN
-       DO isym = 1, nsym
-          CALL find_u( sr(:,:,isym), d_spin(:,:,isym) )
-       ENDDO
-    ENDIF
-    !
-    CALL exx_fft_create()
-    !
-    ! Note that nxxs is not the same as nrxxs in parallel case
-    nxxs = dfftt%nr1x * dfftt%nr2x * dfftt%nr3x
-    nrxxs = dfftt%nnr
-#if defined(__MPI)
-    IF (noncolin) THEN
-       ALLOCATE( psic_all_nc(nxxs,npol), temppsic_all_nc(nxxs,npol) )
-    ELSEIF ( .NOT. gamma_only ) THEN
-       ALLOCATE( psic_all(nxxs), temppsic_all(nxxs) )
-    ENDIF
-#endif
-    IF (noncolin) THEN
-       ALLOCATE( temppsic_nc(nrxxs, npol), psic_nc(nrxxs, npol) )
-    ELSEIF ( .NOT. gamma_only ) THEN
-       ALLOCATE( temppsic(nrxxs) )
-    ENDIF
     !
     IF (.NOT.exx_is_active()) THEN
        !
@@ -458,8 +419,6 @@ MODULE exx
        CALL start_exx()
     ENDIF
     !
-    IF (.NOT. gamma_only) CALL exx_set_symm( dfftt%nr1,  dfftt%nr2,  dfftt%nr3, &
-                                             dfftt%nr1x, dfftt%nr2x, dfftt%nr3x )
     ! set occupations of wavefunctions used in the calculation of exchange term
     IF (.NOT. ALLOCATED(x_occupation)) ALLOCATE( x_occupation(nbnd,nkstot) )
     IF( .NOT. ALLOCATED(x_occupation_d) .and. use_gpu) &
@@ -489,6 +448,9 @@ MODULE exx
        ENDDO
     ENDDO
     !
+    IF ( use_ace ) &
+        WRITE(stdout,'(/,5X,"Using ACE for calculation of exact exchange")') 
+    !
     IF(use_ace) THEN 
       IF (present(nbndproj_)) THEN 
        nbndproj = nbndproj_
@@ -498,6 +460,50 @@ MODULE exx
       WRITE(stdout, '(5X,A,2(I5,A))') "ACE projected onto ", nbndproj, " (nbndproj) and applied to ", &
                                                                               nbnd, " (nbnd) bands"
     END IF 
+    !
+    ! ... prepare the symmetry matrices for the spin part
+    !
+    IF (noncolin) THEN
+       DO isym = 1, nsym
+          CALL find_u( sr(:,:,isym), d_spin(:,:,isym) )
+       ENDDO
+    ENDIF
+    !
+    IF ( Doloc ) THEN
+        WRITE(stdout,'(/,5X,"Using localization algorithm with threshold: ",&
+                & D10.2)') local_thr
+        ! IF (.NOT.gamma_only) CALL errore('exxinit','SCDM with K-points NYI',1)
+        IF (okvan .OR. okpaw) CALL errore( 'exxinit','SCDM with USPP/PAW not &
+                                           &implemented', 1 )
+    ENDIF 
+    !
+    !$acc update device(evc)
+    CALL transform_evc_to_exx( 2 )
+    !
+    CALL exx_fft_create()
+    !
+    IF (.NOT. gamma_only) CALL exx_set_symm( dfftt%nr1,  dfftt%nr2,  dfftt%nr3, &
+                                             dfftt%nr1x, dfftt%nr2x, dfftt%nr3x )
+    !
+!civn: will split from here
+    !
+    ! Note that nxxs is not the same as nrxxs in parallel case
+    nxxs = dfftt%nr1x * dfftt%nr2x * dfftt%nr3x
+    nrxxs = dfftt%nnr
+#if defined(__MPI)
+    IF (noncolin) THEN
+       ALLOCATE( psic_all_nc(nxxs,npol), temppsic_all_nc(nxxs,npol) )
+    ELSEIF ( .NOT. gamma_only ) THEN
+       ALLOCATE( psic_all(nxxs), temppsic_all(nxxs) )
+    ENDIF
+#endif
+    IF (noncolin) THEN
+       ALLOCATE( temppsic_nc(nrxxs, npol), psic_nc(nrxxs, npol) )
+    ELSEIF ( .NOT. gamma_only ) THEN
+       ALLOCATE( temppsic(nrxxs) )
+    ENDIF
+    !
+    ALLOCATE( psic_exx(nrxxs) )
     !
     CALL divide( inter_egrp_comm, x_nbnd_occ, ibnd_start, ibnd_end )
     CALL init_index_over_band( inter_egrp_comm, nbnd, nbnd )
