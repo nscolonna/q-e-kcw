@@ -507,8 +507,6 @@ MODULE exx
        ALLOCATE( temppsic(nrxxs) )
     ENDIF
     !
-    ALLOCATE( psic_exx(nrxxs) )
-    !
     CALL divide( inter_egrp_comm, x_nbnd_occ, ibnd_start, ibnd_end )
     CALL init_index_over_band( inter_egrp_comm, nbnd, nbnd )
     !
