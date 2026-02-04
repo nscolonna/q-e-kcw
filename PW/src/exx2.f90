@@ -46,7 +46,7 @@ MODULE exx2
     USE exx_base,             ONLY : nkqs, xkq_collect, index_xk, index_sym,  &
                                      rir, working_pool
     USE exx_band,             ONLY : change_data_structure, nwordwfc_exx, &
-                                     igk_exx, evc_exx
+                                     igk_exx, evc_exx, transform_evc_to_exx
 #if defined(__CUDA)
     USE device_memcpy_m,      ONLY : dev_memset
     USE device_fbuff_m,       ONLY : dev_buf
@@ -83,6 +83,9 @@ MODULE exx2
     INTEGER :: ibnd_exx, evc_offset
     !
     CALL start_clock ('exxinit2')
+    !
+    !$acc update device(evc)
+    CALL transform_evc_to_exx( 2 )
     !
     ! Note that nxxs is not the same as nrxxs in parallel case
     nxxs = dfftt%nr1x * dfftt%nr2x * dfftt%nr3x

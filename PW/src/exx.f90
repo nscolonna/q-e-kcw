@@ -23,8 +23,6 @@ MODULE exx
   USE control_flags,        ONLY : gamma_only, tqr, use_gpu, many_fft
   USE exx_base,             ONLY : exx_bgrp_standard, dfftt, exxbuff , exxbuff_d, npwt, x_nbnd_occ, &
                                    ibnd_start, ibnd_end
-!civn: try to remove this
-use exx_band,  only : transform_evc_to_exx
   !
   IMPLICIT NONE
   !
@@ -416,11 +414,6 @@ use exx_band,  only : transform_evc_to_exx
         IF (okvan .OR. okpaw) CALL errore( 'exxinit','SCDM with USPP/PAW not &
                                            &implemented', 1 )
     ENDIF 
-    !
-    if(.not.exx_bgrp_standard) then
-      !$acc update device(evc)
-      CALL transform_evc_to_exx( 2 )
-    endif
     !
     CALL exx_fft_create()
     !
