@@ -1,6 +1,6 @@
 # Check compiler version
-if(CMAKE_Fortran_COMPILER_VERSION VERSION_LESS 4.9)
-  message(FATAL_ERROR "Requires GCC 4.9 or higher ")
+if(CMAKE_Fortran_COMPILER_VERSION VERSION_LESS 9.0)
+  message(FATAL_ERROR "Requires GCC 9.0 or higher ")
 endif()
 
 if(CMAKE_Fortran_COMPILER_VERSION VERSION_GREATER_EQUAL 10.0)
