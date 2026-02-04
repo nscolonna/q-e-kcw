@@ -104,6 +104,31 @@ MODULE exx_base
   LOGICAL :: exx_bgrp_standard = .false.
   !! a logical flag to quickly distiguish bgrp types in EXX
   !
+  TYPE(fft_type_descriptor) :: dfftt 
+  !
+  COMPLEX(DP), ALLOCATABLE :: exxbuff(:,:,:)
+  COMPLEX(DP), ALLOCATABLE :: exxbuff_d(:,:,:)
+  !! Buffers: temporary (complex) buffer for wfc storage
+#if defined(__CUDA)
+  attributes(DEVICE) :: exxbuff_d
+#endif
+  !
+#if defined(__USE_INTEL_HBM_DIRECTIVES)
+!DIR$ ATTRIBUTES FASTMEM :: exxbuff
+#elif defined(__USE_CRAY_HBM_DIRECTIVES)
+!DIR$ memory(bandwidth) exxbuff
+#endif
+  !
+  INTEGER :: npwt
+  !! number of plane waves in custom grid (Gamma-only)
+  !
+  INTEGER :: x_nbnd_occ
+  !! number of bands of auxiliary functions with at least 
+  !
+  INTEGER :: ibnd_start = 0
+  !! starting band index used in bgrp parallelization
+  INTEGER :: ibnd_end = 0
+  !! ending band index used in bgrp parallelization
  CONTAINS
   !
   !------------------------------------------------------------------------
