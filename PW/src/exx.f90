@@ -22,7 +22,7 @@ MODULE exx
   !
   USE control_flags,        ONLY : gamma_only, tqr, use_gpu, many_fft
   USE exx_base,             ONLY : exx_bgrp_standard, dfftt, exxbuff , exxbuff_d, npwt, x_nbnd_occ, &
-                                   ibnd_start, ibnd_end
+                                   ibnd_start, ibnd_end, gt, ggt, gcutmt, gkcut, gstart_t, ngmt_g
   !
   IMPLICIT NONE
   !
@@ -87,14 +87,6 @@ MODULE exx
   ! ... custom fft grid and related G-vectors
   !
   LOGICAL :: exx_fft_initialized = .FALSE.
-  REAL(kind=DP), DIMENSION(:), POINTER :: ggt => null()
-  !! G-vectors in custom gri
-  REAL(kind=DP), DIMENSION(:,:),POINTER :: gt => null()
-  !! G-vectors in custom grid
-  INTEGER :: gstart_t
-  !! gstart_t=2 if ggt(1)=0, =1 otherwise
-  INTEGER :: ngmt_g
-  !! Total number of G-vectors in custom grid
   REAL(DP)  :: ecutfock
   !! energy cutoff for custom grid
   !
@@ -112,11 +104,11 @@ MODULE exx
     USE gvecw,                ONLY : ecutwfc
     USE gvect,                ONLY : ecutrho, ngm, g, gg, gstart, mill
     USE cell_base,            ONLY : at, bg, tpiba2
-    USE recvec_subs,          ONLY : ggen, ggens
+    USE recvec_subs,          ONLY : ggens
     USE fft_base,             ONLY : smap
     USE fft_types,            ONLY : fft_type_init
     USE symm_base,            ONLY : fft_fact
-    USE mp_exx,               ONLY : nproc_egrp, negrp, intra_egrp_comm
+    USE mp_exx,               ONLY : negrp, intra_egrp_comm
     USE mp_bands,             ONLY : nproc_bgrp, intra_bgrp_comm, nyfft
     !
     USE klist,                ONLY : nks, xk
@@ -125,17 +117,16 @@ MODULE exx
     !
     USE control_flags,        ONLY : tqr
     USE realus,               ONLY : qpointlist, tabxx, tabp
-    USE exx_band,             ONLY : smap_exx
     USE command_line_options, ONLY : nmany_, pencil_decomposition_
+    !
+    USE exx2,                 ONLY : set_dfftt_grid2
     !
     IMPLICIT NONE
     !
     ! ... local variables
     !
     INTEGER :: ik, ngmt
-    INTEGER, ALLOCATABLE :: ig_l2gt(:), millt(:,:)
     INTEGER, EXTERNAL :: n_plane_waves
-    REAL(DP) :: gkcut, gcutmt
     LOGICAL :: lpara
     !
     IF ( exx_fft_initialized ) RETURN
@@ -186,27 +177,8 @@ MODULE exx
        !
     ELSE
        !
-       WRITE( 6, "(5X,'Exchange parallelized over bands (',i4,' band groups)')" ) &
-              negrp
-       lpara = ( nproc_egrp > 1 )
-       CALL fft_type_init( dfftt, smap_exx, "rho", gamma_only, lpara,     &
-                           intra_egrp_comm, at, bg, gcutmt, gcutmt/gkcut, &
-                           fft_fact=fft_fact, nyfft=nyfft, nmany=nmany_,  &
-                           use_pd=pencil_decomposition_ )
-       ngmt = dfftt%ngm
-       ngmt_g = ngmt
-       CALL mp_sum( ngmt_g, intra_egrp_comm )
-       ALLOCATE( gt(3,dfftt%ngm) )
-       ALLOCATE( ggt(dfftt%ngm)  )
-       ALLOCATE( millt(3,dfftt%ngm) )
-       ALLOCATE( ig_l2gt(dfftt%ngm) )
-       !
-       CALL ggen( dfftt, gamma_only, at, bg, gcutmt, ngmt_g, ngmt, &
-                  gt, ggt, millt, ig_l2gt, gstart_t )
-       !
-       DEALLOCATE( ig_l2gt )
-       DEALLOCATE( millt )
-       npwt = n_plane_waves( ecutwfc/tpiba2, nks, xk, gt, ngmt )
+       ! initialize dfftt grid for massive EXX band parallelism
+       Call set_dfftt_grid2( )
        !
     ENDIF
     ! define clock labels (this enables the corresponding fft too)

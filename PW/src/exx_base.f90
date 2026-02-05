@@ -129,6 +129,16 @@ MODULE exx_base
   !! starting band index used in bgrp parallelization
   INTEGER :: ibnd_end = 0
   !! ending band index used in bgrp parallelization
+  REAL(kind=DP), DIMENSION(:,:),POINTER :: gt => null()
+  !! G-vectors in custom grid
+  REAL(kind=DP), DIMENSION(:), POINTER :: ggt => null()
+  !! G-vectors in custom gri
+  REAL(DP) :: gcutmt, gkcut
+  INTEGER :: gstart_t
+  !! gstart_t=2 if ggt(1)=0, =1 otherwise
+  INTEGER :: ngmt_g
+  !! Total number of G-vectors in custom grid
+  !
  CONTAINS
   !
   !------------------------------------------------------------------------

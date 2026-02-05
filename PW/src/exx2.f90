@@ -10,15 +10,63 @@ MODULE exx2
   USE kinds,                ONLY : DP
   USE control_flags,        ONLY : gamma_only, use_gpu
   USE exx_base,             ONLY : dfftt , exxbuff, exxbuff_d, npwt, x_nbnd_occ, &
-                                   ibnd_start, ibnd_end
+                                   ibnd_start, ibnd_end, gt, ggt, gcutmt, gkcut, gstart_t, ngmt_g
   USE noncollin_module,     ONLY : noncolin, npol
+  USE cell_base,            ONLY : at, bg, tpiba2
+  USE gvecw,                ONLY : ecutwfc
+  USE symm_base,            ONLY : fft_fact
+  USE mp_exx,               ONLY : negrp, inter_egrp_comm, intra_egrp_comm, nproc_egrp
+  USE klist,                ONLY : nks, xk
+  USE mp,                   ONLY : mp_sum
   !
   INTEGER :: ibnd_buff_start
   !! starting buffer index used in bgrp parallelization
   INTEGER :: ibnd_buff_end
   !! ending buffer index used in bgrp parallelization
+  INTEGER, ALLOCATABLE :: ig_l2gt(:), millt(:,:)
   !
  CONTAINS
+  !
+  !------------------------------------------------------------------------
+  SUBROUTINE set_dfftt_grid2( )
+    !------------------------------------------------------------------------
+    USE exx_band,             ONLY : smap_exx
+    USE command_line_options, ONLY : nmany_, pencil_decomposition_
+    USE mp_bands,             ONLY : nyfft
+    USE symm_base,            ONLY : fft_fact
+    USE fft_types,            ONLY : fft_type_init
+    USE recvec_subs,          ONLY : ggen
+    !
+    IMPLICIT NONE
+       LOGICAL :: lpara
+       INTEGER :: ngmt
+    INTEGER, EXTERNAL :: n_plane_waves
+    !
+    WRITE( 6, "(5X,'Exchange parallelized over bands (',i4,' band groups)')" ) &
+           negrp
+    lpara = ( nproc_egrp > 1 )
+    CALL fft_type_init( dfftt, smap_exx, "rho", gamma_only, lpara,     &
+                        intra_egrp_comm, at, bg, gcutmt, gcutmt/gkcut, &
+                        fft_fact=fft_fact, nyfft=nyfft, nmany=nmany_,  &
+                        use_pd=pencil_decomposition_ )
+    ngmt = dfftt%ngm
+    ngmt_g = ngmt
+    CALL mp_sum( ngmt_g, intra_egrp_comm )
+    ALLOCATE( gt(3,dfftt%ngm) )
+    ALLOCATE( ggt(dfftt%ngm)  )
+    ALLOCATE( millt(3,dfftt%ngm) )
+    ALLOCATE( ig_l2gt(dfftt%ngm) )
+    !
+    CALL ggen( dfftt, gamma_only, at, bg, gcutmt, ngmt_g, ngmt, &
+               gt, ggt, millt, ig_l2gt, gstart_t )
+    !
+    DEALLOCATE( ig_l2gt )
+    DEALLOCATE( millt )
+    npwt = n_plane_waves( ecutwfc/tpiba2, nks, xk, gt, ngmt )
+    !
+    RETURN
+    !
+  END SUBROUTINE set_dfftt_grid2
   !
   !------------------------------------------------------------------------
   SUBROUTINE exxinit2( )
@@ -424,6 +472,8 @@ MODULE exx2
     CALL change_data_structure( .FALSE. )
     !
     CALL stop_clock( 'exxinit2' )
+    !
+    RETURN
     !
   END SUBROUTINE exxinit2
   !
