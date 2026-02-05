@@ -58,6 +58,9 @@ MODULE exx_base
   ! ... Internal:
   LOGICAL :: exx_grid_initialized = .FALSE.
   !
+  REAL(DP):: exxalfa=0._DP
+  !! the parameter multiplying the exact-exchange part
+  !
   ! ... variables to deal with Coulomb divergence
   !     and related issues
   REAL(DP) :: eps  = 1.d-6
@@ -122,8 +125,18 @@ MODULE exx_base
   INTEGER :: npwt
   !! number of plane waves in custom grid (Gamma-only)
   !
+  REAL(DP), ALLOCATABLE :: x_occupation(:,:)
+  !! the weights of auxiliary functions in the density matrix
+  !! GPU duplicated data
+  REAL(DP), ALLOCATABLE :: x_occupation_d(:,:)
+#if defined(__CUDA)
+  attributes(DEVICE) :: x_occupation_d
+#endif
   INTEGER :: x_nbnd_occ
   !! number of bands of auxiliary functions with at least 
+  !! some x_occupation > eps_occ
+  REAL(DP), PARAMETER :: eps_occ = 1.d-8
+  !! occupation threshold
   !
   INTEGER :: ibnd_start = 0
   !! starting band index used in bgrp parallelization
