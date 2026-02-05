@@ -481,7 +481,7 @@ MODULE exx2
   END SUBROUTINE exxinit2
   !
   !-----------------------------------------------------------------------
-  SUBROUTINE vexx_gamma( lda, n, m, psi, hpsi, becpsi )
+  SUBROUTINE vexx2_gamma( lda, n, m, psi, hpsi, becpsi )
     !-----------------------------------------------------------------------
     !! Gamma-specific version of vexx.
     !
@@ -830,10 +830,10 @@ MODULE exx2
     DEALLOCATE( vc )
     IF (okvan) DEALLOCATE( deexx )
     !
-  END SUBROUTINE vexx_gamma
+  END SUBROUTINE vexx2_gamma
   !
   !-----------------------------------------------------------------------
-  SUBROUTINE vexx_gamma_gpu(lda, n, m, psi, hpsi, becpsi)
+  SUBROUTINE vexx2_gamma_gpu(lda, n, m, psi, hpsi, becpsi)
   !-----------------------------------------------------------------------
     !
     ! ... Gamma-specific version of vexx
@@ -1241,12 +1241,11 @@ MODULE exx2
     IF(okvan) DEALLOCATE(deexx)
     !
     !-----------------------------------------------------------------------
-  END SUBROUTINE vexx_gamma_gpu
+  END SUBROUTINE vexx2_gamma_gpu
   !-----------------------------------------------------------------------
   !
-  !
   !-----------------------------------------------------------------------
-  SUBROUTINE vexx_k( lda, n, m, psi, hpsi, becpsi )
+  SUBROUTINE vexx2_k( lda, n, m, psi, hpsi, becpsi )
     !-----------------------------------------------------------------------
     !! Generic, k-point version of vexx.
     !
@@ -1709,10 +1708,10 @@ MODULE exx2
     DEALLOCATE( fac, facb )
     IF (okvan) DEALLOCATE( deexx )
     !
-  END SUBROUTINE vexx_k
+  END SUBROUTINE vexx2_k
   !
   !-----------------------------------------------------------------------
-  SUBROUTINE vexx_k_gpu(lda, n, m, psi, hpsi, becpsi)
+  SUBROUTINE vexx2_k_gpu(lda, n, m, psi, hpsi, becpsi)
   !-----------------------------------------------------------------------
     !
     ! ... generic, k-point version of vexx
@@ -2198,6 +2197,6 @@ end associate
     CALL stop_clock( 'vexx_k_fin' )
     !
     !------------------------------------------------------------------------
-  END SUBROUTINE vexx_k_gpu
+  END SUBROUTINE vexx2_k_gpu
   !
 END MODULE exx2
