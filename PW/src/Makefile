@@ -82,6 +82,7 @@ extfield.o \
 exx_base.o \
 exx_band.o \
 exx.o \
+exx1.o \
 exx2.o \
 fcp_capacitance.o \
 fcp_dyn_calcavg.o \

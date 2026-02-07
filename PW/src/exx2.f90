@@ -10,8 +10,9 @@ MODULE exx2
   USE kinds,                ONLY : DP
   USE control_flags,        ONLY : gamma_only, use_gpu, many_fft, tqr
   USE exx_base,             ONLY : dfftt , exxbuff, exxbuff_d, npwt, x_nbnd_occ, &
-                                   ibnd_start, ibnd_end, gt, ggt, gcutmt, gkcut, gstart_t, ngmt_g, &
-                                   eps_occ, exxalfa, x_occupation, x_occupation_d
+                                   gt, ggt, gcutmt, gkcut, gstart_t, ngmt_g, &
+                                   eps_occ, exxalfa, x_occupation, x_occupation_d, &
+                                   ibnd_start, ibnd_end, ibnd_buff_start, ibnd_buff_end
   USE noncollin_module,     ONLY : noncolin, npol
   USE cell_base,            ONLY : at, bg, tpiba2
   USE gvecw,                ONLY : ecutwfc
@@ -20,10 +21,6 @@ MODULE exx2
   USE klist,                ONLY : nks, xk
   USE mp,                   ONLY : mp_sum
   !
-  INTEGER :: ibnd_buff_start
-  !! starting buffer index used in bgrp parallelization
-  INTEGER :: ibnd_buff_end
-  !! ending buffer index used in bgrp parallelization
   INTEGER, ALLOCATABLE :: ig_l2gt(:), millt(:,:)
   !
  CONTAINS
@@ -479,6 +476,70 @@ MODULE exx2
     RETURN
     !
   END SUBROUTINE exxinit2
+  !
+  !-----------------------------------------------------------------------
+  SUBROUTINE vexx2( lda, n, m, psi, hpsi, becpsi )
+    !-----------------------------------------------------------------------
+    !! Wrapper routine computing V_x\psi, V_x = exchange potential. 
+    !! Calls generic version vexx_k or Gamma-specific one vexx_gamma.
+    !
+    USE becmod,         ONLY : bec_type
+    USE mp_exx,         ONLY : negrp, inter_egrp_comm, init_index_over_band
+    USE wvfct,          ONLY : nbnd
+    USE exx_band,       ONLY : transform_psi_to_exx, transform_hpsi_to_local, &
+                               psi_exx, hpsi_exx
+    !
+    IMPLICIT NONE
+    !
+    INTEGER :: lda
+    !! input: leading dimension of arrays psi and hpsi
+    INTEGER :: n
+    !! input: true dimension of psi and hpsi
+    INTEGER :: m
+    !! input: number of states psi
+    COMPLEX(DP) :: psi(lda*npol,m)
+    !! input: m wavefunctions
+    COMPLEX(DP) :: hpsi(lda*npol,m)
+    !! output: V_x*psi
+    TYPE(bec_type), OPTIONAL :: becpsi
+    !! input: <beta|psi>, optional but needed for US and PAW case
+    !
+    IF (negrp > 1) THEN
+       CALL init_index_over_band( inter_egrp_comm, nbnd, m )
+       !
+       ! ... transform psi to the EXX data structure
+       CALL transform_psi_to_exx( lda, n, m, psi )
+    ENDIF
+    !
+    ! ... calculate the EXX contribution to hpsi
+    !
+    IF ( gamma_only ) THEN
+       IF (negrp == 1)THEN
+          IF (.not. use_gpu) CALL vexx2_gamma( lda, n, m, psi, hpsi, becpsi )
+          IF (      use_gpu) CALL vexx2_gamma_gpu( lda, n, m, psi, hpsi, becpsi )
+       ELSE
+          IF (.not. use_gpu) CALL vexx2_gamma( lda, n, m, psi_exx, hpsi_exx, becpsi )
+          IF (      use_gpu) CALL vexx2_gamma_gpu( lda, n, m, psi_exx, hpsi_exx, becpsi )
+       ENDIF
+    ELSE
+       IF (negrp == 1)THEN
+          IF (.not. use_gpu) CALL vexx2_k( lda, n, m, psi, hpsi, becpsi )
+          IF (      use_gpu) CALL vexx2_k_gpu( lda, n, m, psi, hpsi, becpsi )
+       ELSE
+          IF (.not. use_gpu) CALL vexx2_k( lda, n, m, psi_exx, hpsi_exx, becpsi )
+          IF (      use_gpu) CALL vexx2_k_gpu( lda, n, m, psi_exx, hpsi_exx, becpsi )
+       ENDIF
+    ENDIF
+    !
+    IF (negrp > 1) THEN
+       !
+       ! ... transform hpsi to the local data structure
+       !
+       CALL transform_hpsi_to_local(lda,n,m,hpsi)
+       !
+    ENDIF
+    !
+  END SUBROUTINE vexx2
   !
   !-----------------------------------------------------------------------
   SUBROUTINE vexx2_gamma( lda, n, m, psi, hpsi, becpsi )

@@ -23,20 +23,12 @@ MODULE exx
   USE control_flags,        ONLY : gamma_only, tqr, use_gpu, many_fft
   USE exx_base,             ONLY : exx_bgrp_standard, dfftt, exxbuff , exxbuff_d, npwt, x_nbnd_occ, &
                                    ibnd_start, ibnd_end, gt, ggt, gcutmt, gkcut, gstart_t, ngmt_g, &
-                                   eps_occ, exxalfa, x_occupation, x_occupation_d
+                                   eps_occ, exxalfa, x_occupation, x_occupation_d, &
+                                   locbuff, exxmat, locmat, nbndproj, local_thr
   !
   IMPLICIT NONE
   !
   SAVE
-  !
-  ! ... general purpose vars
-  !
-  REAL(DP), ALLOCATABLE :: locbuff(:,:,:)
-  !! temporary (real) buffer for wfc storage
-  REAL(DP), ALLOCATABLE :: locmat(:,:,:)
-  !! buffer for matrix of localization integrals
-  REAL(DP), ALLOCATABLE :: exxmat(:,:,:,:)
-  !! buffer for matrix of localization integrals (K)
   !
   !
   LOGICAL :: use_ace 
@@ -48,17 +40,8 @@ MODULE exx
 #if defined(__CUDA)
   ATTRIBUTES(DEVICE) :: xi_d
 #endif
-  COMPLEX(DP), ALLOCATABLE :: evc0(:,:,:)
-  !! old wfc (G-space) needed to compute fock3
-  INTEGER :: nbndproj
-  !! 
   LOGICAL :: domat
   !! 
-  REAL(DP)::  local_thr 
-  !! threshold for Lin Lin's SCDM localized orbitals: discard 
-  !! contribution to V_x if overlap between localized orbitals
-  !! is smaller than "local_thr".
-  !
   ! ... energy related variables
   !
   REAL(DP) :: fock0 = 0.0_DP
@@ -232,7 +215,7 @@ MODULE exx
     USE becmod,    ONLY : deallocate_bec_type, is_allocated_bec_type, bec_type
     USE us_exx,    ONLY : becxx
     USE exx_base,  ONLY : xkq_collect, index_xkq, index_xk, index_sym, rir, &
-                          working_pool, exx_grid_initialized
+                          working_pool, exx_grid_initialized, evc0
     !
     IMPLICIT NONE
     !
@@ -289,6 +272,7 @@ MODULE exx
     USE paw_variables,        ONLY : okpaw
     USE exx_base,             ONLY : exx_set_symm, exxdiv, &
                                      erfc_scrlen, gau_scrlen, exx_divergence
+    USE exx1,                 ONLY : exxinit1
     USE exx2,                 ONLY : exxinit2
     !
     IMPLICIT NONE
@@ -316,6 +300,9 @@ MODULE exx
        !
        CALL start_exx()
     ENDIF
+    !
+    IF ( use_ace ) &
+        WRITE(stdout,'(/,5X,"Using ACE for calculation of exact exchange")') 
     !
     ! set occupations of wavefunctions used in the calculation of exchange term
     IF (.NOT. ALLOCATED(x_occupation)) ALLOCATE( x_occupation(nbnd,nkstot) )
@@ -380,8 +367,13 @@ MODULE exx
     IF (.NOT. gamma_only) CALL exx_set_symm( dfftt%nr1,  dfftt%nr2,  dfftt%nr3, &
                                              dfftt%nr1x, dfftt%nr2x, dfftt%nr3x )
     !
-    if(.not.exx_bgrp_standard) Call exxinit2()
-!civn add here exxinit1 for standard case
+    if(exx_bgrp_standard) then
+      ! prepare buffers for standard EXX scheme
+      Call exxinit1( DoLoc )
+    else 
+      ! prepare buffers for massive EXX scheme (pair parallelism, DFT data transposition)
+      Call exxinit2()
+    end if
     !
     CALL stop_clock( 'exxinit' )
     !
@@ -396,11 +388,9 @@ MODULE exx
     USE becmod,         ONLY : bec_type
     USE uspp,           ONLY : okvan
     USE paw_variables,  ONLY : okpaw
-    USE mp_exx,         ONLY : negrp, inter_egrp_comm, init_index_over_band
     USE wvfct,          ONLY : nbnd
-    USE exx_band,       ONLY : transform_psi_to_exx, transform_hpsi_to_local, &
-                               psi_exx, hpsi_exx
-    USE exx2,           ONLY : vexx2_k, vexx2_k_gpu, vexx2_gamma, vexx2_gamma_gpu
+    USE exx1,           ONLY : vexx_gamma, vexx_k
+    USE exx2,           ONLY : vexx2
     !
     IMPLICIT NONE
     !
@@ -417,46 +407,20 @@ MODULE exx
     TYPE(bec_type), OPTIONAL :: becpsi
     !! input: <beta|psi>, optional but needed for US and PAW case
     !
-    INTEGER :: i
-    !
     IF ((okvan.OR.okpaw) .AND. .NOT. PRESENT(becpsi)) &
        CALL errore( 'vexx','becpsi needed for US/PAW case', 1 )
+    !
     CALL start_clock( 'vexx' )
     !
-    IF (negrp > 1) THEN
-       CALL init_index_over_band( inter_egrp_comm, nbnd, m )
-       !
-       ! ... transform psi to the EXX data structure
-       CALL transform_psi_to_exx( lda, n, m, psi )
-    ENDIF
-    !
-    ! ... calculate the EXX contribution to hpsi
-    !
-    IF ( gamma_only ) THEN
-       IF (negrp == 1)THEN
-          IF (.not. use_gpu) CALL vexx2_gamma( lda, n, m, psi, hpsi, becpsi )
-          IF (      use_gpu) CALL vexx2_gamma_gpu( lda, n, m, psi, hpsi, becpsi )
-       ELSE
-          IF (.not. use_gpu) CALL vexx2_gamma( lda, n, m, psi_exx, hpsi_exx, becpsi )
-          IF (      use_gpu) CALL vexx2_gamma_gpu( lda, n, m, psi_exx, hpsi_exx, becpsi )
-       ENDIF
-    ELSE
-       IF (negrp == 1)THEN
-          IF (.not. use_gpu) CALL vexx2_k( lda, n, m, psi, hpsi, becpsi )
-          IF (      use_gpu) CALL vexx2_k_gpu( lda, n, m, psi, hpsi, becpsi )
-       ELSE
-          IF (.not. use_gpu) CALL vexx2_k( lda, n, m, psi_exx, hpsi_exx, becpsi )
-          IF (      use_gpu) CALL vexx2_k_gpu( lda, n, m, psi_exx, hpsi_exx, becpsi )
-       ENDIF
-    ENDIF
-    !
-    IF (negrp > 1) THEN
-       !
-       ! ... transform hpsi to the local data structure
-       !
-       CALL transform_hpsi_to_local(lda,n,m,hpsi)
-       !
-    ENDIF
+    if(exx_bgrp_standard) then
+       if (gamma_only ) then
+          Call vexx_gamma(lda, n, m, psi, hpsi, becpsi )
+       else
+          Call vexx_k(lda, n, m, psi, hpsi, becpsi )
+       end if 
+    else
+       Call vexx2(lda, n, m, psi, hpsi, becpsi )
+    end if 
     !
     CALL stop_clock( 'vexx' )
     !
@@ -640,6 +604,7 @@ MODULE exx
     INTEGER :: calbec_start, calbec_end
     INTEGER :: intra_bgrp_comm_
     INTEGER :: iegrp, wegrp
+    INTEGER :: ibnd_start
     !
     CALL init_index_over_band( inter_egrp_comm, nbnd, nbnd )
     !
@@ -1692,6 +1657,7 @@ MODULE exx
     USE becmod,         ONLY : bec_type
     USE lsda_mod,       ONLY : current_spin
     USE mp,             ONLY : mp_stop
+    USE exx_base,       ONLY : evc0
     !
     IMPLICIT NONE
     !
@@ -1975,6 +1941,7 @@ MODULE exx
     USE wvfct,                ONLY : current_k, npwx
     USE klist,                ONLY : wk
     USE noncollin_module,     ONLY : npol
+    USE exx_base,             ONLY : evc0
     !
     IMPLICIT NONE
     !

@@ -26,6 +26,17 @@ MODULE exx_base
   !
   SAVE
   !
+  ! ... general purpose vars
+  !
+  REAL(DP), ALLOCATABLE :: locbuff(:,:,:)
+  !! temporary (real) buffer for wfc storage
+  REAL(DP), ALLOCATABLE :: locmat(:,:,:)
+  !! buffer for matrix of localization integrals
+  REAL(DP), ALLOCATABLE :: exxmat(:,:,:,:)
+  !! buffer for matrix of localization integrals (K)
+  COMPLEX(DP), ALLOCATABLE :: evc0(:,:,:)
+  !! old wfc (G-space) needed to compute fock3
+  !
   ! ... variables defining the auxiliary k-point grid
   !     used in X BZ integration
   !
@@ -138,10 +149,6 @@ MODULE exx_base
   REAL(DP), PARAMETER :: eps_occ = 1.d-8
   !! occupation threshold
   !
-  INTEGER :: ibnd_start = 0
-  !! starting band index used in bgrp parallelization
-  INTEGER :: ibnd_end = 0
-  !! ending band index used in bgrp parallelization
   REAL(kind=DP), DIMENSION(:,:),POINTER :: gt => null()
   !! G-vectors in custom grid
   REAL(kind=DP), DIMENSION(:), POINTER :: ggt => null()
@@ -151,6 +158,21 @@ MODULE exx_base
   !! gstart_t=2 if ggt(1)=0, =1 otherwise
   INTEGER :: ngmt_g
   !! Total number of G-vectors in custom grid
+  !
+  INTEGER :: nbndproj
+  REAL(DP)::  local_thr 
+  !! threshold for Lin Lin's SCDM localized orbitals: discard 
+  !! contribution to V_x if overlap between localized orbitals
+  !! is smaller than "local_thr".
+  !! 
+  INTEGER :: ibnd_start = 0
+  !! starting band index used in bgrp parallelization
+  INTEGER :: ibnd_end = 0
+  !! ending band index used in bgrp parallelization
+  INTEGER :: ibnd_buff_start
+  !! starting buffer index used in bgrp parallelization
+  INTEGER :: ibnd_buff_end
+  !! ending buffer index used in bgrp parallelization
   !
  CONTAINS
   !
