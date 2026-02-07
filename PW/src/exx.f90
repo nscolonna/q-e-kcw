@@ -270,10 +270,12 @@ MODULE exx
                                      exx_is_active
     USE uspp,                 ONLY : okvan
     USE paw_variables,        ONLY : okpaw
-    USE exx_base,             ONLY : exx_set_symm, exxdiv, &
+    USE exx_base,             ONLY : nkqs, index_sym, index_xk, xkq_collect, exx_set_symm, exxdiv, &
                                      erfc_scrlen, gau_scrlen, exx_divergence
     USE exx1,                 ONLY : exxinit1
     USE exx2,                 ONLY : exxinit2
+    USE us_exx,               ONLY : rotate_becxx
+    USE paw_exx,              ONLY : PAW_init_fock_kernel
     !
     IMPLICIT NONE
     !
@@ -374,6 +376,16 @@ MODULE exx
       ! prepare buffers for massive EXX scheme (pair parallelism, DFT data transposition)
       Call exxinit2()
     end if
+    !
+    ! For US/PAW only: compute <beta_I|psi_j,k+q> for the entire 
+    ! de-symmetrized k+q grid by rotating the ones from the irreducible wedge
+    !
+    IF (okvan) CALL rotate_becxx( nkqs, index_xk, index_sym, xkq_collect )
+    !
+    ! Initialize 4-wavefunctions one-center Fock integrals
+    !    \int \psi_a(r)\phi_a(r)\phi_b(r')\psi_b(r')/|r-r'|
+    !
+    IF (okpaw) CALL PAW_init_fock_kernel()
     !
     CALL stop_clock( 'exxinit' )
     !

@@ -44,9 +44,7 @@ MODULE exx1
     USE scatter_mod,          ONLY : gather_grid, scatter_grid
     USE fft_interfaces,       ONLY : invfft
     USE uspp,                 ONLY : nkb, vkb, okvan
-    USE us_exx,               ONLY : rotate_becxx
     USE paw_variables,        ONLY : okpaw
-    USE paw_exx,              ONLY : PAW_init_fock_kernel
     USE mp_orthopools,        ONLY : intra_orthopool_comm
     USE exx_base,             ONLY : nkqs, index_sym,  &
                                      exx_set_symm, rir, working_pool, exxdiv, &
@@ -94,8 +92,6 @@ MODULE exx1
     !
     INTEGER :: h_ibnd
     INTEGER :: evc_offset
-    !
-    CALL start_clock ('exxinit')
     !
     IF ( Doloc ) THEN
         WRITE(stdout,'(/,5X,"Using localization algorithm with threshold: ",&
@@ -334,18 +330,6 @@ MODULE exx1
          CALL mp_bcast( exxbuff(:,:,ikq), working_pool(ikq), intra_orthopool_comm ) 
        ENDDO
     ENDIF
-    !
-    ! For US/PAW only: compute <beta_I|psi_j,k+q> for the entire 
-    ! de-symmetrized k+q grid by rotating the ones from the irreducible wedge
-    !
-    IF (okvan) CALL rotate_becxx( nkqs, index_xk, index_sym, xkq_collect )
-    !
-    ! Initialize 4-wavefunctions one-center Fock integrals
-    !    \int \psi_a(r)\phi_a(r)\phi_b(r')\psi_b(r')/|r-r'|
-    !
-    IF (okpaw) CALL PAW_init_fock_kernel()
-    !
-    CALL stop_clock( 'exxinit' )
     !
   END SUBROUTINE exxinit1
   !

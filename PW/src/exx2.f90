@@ -86,12 +86,8 @@ MODULE exx2
     USE mp,                   ONLY : mp_bcast
     USE scatter_mod,          ONLY : gather_grid, scatter_grid
     USE fft_interfaces,       ONLY : invfft
-    USE uspp,                 ONLY : okvan
-    USE us_exx,               ONLY : rotate_becxx
-    USE paw_variables,        ONLY : okpaw
-    USE paw_exx,              ONLY : PAW_init_fock_kernel
     USE mp_orthopools,        ONLY : intra_orthopool_comm
-    USE exx_base,             ONLY : nkqs, xkq_collect, index_xk, index_sym,  &
+    USE exx_base,             ONLY : nkqs, index_xk, index_sym,  &
                                      rir, working_pool
     USE exx_band,             ONLY : change_data_structure, nwordwfc_exx, &
                                      igk_exx, evc_exx, transform_evc_to_exx
@@ -129,8 +125,6 @@ MODULE exx2
     INTEGER, EXTERNAL :: global_kpoint_index
     INTEGER :: ibnd_start_new, ibnd_end_new, max_buff_bands_per_egrp
     INTEGER :: ibnd_exx, evc_offset
-    !
-    CALL start_clock ('exxinit2')
     !
     !$acc update device(evc)
     CALL transform_evc_to_exx( 2 )
@@ -459,19 +453,7 @@ MODULE exx2
        ENDDO
     ENDIF
     !
-    ! For US/PAW only: compute <beta_I|psi_j,k+q> for the entire 
-    ! de-symmetrized k+q grid by rotating the ones from the irreducible wedge
-    !
-    IF (okvan) CALL rotate_becxx( nkqs, index_xk, index_sym, xkq_collect )
-    !
-    ! Initialize 4-wavefunctions one-center Fock integrals
-    !    \int \psi_a(r)\phi_a(r)\phi_b(r')\psi_b(r')/|r-r'|
-    !
-    IF (okpaw) CALL PAW_init_fock_kernel()
-    !
     CALL change_data_structure( .FALSE. )
-    !
-    CALL stop_clock( 'exxinit2' )
     !
     RETURN
     !
