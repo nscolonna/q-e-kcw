@@ -194,6 +194,7 @@ MODULE exx1
           ENDIF
           ! 
           DO ibnd = ibnd_loop_start, ibnd_end, 2
+             h_ibnd = h_ibnd + 1
              !
              psic(:) = ( 0._DP, 0._DP )
              !
@@ -1134,7 +1135,7 @@ MODULE exx1
                         ENDDO
 !$omp end parallel do
                         ! bring it to G-space
-                        CALL fwfft ('Custom', rhoc, dfftt)
+                        CALL fwfft ('Rho', rhoc, dfftt)
 
                         vc = 0._dp
 !$omp parallel do default(shared), private(ig), reduction(+:vc)
