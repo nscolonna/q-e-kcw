@@ -2260,4 +2260,349 @@ end associate
     !------------------------------------------------------------------------
   END SUBROUTINE vexx2_k_gpu
   !
+  !-----------------------------------------------------------------------
+  FUNCTION exx_stress2()
+    !-----------------------------------------------------------------------
+    !! This is Eq.(10) of PRB 73, 125120 (2006).
+    !
+    USE constants,            ONLY : fpi, e2, pi, tpi
+    USE io_files,             ONLY : iunwfc_exx, nwordwfc
+    USE buffers,              ONLY : get_buffer
+    USE cell_base,            ONLY : alat, omega, bg, at, tpiba
+    USE symm_base,            ONLY : nsym, s
+    USE wvfct,                ONLY : nbnd, npwx, wg, current_k
+    USE wavefunctions,        ONLY : evc
+    USE klist,                ONLY : xk, ngk, nks
+    USE lsda_mod,             ONLY : lsda, current_spin, isk
+    USE gvect,                ONLY : g
+    USE mp_pools,             ONLY : npool, inter_pool_comm
+    USE mp_exx,               ONLY : inter_egrp_comm, intra_egrp_comm, &
+                                     ibands, nibands, my_egrp_id, jblock, &
+                                     egrp_pairs, max_pairs, negrp, me_egrp, &
+                                     all_start, all_end, iexx_start
+    USE mp,                   ONLY : mp_sum, mp_circular_shift_left
+    USE fft_base,             ONLY : dffts
+    USE fft_interfaces,       ONLY : fwfft, invfft
+    USE uspp,                 ONLY : okvan
+    !
+    USE exx_base,             ONLY : nq1, nq2, nq3, nqs, eps, exxdiv,       &
+                                     x_gamma_extrapolation, on_double_grid, &
+                                     grid_factor, yukawa, erfc_scrlen,      &
+                                     use_coulomb_vcut_ws, use_coulomb_vcut_spheric, &
+                                     gau_scrlen, vcut, index_xkq, index_xk, index_sym
+    USE exx_band,             ONLY : change_data_structure, transform_evc_to_exx, &
+                                     g_exx, igk_exx, nwordwfc_exx, evc_exx
+    USE coulomb_vcut_module,  ONLY : vcut_get,  vcut_spheric_get
+    !
+    IMPLICIT NONE
+    !
+    ! ... local variables
+    !
+    REAL(DP) :: exx_stress2(3,3), exx_stress_(3,3)
+    !
+    COMPLEX(DP),ALLOCATABLE :: tempphic(:), temppsic(:), result(:)
+    COMPLEX(DP),ALLOCATABLE :: tempphic_nc(:,:), temppsic_nc(:,:), &
+                               result_nc(:,:)
+    COMPLEX(DP),ALLOCATABLE :: rhoc(:)
+    REAL(DP),   ALLOCATABLE :: fac(:), fac_tens(:,:,:), fac_stress(:)
+    INTEGER  :: npw, jbnd, ibnd, ik, ikk, ig, ir, ikq, iq, isym
+    INTEGER  :: nqi, iqi, beta, nrxxs, ngm
+    INTEGER  :: ibnd_loop_start
+    REAL(DP) :: x1, x2
+    REAL(DP) :: qq, xk_cryst(3), sxk(3), xkq(3), vc(3,3), x, q(3)
+    REAL(DP) :: delta(3,3)
+    INTEGER :: jstart, jend, ii, ipair, jblock_start, jblock_end
+    INTEGER :: iegrp, wegrp
+    INTEGER :: exxbuff_index
+    !
+    CALL transform_evc_to_exx( 0 )
+    !
+    IF (npool>1) CALL errore( 'exx_stress2', 'stress not available with pools', 1 )
+    IF (noncolin) CALL errore( 'exx_stress2', 'noncolinear stress not implemented', 1 )
+    IF (okvan) CALL infomsg( 'exx_stress2', 'USPP stress not tested' )
+    !
+    nrxxs = dfftt%nnr
+    ngm   = dfftt%ngm
+    delta = RESHAPE( (/1._dp,0._dp,0._dp, 0._dp,1._dp,0._dp, 0._dp,0._dp,1._dp/), (/3,3/))
+    exx_stress_ = 0._dp
+    !
+    ALLOCATE( tempphic(nrxxs), temppsic(nrxxs), rhoc(nrxxs), fac(ngm) )
+    ALLOCATE( fac_tens(3,3,ngm), fac_stress(ngm) )
+    !
+    nqi = nqs
+    !
+    ! ... loop over k-points
+    DO ikk = 1, nks
+       current_k = ikk
+       IF (lsda) current_spin = isk(ikk)
+       npw = ngk(ikk)
+       !
+       IF (nks > 1) CALL get_buffer( evc_exx, nwordwfc_exx, iunwfc_exx, ikk )
+       !
+       DO iqi = 1, nqi
+          !
+          iq = iqi
+          !
+          ikq  = index_xkq(current_k,iq)
+          ik   = index_xk(ikq)
+          isym = ABS(index_sym(ikq))      
+          !      
+
+          ! FIXME: use cryst_to_cart and company as above..      
+          xk_cryst(:) = at(1,:)*xk(1,ik)+at(2,:)*xk(2,ik)+at(3,:)*xk(3,ik)      
+          IF (index_sym(ikq) < 0) xk_cryst = -xk_cryst      
+          sxk(:) = s(:,1,isym)*xk_cryst(1) + &      
+                   s(:,2,isym)*xk_cryst(2) + &      
+                   s(:,3,isym)*xk_cryst(3)      
+          xkq(:) = bg(:,1)*sxk(1) + bg(:,2)*sxk(2) + bg(:,3)*sxk(3)      
+          !      
+          !CALL start_clock ('exxen2_ngmloop')      
+          !      
+!$omp parallel do default(shared), private(ig, beta, q, qq, on_double_grid, x)
+          DO ig = 1, ngm      
+             IF (negrp == 1) THEN      
+                q(1) = xk(1,current_k) - xkq(1) + g(1,ig)      
+                q(2) = xk(2,current_k) - xkq(2) + g(2,ig)      
+                q(3) = xk(3,current_k) - xkq(3) + g(3,ig)      
+             ELSE      
+                q(1) = xk(1,current_k) - xkq(1) + g_exx(1,ig)      
+                q(2) = xk(2,current_k) - xkq(2) + g_exx(2,ig)      
+                q(3) = xk(3,current_k) - xkq(3) + g_exx(3,ig)      
+             ENDIF      
+             !      
+             q = q * tpiba      
+             qq = ( q(1)*q(1) + q(2)*q(2) + q(3)*q(3) )      
+             !      
+             DO beta = 1, 3      
+                fac_tens(1:3,beta,ig) = q(1:3)*q(beta)      
+             ENDDO      
+             !      
+             IF (x_gamma_extrapolation) THEN      
+                on_double_grid = .TRUE.      
+                x= 0.5d0/tpiba*(q(1)*at(1,1)+q(2)*at(2,1)+q(3)*at(3,1))*nq1      
+                on_double_grid = on_double_grid .AND. (ABS(x-NINT(x))<eps)      
+                x= 0.5d0/tpiba*(q(1)*at(1,2)+q(2)*at(2,2)+q(3)*at(3,2))*nq2      
+                on_double_grid = on_double_grid .AND. (ABS(x-NINT(x))<eps)      
+                x= 0.5d0/tpiba*(q(1)*at(1,3)+q(2)*at(2,3)+q(3)*at(3,3))*nq3      
+                on_double_grid = on_double_grid .AND. (ABS(x-NINT(x))<eps)      
+             ELSE      
+                on_double_grid = .FALSE.      
+             ENDIF      
+             !      
+             IF (use_coulomb_vcut_ws) THEN      
+                fac(ig) = vcut_get(vcut, q)      
+                fac_stress(ig) = 0._dp   ! not implemented      
+                IF (gamma_only .AND. qq > 1.d-8) fac(ig) = 2.d0 * fac(ig)      
+                !      
+             ELSEIF ( use_coulomb_vcut_spheric ) THEN      
+                fac(ig) = vcut_spheric_get(vcut, q)      
+                fac_stress(ig) = 0._dp   ! not implemented      
+                IF (gamma_only .AND. qq > 1.d-8) fac(ig) = 2.d0 * fac(ig)      
+                !      
+             ELSEIF (gau_scrlen > 0) THEN      
+                fac(ig) = e2*((pi/gau_scrlen)**(1.5d0))* &       
+                          EXP(-qq/4.d0/gau_scrlen) * grid_factor       
+                fac_stress(ig) =  e2*2.d0/4.d0/gau_scrlen  * &       
+                                  EXP(-qq/4.d0/gau_scrlen) * &
+                                  ((pi/gau_scrlen)**(1.5d0))*grid_factor       
+                IF (gamma_only) fac(ig) = 2.d0 * fac(ig)       
+                IF (gamma_only) fac_stress(ig) = 2.d0 * fac_stress(ig)       
+                IF (on_double_grid) fac(ig) = 0._dp       
+                IF (on_double_grid) fac_stress(ig) = 0._dp       
+                !       
+             ELSEIF (qq > 1.d-8) THEN      
+                IF ( erfc_scrlen > 0 ) THEN       
+                  fac(ig)=e2*fpi/qq*(1._dp-EXP(-qq/4.d0/erfc_scrlen**2)) * grid_factor       
+                  fac_stress(ig) = -e2*fpi * 2.d0/qq**2 * ( &       
+                      (1._dp+qq/4.d0/erfc_scrlen**2)*EXP(-qq/4.d0/erfc_scrlen**2) - 1._dp) * &       
+                      grid_factor       
+                ELSE       
+                  fac(ig)=e2*fpi/( qq + yukawa ) * grid_factor       
+                  fac_stress(ig) = 2.d0 * e2*fpi/(qq+yukawa)**2 * grid_factor       
+                ENDIF       
+                !       
+                IF (gamma_only) fac(ig) = 2.d0 * fac(ig)       
+                IF (gamma_only) fac_stress(ig) = 2.d0 * fac_stress(ig)       
+                IF (on_double_grid) fac(ig) = 0._dp       
+                IF (on_double_grid) fac_stress(ig) = 0._dp       
+                !      
+             ELSE 
+                ! 
+                fac(ig) = -exxdiv ! or rather something else (see f.gygi)       
+                fac_stress(ig) = 0._dp  ! or -exxdiv_stress (not yet implemented)       
+                IF ( yukawa> 0._dp .AND. .NOT. x_gamma_extrapolation) THEN       
+                  fac(ig) = fac(ig) + e2*fpi/( qq + yukawa )       
+                  fac_stress(ig) = 2.d0 * e2*fpi/(qq+yukawa)**2       
+                ENDIF       
+                IF (erfc_scrlen > 0._dp .AND. .NOT. x_gamma_extrapolation) THEN       
+                  fac(ig) = e2*fpi / (4.d0*erfc_scrlen**2)       
+                  fac_stress(ig) = e2*fpi / (8.d0*erfc_scrlen**4)       
+                ENDIF 
+                !
+             ENDIF
+             !
+          ENDDO      
+!$omp end parallel do
+          !CALL stop_clock ('exxen2_ngmloop')      
+          DO iegrp = 1, negrp      
+             !      
+             ! compute the id of group whose data is currently worked on      
+             wegrp = MOD(iegrp+my_egrp_id-1, negrp)+1      
+             !      
+             jblock_start = all_start(wegrp)      
+             jblock_end = all_end(wegrp)      
+             !      
+             ! loop over bands      
+             DO ii = 1, nibands(my_egrp_id+1)      
+                !      
+                jbnd = ibands(ii,my_egrp_id+1)      
+                !      
+                IF (jbnd==0 .OR. jbnd>nbnd) CYCLE      
+                !      
+                !determine which j-bands to calculate      
+                jstart = 0      
+                jend = 0      
+                DO ipair=1, max_pairs      
+                   IF (egrp_pairs(1,ipair,my_egrp_id+1).eq.jbnd)THEN      
+                      IF (jstart == 0)THEN      
+                         jstart = egrp_pairs(2,ipair,my_egrp_id+1)      
+                         jend = jstart      
+                      ELSE      
+                         jend = egrp_pairs(2,ipair,my_egrp_id+1)      
+                      ENDIF      
+                   ENDIF      
+                ENDDO      
+                !      
+                jstart = MAX(jstart,jblock_start)      
+                jend = MIN(jend,jblock_end)      
+                !      
+                temppsic(:) = ( 0._dp, 0._dp )      
+!$omp parallel do default(shared), private(ig)
+                DO ig = 1, npw      
+                   temppsic(dfftt%nl(igk_exx(ig,ikk))) = evc_exx(ig,ii)      
+                ENDDO      
+!$omp end parallel do
+                !      
+                IF (gamma_only) THEN      
+!$omp parallel do default(shared), private(ig)
+                   DO ig = 1, npw      
+                      temppsic(dfftt%nlm(igk_exx(ig,ikk))) = CONJG(evc_exx(ig,ii))      
+                   ENDDO      
+!$omp end parallel do
+                ENDIF      
+                !      
+                CALL invfft( 'Wave', temppsic, dfftt )      
+                !      
+                IF (gamma_only) THEN      
+                   !      
+                   IF (MOD(jstart,2) == 0) THEN      
+                      ibnd_loop_start = jstart-1      
+                   ELSE      
+                      ibnd_loop_start = jstart      
+                   ENDIF      
+                   !      
+                   DO ibnd = ibnd_loop_start, jend, 2     !for each band of psi      
+                      !      
+                      exxbuff_index = (ibnd+1)/2-(all_start(wegrp)+1)/2+(iexx_start+1)/2      
+                      !      
+                      IF ( ibnd < jstart ) THEN      
+                         x1 = 0._dp      
+                      ELSE      
+                         x1 = x_occupation(ibnd,ik)      
+                      ENDIF      
+                      !      
+                      IF ( ibnd == jend) THEN      
+                         x2 = 0._dp      
+                      ELSE      
+                         x2 = x_occupation(ibnd+1,ik)      
+                      ENDIF      
+                      !      
+                      IF ( ABS(x1) < eps_occ .AND. ABS(x2) < eps_occ ) CYCLE      
+                      !      
+                      ! calculate rho in real space      
+!$omp parallel do default(shared), private(ir)
+                      DO ir = 1, nrxxs      
+                         tempphic(ir) = exxbuff(ir,exxbuff_index,ikq)      
+                         rhoc(ir) = CONJG(tempphic(ir))*temppsic(ir) / omega      
+                      ENDDO      
+!$omp end parallel do
+                      ! bring it to G-space      
+                      CALL fwfft( 'Rho', rhoc, dfftt )      
+                      !      
+                      vc = 0._dp      
+!$omp parallel do default(shared), private(ig), reduction(+:vc)
+                      DO ig = 1, ngm      
+                         !      
+                         vc(:,:) = vc(:,:) + x1 * 0.25_dp * &      
+                                   ABS( rhoc(dfftt%nl(ig)) + &      
+                                   CONJG(rhoc(dfftt%nlm(ig))))**2 * &      
+                                   (fac_tens(:,:,ig)*fac_stress(ig)/2.d0 - delta(:,:)*fac(ig))      
+                         vc(:,:) = vc(:,:) + x2 * 0.25_dp * &      
+                                   ABS( rhoc(dfftt%nl(ig)) - &      
+                                   CONJG(rhoc(dfftt%nlm(ig))))**2 * &      
+                                   (fac_tens(:,:,ig)*fac_stress(ig)/2.d0 - delta(:,:)*fac(ig))      
+                      ENDDO      
+!$omp end parallel do
+                      vc = vc / nqs / 4.d0
+                      exx_stress_ = exx_stress_ + exxalfa * vc * wg(jbnd,ikk)
+                   ENDDO
+                   !
+                ELSE
+                   !
+                   DO ibnd = jstart, jend    !for each band of psi
+                      !
+                      IF ( ABS(x_occupation(ibnd,ik)) < 1.d-6) CYCLE
+                      !
+                      ! calculate rho in real space
+!$omp parallel do default(shared), private(ir)
+                      DO ir = 1, nrxxs
+                         tempphic(ir) = exxbuff(ir,ibnd-all_start(wegrp)+iexx_start,ikq)
+                         rhoc(ir) = CONJG(tempphic(ir))*temppsic(ir) / omega
+                      ENDDO
+!$omp end parallel do
+                      !
+                      ! bring it to G-space
+                      CALL fwfft( 'Rho', rhoc, dfftt )
+                      !
+                      vc = 0._dp
+!$omp parallel do default(shared), private(ig), reduction(+:vc)
+                      DO ig = 1, ngm
+                         vc(:,:) = vc(:,:) + rhoc(dfftt%nl(ig))  * &
+                                   CONJG(rhoc(dfftt%nl(ig))) *     &
+                                   (fac_tens(:,:,ig)*fac_stress(ig)/2.d0 - &
+                                   delta(:,:)*fac(ig))
+                      ENDDO
+!$omp end parallel do
+                      !
+                      vc = vc * x_occupation(ibnd,ik) / nqs / 4.d0
+                      exx_stress_ = exx_stress_ + exxalfa * vc * wg(jbnd,ikk)
+                      !
+                   ENDDO
+                   !
+                ENDIF ! gamma or k-points
+                !
+             ENDDO ! jbnd
+             !
+             ! get the next nbnd/negrp data
+             IF (negrp > 1) CALL mp_circular_shift_left( exxbuff(:,:,ikq), me_egrp, &
+                                                         inter_egrp_comm )
+             !
+          ENDDO ! iegrp
+          !
+       ENDDO ! iqi
+       !
+    ENDDO ! ikk
+    !
+    DEALLOCATE( tempphic, temppsic, rhoc, fac, fac_tens, fac_stress )
+    !
+    CALL mp_sum( exx_stress_, intra_egrp_comm )
+    CALL mp_sum( exx_stress_, inter_egrp_comm )
+    CALL mp_sum( exx_stress_, inter_pool_comm )
+    !
+    exx_stress2 = exx_stress_
+    !
+    CALL change_data_structure( .FALSE. )
+    !
+  END FUNCTION exx_stress2
+  !
 END MODULE exx2

@@ -111,11 +111,11 @@ MODULE exx_base
   LOGICAL, ALLOCATABLE :: coulomb_done(:,:)
   !! list of which Coulomb factors have been calculated already
   !
-  CHARACTER(len=80) :: exx_bgrp_type = 'standard'
+  CHARACTER(len=80) :: exx_bgrp_type = 'standard' ! (initialized in read_namelist)
   !! see input keyword 'exx_bgrp_type'
   !! exx band parallelism schemes: "standard" ... regular computations
   !!                               "massive"  ... very large systems (useful when the local DFT part becomes relevant)
-  LOGICAL :: exx_bgrp_standard = .false.
+  LOGICAL :: exx_bgrp_standard = .true. ! (set in exx_iosys)
   !! a logical flag to quickly distiguish bgrp types in EXX
   !
   TYPE(fft_type_descriptor) :: dfftt 
