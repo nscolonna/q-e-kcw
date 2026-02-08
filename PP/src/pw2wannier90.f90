@@ -6865,6 +6865,7 @@ SUBROUTINE write_plot
          evc_r(:, :) = (0.d0, 0.d0)
          DO ipol = 1, npol
             evc_r(dffts%nl(igk_k(1:npw,ik)), ipol) = evc(1+npwx*(ipol-1):npw+npwx*(ipol-1), ibnd)
+            IF (gamma_only) evc_r(dffts%nlm(igk_k(1:npw,ik)), ipol) = CONJG(evc(1:npw, ibnd))
             CALL invfft('Wave', evc_r(:, ipol), dffts)
          ENDDO
          !
