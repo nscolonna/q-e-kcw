@@ -864,6 +864,10 @@ PROGRAM pw2wannier90
        'Non-collinear and gamma_only not implemented',1)
   IF (gamma_only.and.scdm_proj) CALL errore('pw2wannier90',&
        'Gamma_only and SCDM not implemented',1)
+  IF (gamma_only .AND. ANY(atom_proj_frozen >= 0)) CALL errore('pw2wannier90',&
+       'gamma_only and atom_proj_frozen not implemented',1)
+  IF (gamma_only .AND. write_unkg) CALL errore('pw2wannier90',&
+       'gamma_only and write_unkg not implemented',1)
   IF (scdm_proj) then
     IF ((trim(scdm_entanglement) /= 'isolated') .AND. &
         (trim(scdm_entanglement) /= 'erfc') .AND. &
