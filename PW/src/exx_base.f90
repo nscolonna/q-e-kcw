@@ -105,12 +105,6 @@ MODULE exx_base
   REAL(DP) :: ecutvcut
   TYPE(vcut_type) :: vcut
   !
-  REAL(DP), ALLOCATABLE :: coulomb_fac(:,:,:)
-  !! the Coulomb factor is reused between iterations
-  !
-  LOGICAL, ALLOCATABLE :: coulomb_done(:,:)
-  !! list of which Coulomb factors have been calculated already
-  !
   CHARACTER(len=80) :: exx_bgrp_type = 'standard' ! (initialized in read_namelist)
   !! see input keyword 'exx_bgrp_type'
   !! exx band parallelism schemes: "standard" ... regular computations
@@ -743,49 +737,6 @@ MODULE exx_base
     DEALLOCATE ( s_scaled, ftau )
     !
   END SUBROUTINE exx_set_symm
-  !
-  !
-  !-----------------------------------------------------------------------
-  SUBROUTINE g2_convolution_all( ngm, g, xk, xkq, iq, current_k )
-    !-----------------------------------------------------------------------
-    !! Wrapper for g2_convolution.
-    !
-    USE kinds,     ONLY : DP
-    USE klist,     ONLY : nks
-    !
-    IMPLICIT NONE
-    !
-    INTEGER,  INTENT(IN) :: ngm
-    !! Number of G vectors
-    REAL(DP), INTENT(IN) :: g(3,ngm)
-    !! Cartesian components of G vectors
-    REAL(DP), INTENT(IN) :: xk(3)
-    !! current k vector
-    REAL(DP), INTENT(IN) :: xkq(3)
-    !! current q vector
-    INTEGER, INTENT(IN) :: current_k
-    !! current k-point index
-    INTEGER, INTENT(IN) :: iq
-    !! q-grid point index
-    !
-    ! ... Check if coulomb_fac has been allocated
-    IF( .NOT. ALLOCATED( coulomb_fac ) ) ALLOCATE( coulomb_fac(ngm,nqs,nks) )
-    !
-    ! ... Check if coulomb_done has been allocated
-    IF( .NOT. ALLOCATED( coulomb_done) ) THEN
-       ALLOCATE( coulomb_done(nqs,nks) )
-       coulomb_done = .FALSE.
-    ENDIF
-    !
-    ! ... return if this k and k' already computed, otherwise compute it
-    IF ( coulomb_done(iq,current_k) ) RETURN
-    !
-    CALL g2_convolution( ngm, g, xk, xkq, coulomb_fac(:,iq,current_k) )
-    !
-    coulomb_done(iq,current_k) = .TRUE.
-    !
-  END SUBROUTINE g2_convolution_all
-  !
   !
   !-----------------------------------------------------------------------
   SUBROUTINE g2_convolution( ngm, g, xk, xkq, fac )

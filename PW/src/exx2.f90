@@ -23,9 +23,57 @@ MODULE exx2
   !
   INTEGER, ALLOCATABLE :: ig_l2gt(:), millt(:,:)
   !
+  REAL(DP), ALLOCATABLE :: coulomb_fac(:,:,:)
+  !! the Coulomb factor is reused between iterations
+  !
+  LOGICAL, ALLOCATABLE :: coulomb_done(:,:)
+  !! list of which Coulomb factors have been calculated already
+  !
  CONTAINS
 #define _CX(A)  CMPLX(A,0._dp,kind=DP)
 #define _CY(A)  CMPLX(0._dp,-A,kind=DP)
+  !
+  !-----------------------------------------------------------------------
+  SUBROUTINE g2_convolution_all( ngm, g, xk, xkq, iq, current_k )
+    !-----------------------------------------------------------------------
+    !! Wrapper for g2_convolution.
+    !
+    USE kinds,     ONLY : DP
+    USE klist,     ONLY : nks
+    USE exx_base,  ONLY : g2_convolution, nqs
+    !
+    IMPLICIT NONE
+    !
+    INTEGER,  INTENT(IN) :: ngm
+    !! Number of G vectors
+    REAL(DP), INTENT(IN) :: g(3,ngm)
+    !! Cartesian components of G vectors
+    REAL(DP), INTENT(IN) :: xk(3)
+    !! current k vector
+    REAL(DP), INTENT(IN) :: xkq(3)
+    !! current q vector
+    INTEGER, INTENT(IN) :: current_k
+    !! current k-point index
+    INTEGER, INTENT(IN) :: iq
+    !! q-grid point index
+    !
+    ! ... Check if coulomb_fac has been allocated
+    IF( .NOT. ALLOCATED( coulomb_fac ) ) ALLOCATE( coulomb_fac(ngm,nqs,nks) )
+    !
+    ! ... Check if coulomb_done has been allocated
+    IF( .NOT. ALLOCATED( coulomb_done) ) THEN
+       ALLOCATE( coulomb_done(nqs,nks) )
+       coulomb_done = .FALSE.
+    ENDIF
+    !
+    ! ... return if this k and k' already computed, otherwise compute it
+    IF ( coulomb_done(iq,current_k) ) RETURN
+    !
+    CALL g2_convolution( ngm, g, xk, xkq, coulomb_fac(:,iq,current_k) )
+    !
+    coulomb_done(iq,current_k) = .TRUE.
+    !
+  END SUBROUTINE g2_convolution_all
   !
   !------------------------------------------------------------------------
   SUBROUTINE set_dfftt_grid2( )
@@ -547,8 +595,7 @@ MODULE exx2
                                newdxx_g, newdxx_r, add_nlxx_pot, &
                                qvan_init, qvan_clean
     USE paw_exx,        ONLY : PAW_newdxx
-    USE exx_base,       ONLY : nqs, index_xkq, index_xk, xkq_collect, &
-                               coulomb_fac, g2_convolution_all
+    USE exx_base,       ONLY : nqs, index_xkq, index_xk, xkq_collect
     USE exx2_utils,     ONLY : result_sum, igk_exx
     !
     IMPLICIT NONE
@@ -900,8 +947,7 @@ MODULE exx2
                                newdxx_g, newdxx_r, add_nlxx_pot, &
                                qvan_init, qvan_clean
     USE paw_exx,        ONLY : PAW_newdxx
-    USE exx_base,       ONLY : nqs, index_xkq, index_xk, xkq_collect, &
-         coulomb_fac, g2_convolution_all
+    USE exx_base,       ONLY : nqs, index_xkq, index_xk, xkq_collect
     USE exx2_utils,     ONLY : result_sum, igk_exx, igk_exx_d
 #if defined(__CUDA)
     USE device_memcpy_m, ONLY : dev_memset
@@ -1311,8 +1357,7 @@ MODULE exx2
                                newdxx_g, newdxx_r, add_nlxx_pot, &
                                qvan_init, qvan_clean
     USE paw_exx,        ONLY : PAW_newdxx
-    USE exx_base,       ONLY : nqs, xkq_collect, index_xkq, index_xk, &
-                               coulomb_fac, g2_convolution_all
+    USE exx_base,       ONLY : nqs, xkq_collect, index_xkq, index_xk
     USE exx2_utils,     ONLY : result_sum, igk_exx
     USE io_global,      ONLY : stdout
     !
@@ -1778,8 +1823,7 @@ MODULE exx2
                                newdxx_g, newdxx_r, add_nlxx_pot, &
                                qvan_init, qvan_clean
     USE paw_exx,        ONLY : PAW_newdxx
-    USE exx_base,       ONLY : nqs, xkq_collect, index_xkq, index_xk, &
-         coulomb_fac, g2_convolution_all
+    USE exx_base,       ONLY : nqs, xkq_collect, index_xkq, index_xk
     USE exx2_utils,     ONLY : result_sum, igk_exx, igk_exx_d
     !CUDA stuff
     USE mp_exx,         ONLY : iexx_istart_d
@@ -2274,8 +2318,7 @@ end associate
     USE paw_exx,                 ONLY : PAW_xx_energy
     USE us_exx,                  ONLY : bexg_merge, becxx, addusxx_g, &
                                         addusxx_r, qvan_init, qvan_clean
-    USE exx_base,                ONLY : nqs, xkq_collect, index_xkq, index_xk, &
-                                        coulomb_fac, g2_convolution_all
+    USE exx_base,                ONLY : nqs, xkq_collect, index_xkq, index_xk
     USE exx2_utils,              ONLY : igk_exx, change_data_structure, &
                                         transform_evc_to_exx, nwordwfc_exx, &
                                         evc_exx
@@ -2636,8 +2679,7 @@ end associate
     USE paw_exx,                 ONLY : PAW_xx_energy
     USE us_exx,                  ONLY : bexg_merge, becxx, addusxx_g, &
                                         addusxx_r, qvan_init, qvan_clean
-    USE exx_base,                ONLY : nqs, xkq_collect, index_xkq, index_xk, &
-                                        coulomb_fac, g2_convolution_all
+    USE exx_base,                ONLY : nqs, xkq_collect, index_xkq, index_xk
     USE exx2_utils,              ONLY : change_data_structure, &
                                         transform_evc_to_exx, nwordwfc_exx, &
                                         igk_exx, evc_exx
