@@ -898,7 +898,7 @@ MODULE pw_restart_new
     END SUBROUTINE pw_write_schema
     !
     !------------------------------------------------------------------------
-    SUBROUTINE write_collected_wfc( )
+    SUBROUTINE write_collected_wfc( write_wann_, spin_component )
       !------------------------------------------------------------------------
       !
       USE mp,                   ONLY : mp_sum, mp_max
@@ -932,6 +932,17 @@ MODULE pw_restart_new
       CHARACTER(LEN=2), DIMENSION(2) :: updw = (/ 'up', 'dw' /)
       CHARACTER(LEN=256)    :: dirname
       CHARACTER(LEN=320)    :: filename, filenameace
+      LOGICAL, OPTIONAL, INTENT (IN)  :: write_wann_
+      INTEGER, OPTIONAL, INTENT (IN)  :: spin_component
+      !
+      LOGICAL               :: write_wann
+      !
+      write_wann = .false. 
+      IF (present (write_wann_) ) THEN
+         IF (write_wann_ .eqv. .true.) write_wann = .true.
+         IF (write_wann .AND. .NOT. present (spin_component)) &
+                 CALL errore( 'write_collected_wfc', 'Missing Wannier spin component', 1 )
+      ENDIF
       !
       dirname = restart_dir ()
       !
@@ -968,6 +979,9 @@ MODULE pw_restart_new
       ALLOCATE ( mill_k( 3, npwx ) )
       !
       k_points_loop: DO ik = 1, nks
+         !
+         ! one spin component at the time in KCW
+         IF ( write_wann .AND. lsda .AND. isk(ik) /= spin_component) CYCLE
          !
          ! ik_g is the index of k-point ik in the global list
          !
@@ -1008,6 +1022,8 @@ MODULE pw_restart_new
             ispin = isk(ik)
             filename = TRIM(dirname) // 'wfc' // updw(ispin) // &
                  & TRIM(int_to_char(ik_g))
+            IF (write_wann) filename = TRIM(dirname) // 'wfcwann' // updw(ispin) // &
+                                 & TRIM(int_to_char(ik_g))
             !
             if(exx_is_active()) filenameace = TRIM(dirname) // 'ace' // updw(ispin) // &
                  & TRIM(int_to_char(ik_g))
@@ -1016,6 +1032,7 @@ MODULE pw_restart_new
             !
             ispin = 1
             filename = TRIM(dirname) // 'wfc' // TRIM(int_to_char(ik_g))
+            IF (write_wann) filename = TRIM(dirname) // 'wfcwann' // TRIM(int_to_char(ik_g))
             !
             if(exx_is_active()) filenameace = TRIM(dirname) // 'ace' // TRIM(int_to_char(ik_g))
             !

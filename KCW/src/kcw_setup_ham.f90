@@ -15,7 +15,7 @@ subroutine kcw_setup_ham
   !
   USE kinds,             ONLY : DP
   USE ions_base,         ONLY : nat, ityp
-  USE io_files,          ONLY : tmp_dir
+  USE io_files,          ONLY : tmp_dir, restart_dir
   USE scf,               ONLY : v, vrs, vltot,  kedtau
   USE fft_base,          ONLY : dfftp, dffts
   USE fft_interfaces,    ONLY : invfft
@@ -200,7 +200,8 @@ subroutine kcw_setup_ham
     CALL rotate_ks () 
     !
   ELSE 
-    dirname = TRIM (tmp_dir_kcw) 
+    !dirname = TRIM (tmp_dir_kcw) 
+    dirname = restart_dir ()
     WRITE(stdout,'(/,5X, "INFO: MLWF read from file: &
                   Reading collected, re-writing distributed wavefunctions")')
     DO ik = 1, nks

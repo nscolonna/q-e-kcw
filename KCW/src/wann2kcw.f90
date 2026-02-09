@@ -18,9 +18,15 @@ SUBROUTINE wann2kcw
   !!   
   !!  Code written by Nicola Colonna (EPFL April 2019) 
   !
-  USE io_kcw,             ONLY : write_mlwf
+  USE io_files,           ONLY : iunwfc, nwordwfc
+  USE wvfct,              ONLY : nbnd, npwx
+  USE control_kcw,        ONLY : spin_component, iuwfc_wann, num_wann
+  USE noncollin_module,   ONLY : npol
+  USE pw_restart_new,     ONLY : write_collected_wfc
   !
   IMPLICIT NONE
+  !
+  INTEGER  :: iunwfc_, nwordwfc_, nbnd_
   !
   !
   ! 1) Set up for the KC calculation. 
@@ -28,7 +34,20 @@ SUBROUTINE wann2kcw
   ! 
   !WRITE(*,*),'--SETUP DONE!!'
   ! 2) Save MLWF on file 
-  CALL write_mlwf( ) 
+  ! To use write_collected_wfc, we need to redefine some global variables
+  ! Here we store ...
+  nbnd_    = nbnd
+  nwordwfc_= nwordwfc
+  iunwfc   = iunwfc_ 
+  ! ... overwrite ...
+  nbnd     = num_wann
+  nwordwfc = num_wann * npwx * npol
+  iunwfc   = iuwfc_wann
+  CALL write_collected_wfc (.true., spin_component)
+  ! ... restore original values
+  nbnd     = nbnd_
+  nwordwfc = nwordwfc
+  iunwfc_  = iunwfc
   !
   CALL clean_pw( .TRUE. )
   CALL close_kcw ( ) 
