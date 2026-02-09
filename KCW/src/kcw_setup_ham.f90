@@ -47,7 +47,8 @@ subroutine kcw_setup_ham
   USE mp,                ONLY : mp_bcast
   USE eqv,               ONLY : dmuxc
   !
-  USE io_kcw,            ONLY : read_rhowann, read_mlwf, read_rhowann_g
+  USE io_kcw,            ONLY : read_rhowann, read_rhowann_g
+  USE pw_restart_new,    ONLY : read_collected_wfc
   USE lsda_mod,          ONLY : lsda, isk, nspin, current_spin, starting_magnetization
   !
   USE coulomb,           ONLY : setup_coulomb
@@ -209,7 +210,8 @@ subroutine kcw_setup_ham
         IF ( lsda .AND. isk(ik) /= spin_component) CYCLE
         npw = ngk(ik)
         IF ( nkb > 0 ) CALL init_us_2( npw, igk_k(1,ik), xk(1,ik), vkb )
-        CALL read_mlwf ( dirname, ik, evc0 )
+        !CALL read_mlwf ( dirname, ik, evc0 )
+        CALL read_collected_wfc ( dirname, ik, evc0, "mlwf4kcw")
         ik_eff = ik-(spin_component-1)*nkstot_eff
         CALL save_buffer ( evc0, lrwfc, iuwfc_wann, ik_eff )
         CALL ks_hamiltonian(evc0, ik, num_wann) 
