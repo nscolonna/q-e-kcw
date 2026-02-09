@@ -420,7 +420,7 @@ SUBROUTINE reset_exx( )
   USE exx_base,   ONLY : exx_grid_init, exx_mp_init, exx_div_check, & 
                          coulomb_fac, coulomb_done , exx_bgrp_standard
   USE exx,        ONLY : dfftt, exx_fft_create, deallocate_exx 
-  USE exx_band,   ONLY : igk_exx 
+  USE exx2_utils, ONLY : igk_exx 
   ! 
   IMPLICIT NONE
   !

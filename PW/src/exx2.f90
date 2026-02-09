@@ -30,7 +30,7 @@ MODULE exx2
   !------------------------------------------------------------------------
   SUBROUTINE set_dfftt_grid2( )
     !------------------------------------------------------------------------
-    USE exx_band,             ONLY : smap_exx
+    USE exx2_utils,           ONLY : smap_exx
     USE command_line_options, ONLY : nmany_, pencil_decomposition_
     USE mp_bands,             ONLY : nyfft
     USE symm_base,            ONLY : fft_fact
@@ -89,7 +89,7 @@ MODULE exx2
     USE mp_orthopools,        ONLY : intra_orthopool_comm
     USE exx_base,             ONLY : nkqs, index_xk, index_sym,  &
                                      rir, working_pool
-    USE exx_band,             ONLY : change_data_structure, nwordwfc_exx, &
+    USE exx2_utils,           ONLY : change_data_structure, nwordwfc_exx, &
                                      igk_exx, evc_exx, transform_evc_to_exx
 #if defined(__CUDA)
     USE device_memcpy_m,      ONLY : dev_memset
@@ -468,7 +468,7 @@ MODULE exx2
     USE becmod,         ONLY : bec_type
     USE mp_exx,         ONLY : negrp, inter_egrp_comm, init_index_over_band
     USE wvfct,          ONLY : nbnd
-    USE exx_band,       ONLY : transform_psi_to_exx, transform_hpsi_to_local, &
+    USE exx2_utils,     ONLY : transform_psi_to_exx, transform_hpsi_to_local, &
                                psi_exx, hpsi_exx
     !
     IMPLICIT NONE
@@ -549,7 +549,7 @@ MODULE exx2
     USE paw_exx,        ONLY : PAW_newdxx
     USE exx_base,       ONLY : nqs, index_xkq, index_xk, xkq_collect, &
                                coulomb_fac, g2_convolution_all
-    USE exx_band,       ONLY : result_sum, igk_exx
+    USE exx2_utils,     ONLY : result_sum, igk_exx
     !
     IMPLICIT NONE
     !
@@ -902,7 +902,7 @@ MODULE exx2
     USE paw_exx,        ONLY : PAW_newdxx
     USE exx_base,       ONLY : nqs, index_xkq, index_xk, xkq_collect, &
          coulomb_fac, g2_convolution_all
-    USE exx_band,       ONLY : result_sum, igk_exx, igk_exx_d
+    USE exx2_utils,     ONLY : result_sum, igk_exx, igk_exx_d
 #if defined(__CUDA)
     USE device_memcpy_m, ONLY : dev_memset
 #endif
@@ -1313,7 +1313,7 @@ MODULE exx2
     USE paw_exx,        ONLY : PAW_newdxx
     USE exx_base,       ONLY : nqs, xkq_collect, index_xkq, index_xk, &
                                coulomb_fac, g2_convolution_all
-    USE exx_band,       ONLY : result_sum, igk_exx
+    USE exx2_utils,     ONLY : result_sum, igk_exx
     USE io_global,      ONLY : stdout
     !
     !
@@ -1780,10 +1780,9 @@ MODULE exx2
     USE paw_exx,        ONLY : PAW_newdxx
     USE exx_base,       ONLY : nqs, xkq_collect, index_xkq, index_xk, &
          coulomb_fac, g2_convolution_all
-    USE exx_band,       ONLY : result_sum, igk_exx
+    USE exx2_utils,     ONLY : result_sum, igk_exx, igk_exx_d
     !CUDA stuff
     USE mp_exx,         ONLY : iexx_istart_d
-    USE exx_band,       ONLY : igk_exx_d
     USE io_global,      ONLY : stdout
     !
     !
@@ -2277,7 +2276,7 @@ end associate
                                         addusxx_r, qvan_init, qvan_clean
     USE exx_base,                ONLY : nqs, xkq_collect, index_xkq, index_xk, &
                                         coulomb_fac, g2_convolution_all
-    USE exx_band,                ONLY : igk_exx, change_data_structure, &
+    USE exx2_utils,              ONLY : igk_exx, change_data_structure, &
                                         transform_evc_to_exx, nwordwfc_exx, &
                                         evc_exx
     USE uspp_init,            ONLY : init_us_2
@@ -2639,7 +2638,7 @@ end associate
                                         addusxx_r, qvan_init, qvan_clean
     USE exx_base,                ONLY : nqs, xkq_collect, index_xkq, index_xk, &
                                         coulomb_fac, g2_convolution_all
-    USE exx_band,                ONLY : change_data_structure, &
+    USE exx2_utils,              ONLY : change_data_structure, &
                                         transform_evc_to_exx, nwordwfc_exx, &
                                         igk_exx, evc_exx
     !
@@ -2953,7 +2952,7 @@ end associate
                                      grid_factor, yukawa, erfc_scrlen,      &
                                      use_coulomb_vcut_ws, use_coulomb_vcut_spheric, &
                                      gau_scrlen, vcut, index_xkq, index_xk, index_sym
-    USE exx_band,             ONLY : change_data_structure, transform_evc_to_exx, &
+    USE exx2_utils,           ONLY : change_data_structure, transform_evc_to_exx, &
                                      g_exx, igk_exx, nwordwfc_exx, evc_exx
     USE coulomb_vcut_module,  ONLY : vcut_get,  vcut_spheric_get
     !

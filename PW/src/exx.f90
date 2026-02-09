@@ -461,7 +461,7 @@ MODULE exx
     USE becmod,                 ONLY : bec_type, allocate_bec_type, &
                                        deallocate_bec_type, calbec
     USE uspp,                   ONLY : okvan,nkb,vkb
-    USE exx_band,               ONLY : nwordwfc_exx, igk_exx
+    USE exx2_utils,             ONLY : nwordwfc_exx, igk_exx
     USE uspp_init,              ONLY : init_us_2
     USE mp_bands,               ONLY : intra_bgrp_comm
     IMPLICIT NONE
