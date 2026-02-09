@@ -34,7 +34,7 @@ SUBROUTINE electrons()
   USE wvfct,                ONLY : nbnd, wg, et
   USE klist,                ONLY : nks
   USE uspp,                 ONLY : okvan
-  USE exx,                  ONLY : aceinit,exxinit, exxenergy2, exxbuff, &
+  USE exx,                  ONLY : aceinit,exxinit, exxenergy2, exxenergyace, exxbuff, &
                                    fock0, fock1, fock2, fock3, dexx, use_ace, local_thr, &
                                    domat
   USE xc_lib,               ONLY : xclib_dft_is, exx_is_active, stop_exx
@@ -60,8 +60,6 @@ SUBROUTINE electrons()
   REAL(DP) :: charge
   !! the total charge
   REAL(DP) :: exxen
-  !! used to compute exchange energy
-  REAL(DP), EXTERNAL :: exxenergyace
   INTEGER :: idum
   !! dummy counter on iterations
   INTEGER :: iter
@@ -1780,72 +1778,3 @@ SUBROUTINE electrons_scf ( printout, exxen )
   END SUBROUTINE print_energies
   !
 END SUBROUTINE electrons_scf
-!
-!----------------------------------------------------------------------------
-FUNCTION exxenergyace( )
-  !--------------------------------------------------------------------------
-  !! Compute exchange energy using ACE
-  !
-  USE kinds,              ONLY : DP
-  USE buffers,            ONLY : get_buffer
-  USE exx,                ONLY : vexxace_gamma, vexxace_k, domat, &
-                                 vexxace_gamma_gpu, vexxace_k_gpu
-  USE klist,              ONLY : nks, ngk
-  USE wvfct,              ONLY : nbnd, npwx, current_k
-  USE lsda_mod,           ONLY : lsda, isk, current_spin
-  USE io_files,           ONLY : iunwfc, nwordwfc
-  USE mp_pools,           ONLY : inter_pool_comm
-  USE mp_bands,           ONLY : intra_bgrp_comm
-  USE mp,                 ONLY : mp_sum
-  USE control_flags,      ONLY : gamma_only, use_gpu
-  USE wavefunctions,      ONLY : evc
-  !
-  IMPLICIT NONE
-  !
-  REAL(DP) :: exxenergyace
-  !! computed energy
-  !
-  ! ... local variables
-  !
-  REAL(DP) :: ex
-  INTEGER :: ik, npw
-  !
-  domat = .TRUE.
-  exxenergyace=0.0_dp
-  !
-  DO ik = 1, nks
-     npw = ngk (ik)
-     !
-     current_k = ik
-     IF ( lsda ) current_spin = isk(ik)
-     !
-     IF (nks > 1) THEN
-        CALL get_buffer( evc, nwordwfc, iunwfc, ik )
-        !$acc update device(evc)
-     ENDIF
-     !
-     IF (gamma_only) THEN
-        IF (use_gpu) THEN
-          !$acc host_data use_device(evc)
-          CALL vexxace_gamma_gpu( npw, nbnd, evc, ex )
-          !$acc end host_data
-        ELSE
-          CALL vexxace_gamma( npw, nbnd, evc, ex )
-        END IF
-     ELSE
-        IF (use_gpu) THEN
-          !$acc host_data use_device(evc)
-          CALL vexxace_k_gpu( npw, nbnd, evc, ex )
-          !$acc end host_data
-        ELSE
-          CALL vexxace_k( npw, nbnd, evc, ex )
-        ENDIF
-     ENDIF
-     exxenergyace = exxenergyace + ex
-  ENDDO
-  !
-  CALL mp_sum( exxenergyace, inter_pool_comm )
-  !
-  domat = .FALSE.
-  !
-END FUNCTION exxenergyace
