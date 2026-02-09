@@ -50,8 +50,6 @@ MODULE exx1
                                      exx_set_symm, rir, working_pool, exxdiv, &
                                      erfc_scrlen, gau_scrlen, exx_divergence, &
                                      x_nbnd_occ, nbndproj, local_thr
-    USE exx_band,             ONLY : change_data_structure, nwordwfc_exx, &
-                                     transform_evc_to_exx, evc_exx
 #if defined(__CUDA)
     USE device_memcpy_m,      ONLY : dev_memset
     USE device_fbuff_m,       ONLY : dev_buf

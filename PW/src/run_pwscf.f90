@@ -418,7 +418,7 @@ SUBROUTINE reset_exx( )
 !-------------------------------------------------------------
   USE fft_types,  ONLY : fft_type_deallocate 
   USE exx_base,   ONLY : exx_grid_init, exx_mp_init, exx_div_check, & 
-                         coulomb_fac, coulomb_done 
+                         coulomb_fac, coulomb_done , exx_bgrp_standard
   USE exx,        ONLY : dfftt, exx_fft_create, deallocate_exx 
   USE exx_band,   ONLY : igk_exx 
   ! 
@@ -428,7 +428,9 @@ SUBROUTINE reset_exx( )
   !
   IF (ALLOCATED(coulomb_fac) ) DEALLOCATE( coulomb_fac, coulomb_done )
   CALL deallocate_exx( )
-  IF (ALLOCATED(igk_exx)) DEALLOCATE(igk_exx) 
+  IF(.not.exx_bgrp_standard) THEN
+    IF (ALLOCATED(igk_exx)) DEALLOCATE(igk_exx) 
+  END IF
   dfftt%nr1=0; dfftt%nr2=0; dfftt%nr3=0 
   CALL fft_type_deallocate( dfftt ) ! FIXME: is this needed?
   !
