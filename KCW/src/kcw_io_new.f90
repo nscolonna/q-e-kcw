@@ -24,7 +24,7 @@ MODULE io_kcw
   LOGICAL,       SAVE      :: rho_binary = .TRUE.
   !
   PUBLIC :: rho_binary
-  PUBLIC :: write_rhowann, read_rhowann, write_mlwf, read_mlwf, write_rhowann_sgl, read_rhowann_sgl
+  PUBLIC :: write_rhowann, read_rhowann, write_mlwf, write_rhowann_sgl, read_rhowann_sgl
   PUBLIC :: write_rhowann_g, read_rhowann_g
   CHARACTER(LEN=6), EXTERNAL :: int_to_char
   !
@@ -927,13 +927,13 @@ MODULE io_kcw
            !
            ik_g = MOD ( ik_g-1, nkstot/2 ) + 1 
            ispin = isk(ik)
-           filename = TRIM(dirname) // 'wfc_wann_' // updw(ispin) // '_ik' //&
+           filename = TRIM(dirname) // 'wfcwann' // updw(ispin) // &
                 & TRIM(int_to_char(ik_g))
            !
         ELSE
            !
            ispin = 1
-           filename = TRIM(dirname) // 'wfc_wann_ik' // TRIM(int_to_char(ik_g))
+           filename = TRIM(dirname) // 'wfcwann' // TRIM(int_to_char(ik_g))
            !
         ENDIF
         !
@@ -1041,124 +1041,6 @@ MODULE io_kcw
      !
    END SUBROUTINE gk_l2gmap_kdip
    !
-   !
-   ! NsC: Adapted from read_collected_wfc inside PW/scr/pw_restart_new.f90
-   SUBROUTINE read_mlwf ( dirname, ik, evc )
-     !------------------------------------------------------------------------
-     !
-     ! ... reads from directory "dirname" (new file format) for k-point "ik"
-     ! ... wavefunctions from collected format into distributed array "evc"
-     !
-     USE control_flags,        ONLY : gamma_only
-     USE klist,                ONLY : nkstot, nks, ngk, igk_k
-     USE wvfct,                ONLY : npwx, nbnd
-     USE gvect,                ONLY : ig_l2g
-     USE mp_bands,             ONLY : root_bgrp, intra_bgrp_comm
-     USE mp_pools,             ONLY : me_pool, root_pool, &
-                                      intra_pool_comm
-     USE mp,                   ONLY : mp_sum, mp_max
-     USE io_base,              ONLY : read_wfc
-     USE lsda_mod,             ONLY : nspin, isk, nspin
-     USE control_kcw,          ONLY : num_wann
-     USE noncollin_module,  ONLY : domag, noncolin, m_loc, angle1, angle2, ux, nspin_lsda, nspin_gga, nspin_mag, npol
-     !
-     IMPLICIT NONE
-     !
-     CHARACTER(LEN=*), INTENT(IN) :: dirname
-     INTEGER, INTENT(IN) :: ik
-     COMPLEX(dp), INTENT(OUT) :: evc(:,:)
-     !
-     CHARACTER(LEN=320)   :: filename, msg
-     INTEGER              :: ik_g, ig
-     INTEGER              :: npol_, nbnd_
-     INTEGER              :: ike, iks, ngk_g, npw_g, ispin
-     INTEGER, EXTERNAL    :: global_kpoint_index
-     INTEGER, ALLOCATABLE :: mill_k(:,:)
-     INTEGER, ALLOCATABLE :: igk_l2g(:), igk_l2g_kdip(:)
-     LOGICAL              :: ionode_k
-     REAL(DP)             :: scalef, xk_(3), b1(3), b2(3), b3(3)
-     CHARACTER(LEN=2), DIMENSION(2) :: updw = (/ 'up', 'dw' /)
-     !
-     ! ... the root processor of each pool reads
-     !
-     ionode_k = (me_pool == root_pool)
-     !
-     iks = global_kpoint_index (nkstot, 1)
-     ike = iks + nks - 1
-     !
-     ! ik_g: index of k-point ik in the global list
-     !
-     ik_g = ik + iks - 1
-     !
-     ! ... the igk_l2g_kdip local-to-global map is needed to read wfcs
-     !
-     ALLOCATE ( igk_l2g_kdip( npwx ) )
-     !
-     ! ... The igk_l2g array yields the correspondence between the
-     ! ... local k+G index and the global G index - requires arrays
-     ! ... igk_k (k+G indices) and ig_l2g (local to global G index map)
-     !
-     ALLOCATE ( igk_l2g( npwx ) )
-     igk_l2g = 0
-     DO ig = 1, ngk(ik)
-        igk_l2g(ig) = ig_l2g(igk_k(ig,ik))
-     END DO
-     !
-     ! ... npw_g: the maximum G vector index among all processors
-     ! ... ngk_g: global number of k+G vectors for all k points
-     !
-     npw_g = MAXVAL( igk_l2g(1:ngk(ik)) )
-     CALL mp_max( npw_g, intra_pool_comm )
-     ngk_g = ngk(ik)
-     CALL mp_sum( ngk_g, intra_bgrp_comm)
-     !
-     ! ... now compute the igk_l2g_kdip local-to-global map
-     !
-     igk_l2g_kdip = 0
-     CALL gk_l2gmap_kdip( npw_g, ngk_g, ngk(ik), igk_l2g, &
-          igk_l2g_kdip )
-     DEALLOCATE ( igk_l2g )
-     !
-     IF ( nspin_mag == 2 ) THEN
-        !
-        ! ... LSDA: spin mapped to k-points, isk(ik) tracks up and down spin
-        !
-        ik_g = MOD ( ik_g-1, nkstot/2 ) + 1 
-        ispin = isk(ik)
-        filename = TRIM(dirname) // 'wfc_wann_' // updw(ispin) // '_ik' // &
-             & TRIM(int_to_char(ik_g))
-        !
-     ELSE
-        !
-        filename = TRIM(dirname) // 'wfc_wann_ik' // TRIM(int_to_char(ik_g))
-        !
-     ENDIF
-     !
-     ! ... Miller indices are read from file (but not used)
-     !
-     ALLOCATE( mill_k ( 3,npwx ) )
-     !
-     evc=(0.0_DP, 0.0_DP)
-     !
-     CALL read_wfc( iunpun, filename, root_bgrp, intra_bgrp_comm, &
-          ik_g, xk_, ispin, npol_, evc, npw_g, gamma_only, nbnd_, &
-          igk_l2g_kdip(:), ngk(ik), b1, b2, b3, mill_k, scalef )
-     !
-     DEALLOCATE ( mill_k )
-     DEALLOCATE ( igk_l2g_kdip )
-     !
-     ! ... here one should check for consistency between what is read
-     ! ... and what is expected
-     !
-     IF ( nbnd_ < num_wann ) THEN
-        WRITE (msg,'("The number of bands for this run is",I6,", but only",&
-             & I6," bands were read from file")')  num_wann, nbnd_
-        CALL errore ('pw_restart - read_collected_wfc', msg, 1 )
-     END IF
-     !
-     RETURN
-     !
-   END SUBROUTINE read_mlwf
    !
    !NsC: read and write in g-space. Adapted from read_rhog/write_rhog in Modules/io_base.f90
    !     write/read Miller indeces NOT exploited here! (check diff with read_rhog in Modules/io_base.f90)

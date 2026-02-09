@@ -1485,13 +1485,14 @@ MODULE pw_restart_new
       CHARACTER(LEN=*), INTENT(IN) :: dirname
       INTEGER, INTENT(IN) :: ik
       COMPLEX(dp), INTENT(OUT) :: arr(:,:)
-      CHARACTER(LEN=3), OPTIONAL, INTENT(IN) :: label_
+      CHARACTER(LEN=*), OPTIONAL, INTENT(IN) :: label_
       INTEGER, OPTIONAL, INTENT(OUT)  :: ierr_
       !
       CHARACTER(LEN=2), DIMENSION(2) :: updw = (/ 'up', 'dw' /)
       CHARACTER(LEN=320)   :: filename, msg 
-      CHARACTER(LEN=3)     :: label 
+      CHARACTER(LEN=320)   :: label 
       LOGICAL              :: read_ace
+      LOGICAL              :: read_wann
       INTEGER              :: i, ik_g, ig
       INTEGER              :: npol_, nbnd_
       INTEGER              :: ike, iks, ngk_g, npw_g, ispin
@@ -1505,18 +1506,24 @@ MODULE pw_restart_new
       !
       if(present(label_)) then 
          label = label_
-         if(label.eq."ace") then 
+         if(TRIM(label).eq."ace") then 
             if(.not.exx_is_active()) CALL errore ('pw_restart-read_collected_wfc',&
                  "ace but not exx_is_active", 1 ) 
             read_ace = .true.
-         else if(label.eq."wfc") then
+            read_wann = .false.
+         else if(TRIM(label).eq."wfc") then
             read_ace = .false.
-         else
+            read_wann = .false.
+         else if(TRIM(label).eq."wfcwann") then
+            read_ace = .false.
+            read_wann = .true. 
+         else 
             CALL errore ('pw_restart - read_collected_wfc', "wrong label", 1 )
          end if
       else
          label = "wfc"
          read_ace = .false.
+         read_wann = .false.
       end if
       !
       ! ... the root processor of each pool reads
@@ -1565,12 +1572,12 @@ MODULE pw_restart_new
          !
          ik_g = MOD ( ik_g-1, nkstot/2 ) + 1 
          ispin = isk(ik)
-         filename = TRIM(dirname) // label // updw(ispin) // &
+         filename = TRIM(dirname) // TRIM(label) // updw(ispin) // &
               & TRIM(int_to_char(ik_g))
          !
       ELSE
          !
-         filename = TRIM(dirname) // label // TRIM(int_to_char(ik_g))
+         filename = TRIM(dirname) // TRIM(label) // TRIM(int_to_char(ik_g))
          !
       ENDIF
       !
@@ -1599,7 +1606,11 @@ MODULE pw_restart_new
         WRITE(stdout, '(5X,A,I8,A)') 'ACE potential read for ', nbnd_, ' bands'
         nbndproj = nbnd_
         !
-      ELSE IF ( nbnd_ < nbnd .and..not. read_ace) THEN
+      ELSE IF(read_wann) THEN
+        !
+        WRITE(stdout, '(5X,A,I8,A)') 'Read ', nbnd_, ' Wannier functions'
+        !
+      ELSE IF ( nbnd_ < nbnd .and..not. read_ace .and. .not. read_wann) THEN
         !
         WRITE (msg,'("The number of bands for this run is",I6,", but only",&
              & I6," bands were read from file")')  nbnd, nbnd_  
