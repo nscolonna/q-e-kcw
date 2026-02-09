@@ -2181,8 +2181,8 @@ SUBROUTINE exx_iosys ( ecutwfc, ecutrho )
   !
   exx_bgrp_type_ = exx_bgrp_type
   write(stdout, '(/,5x,"Exact exchange band parallelism type set to ",A/)' ) trim(exx_bgrp_type_)
-  IF (trim(exx_bgrp_type_).ne.'standard' .and. trim(exx_bgrp_type_).ne.'massive' ) &
-        & CALL errore('input','Invalid value of exx_bgrp_type (standard or massive)',1)
+  IF (trim(exx_bgrp_type_).ne.'standard' .and. trim(exx_bgrp_type_).ne.'band_pairs' ) &
+        & CALL errore('input','Invalid value of exx_bgrp_type (values: standard or band_pairs)',1)
   IF( trim(exx_bgrp_type_) .eq. 'standard') then
      exx_bgrp_standard = .true.
   ELSE

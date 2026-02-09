@@ -472,10 +472,11 @@ MODULE input_parameters
 
           ! next group of variables PWSCF ONLY
           ! 
-        CHARACTER(len=80) :: exx_bgrp_type = 'massive'
-        !! exx band parallelism schemes: "standard" ... regular computations
-        !!                               "massive"  ... very large systems (useful when the local DFT part becomes relevant)
-          !
+        CHARACTER(len=80) :: exx_bgrp_type = 'band_pairs'
+        !! exx band parallelism schemes: "standard"   ... regular computations
+        !!                               "band_pairs" ... distribute band pairs over bgrp (useful when the local DFT part becomes relevant)
+        !!                                                (Barnes et al., Computer Physics Communications, Volume 214, 2017, Pages 52-58)
+        !
         REAL(DP) :: exx_fraction = -1.0_DP
         !! exact exchange fraction. If negative, use defaults
         REAL(DP) :: screening_parameter = -1.0_DP
