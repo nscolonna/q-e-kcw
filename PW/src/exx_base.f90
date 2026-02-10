@@ -28,6 +28,9 @@ MODULE exx_base
   !
   ! ... general purpose vars
   !
+  COMPLEX(DP) :: d_spin(2,2,48)
+  !! spin matrices for non collinear calculations
+  !
   REAL(DP), ALLOCATABLE :: locbuff(:,:,:)
   !! temporary (real) buffer for wfc storage
   REAL(DP), ALLOCATABLE :: locmat(:,:,:)

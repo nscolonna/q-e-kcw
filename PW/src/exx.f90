@@ -271,7 +271,7 @@ MODULE exx
     USE uspp,                 ONLY : okvan
     USE paw_variables,        ONLY : okpaw
     USE exx_base,             ONLY : nkqs, index_sym, index_xk, xkq_collect, exx_set_symm, exxdiv, &
-                                     erfc_scrlen, gau_scrlen, exx_divergence
+                                     erfc_scrlen, gau_scrlen, exx_divergence, d_spin
     USE exx1,                 ONLY : exxinit1
     USE exx2,                 ONLY : exxinit2
     USE us_exx,               ONLY : rotate_becxx
@@ -289,7 +289,6 @@ MODULE exx
     !
     INTEGER :: ik, ibnd, ir, isym
     REAL(DP), ALLOCATABLE :: occ(:,:)
-    COMPLEX(DP) :: d_spin(2,2,48)
     !
     CALL start_clock ('exxinit')
     !

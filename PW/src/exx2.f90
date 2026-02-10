@@ -136,7 +136,7 @@ MODULE exx2
     USE fft_interfaces,       ONLY : invfft
     USE mp_orthopools,        ONLY : intra_orthopool_comm
     USE exx_base,             ONLY : nkqs, index_xk, index_sym,  &
-                                     rir, working_pool
+                                     rir, working_pool, d_spin
     USE exx2_utils,           ONLY : change_data_structure, nwordwfc_exx, &
                                      igk_exx, evc_exx, transform_evc_to_exx
 #if defined(__CUDA)
@@ -168,7 +168,6 @@ MODULE exx2
     COMPLEX(DP),ALLOCATABLE  :: temppsic_all(:), psic_all(:)
     COMPLEX(DP), ALLOCATABLE :: temppsic_all_nc(:,:), psic_all_nc(:,:)
 #endif
-    COMPLEX(DP) :: d_spin(2,2,48)
     INTEGER :: npw, current_ik
     INTEGER, EXTERNAL :: global_kpoint_index
     INTEGER :: ibnd_start_new, ibnd_end_new, max_buff_bands_per_egrp

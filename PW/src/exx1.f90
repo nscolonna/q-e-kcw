@@ -49,7 +49,7 @@ MODULE exx1
     USE exx_base,             ONLY : nkqs, index_sym,  &
                                      exx_set_symm, rir, working_pool, exxdiv, &
                                      erfc_scrlen, gau_scrlen, exx_divergence, &
-                                     x_nbnd_occ, nbndproj, local_thr
+                                     x_nbnd_occ, nbndproj, local_thr, d_spin
 #if defined(__CUDA)
     USE device_memcpy_m,      ONLY : dev_memset
     USE device_fbuff_m,       ONLY : dev_buf
@@ -84,7 +84,6 @@ MODULE exx1
     COMPLEX(DP),ALLOCATABLE  :: temppsic_all(:), psic_all(:)
     COMPLEX(DP), ALLOCATABLE :: temppsic_all_nc(:,:), psic_all_nc(:,:)
 #endif
-    COMPLEX(DP) :: d_spin(2,2,48)
     INTEGER :: npw, current_ik
     INTEGER, EXTERNAL :: global_kpoint_index
     !
