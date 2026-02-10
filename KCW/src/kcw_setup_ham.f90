@@ -200,7 +200,6 @@ subroutine kcw_setup_ham
     CALL rotate_ks () 
     !
   ELSE 
-    !dirname = TRIM (tmp_dir_kcw) 
     dirname = restart_dir ()
     WRITE(stdout,'(/,5X, "INFO: MLWF read from file: &
                   Reading collected, re-writing distributed wavefunctions")')
@@ -211,7 +210,6 @@ subroutine kcw_setup_ham
         IF ( lsda .AND. isk(ik) /= spin_component) CYCLE
         npw = ngk(ik)
         IF ( nkb > 0 ) CALL init_us_2( npw, igk_k(1,ik), xk(1,ik), vkb )
-        !CALL read_mlwf ( dirname, ik, evc0 )
         CALL read_collected_wfc ( dirname, ik, evc0, "wfcwann")
         ik_eff = ik-(spin_component-1)*nkstot_eff
         CALL save_buffer ( evc0, lrwfc, iuwfc_wann, ik_eff )
