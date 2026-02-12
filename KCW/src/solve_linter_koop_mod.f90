@@ -90,7 +90,7 @@ subroutine solve_linter_koop ( spin_ref, i_ref, delta_vr, drhog_scf, delta_vg, d
               dvscfout (:,:),   & !
               dbecsum(:,:,:,:), & !
               dbecsum_nc (:,:,:,:,:,:), & !
-              aux(:)           !
+              aux(:)           !  
   INTEGER :: nrec
   !
   COMPLEX(DP), POINTER ::  dvscfin(:,:,:), dvscfins (:,:,:)
@@ -119,7 +119,7 @@ subroutine solve_linter_koop ( spin_ref, i_ref, delta_vr, drhog_scf, delta_vg, d
   LOGICAL :: new
   COMPLEX(DP)    ::   imag
   REAL(DP)       ::   xq_cryst(3)
-  INTEGER        ::   isym,nnr
+  INTEGER        ::   isym, nnr
 
   ! Set to false to revert to the previous implementation of the Linear solver (consistent with QE7.1)
   new = .true.
@@ -137,17 +137,15 @@ subroutine solve_linter_koop ( spin_ref, i_ref, delta_vr, drhog_scf, delta_vg, d
     !$acc kernels present(dvscfins)
     dvscfins(:,:,:) = (0.D0, 0.D0)
     !$acc end kernels
-    !$acc update host(dvscfins)
   ELSE
     ALLOCATE (dvscfin (dfftp%nnr, nspin_mag, 1)) 
     !$acc enter data create(dvscfin(1:nnr, 1:nspin_mag, 1))
     !$acc kernels present(dvscfin)
     dvscfin(:,:,:) = (0.D0, 0.D0)
     !$acc end kernels
-    !$acc update host(dvscfin)
   ENDIF
   !
-  ALLOCATE (drhoscf  (dffts%nnr, nspin_mag)) 
+  ALLOCATE (drhoscf  (dffts%nnr, nspin_mag))
   ALLOCATE (drhoscfh (dfftp%nnr, nspin_mag))
   ALLOCATE (dvscfout (dfftp%nnr, nspin_mag))    
   ALLOCATE (dbecsum ( (nhm * (nhm + 1))/2 , nat , nspin_mag , 1)) 
@@ -257,8 +255,7 @@ subroutine solve_linter_koop ( spin_ref, i_ref, delta_vr, drhog_scf, delta_vg, d
             thresh = min (1.d-2 * sqrt (dr2), 1.d-6)
           ENDIF
           ! 
-          !
-          CALL sternheimer_kernel(iter==1, isolv==2, 1, lrdvwfc, iudvwfc, &
+            CALL sternheimer_kernel(iter==1, isolv==2, 1, lrdvwfc, iudvwfc, &
             thresh, dvscfins, all_conv, averlt, drhoscf, dbecsum, &
             dbecsum_nc(:,:,:,:,:,isolv))
           !
@@ -267,16 +264,16 @@ subroutine solve_linter_koop ( spin_ref, i_ref, delta_vr, drhog_scf, delta_vg, d
         DO isolv = 1, nsolv
           !
           IF (iter == 1 ) THEN
-            thresh = 1.d-6
+             thresh = 1.d-6
           ELSE
             thresh = min (1.d-2 * sqrt (dr2), 1.d-6)
           ENDIF
           ! 
-          !
-          CALL sternheimer_kernel(iter==1, isolv==2, 1, lrdvwfc, iudvwfc, &
+            !
+            CALL sternheimer_kernel(iter==1, isolv==2, 1, lrdvwfc, iudvwfc, &
             thresh, dvscfin, all_conv, averlt, drhoscf, dbecsum, &
             dbecsum_nc(:,:,:,:,:,isolv))
-          !
+            !
           !
         ENDDO
      END IF
@@ -333,11 +330,10 @@ subroutine solve_linter_koop ( spin_ref, i_ref, delta_vr, drhog_scf, delta_vg, d
      ! NB: always CALL with imode=0 to avoid CALL to addcore in dv_of_drho for 
      !     nlcc pseudo. The CALL is not needed since we are not moving atoms!!
      !
-     CALL dv_of_drho (dvscfout)  
-     !
+     CALL dv_of_drho (dvscfout) 
+!
      ! ... On output in dvscfin we have the mixed potential
      !
-     !! TMP REMOVED $acc update host(dvscfin)
      CALL mix_potential (2*dfftp%nnr*nspin_mag, dvscfout, dvscfin, &   
                          alpha_mix(iter), dr2, tr2/npol, iter, &
                          nmix, flmixDPot, convt)
