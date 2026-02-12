@@ -100,6 +100,8 @@ SUBROUTINE kcw_init_q()
         ! 
         CALL init_us_2 (npw, igk_k(1,ikk), xk(1,ikk), vkb)
         !
+        !$acc update host(vkb)
+        !
         ! becp1 = <vkb|evc>
         !
         CALL calbec (npw, vkb, evc, becp1(ik))

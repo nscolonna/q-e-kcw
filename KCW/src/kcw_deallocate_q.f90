@@ -30,6 +30,7 @@ SUBROUTINE kcw_deallocate_q()
   IF (lgamma) THEN
      if (associated(evq))  nullify(evq)
   ELSE
+     !$acc exit data delete(evq)
      if (associated(evq))  deallocate(evq)
   ENDIF
   !

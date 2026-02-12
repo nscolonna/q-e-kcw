@@ -119,6 +119,8 @@ subroutine solve_linter_koop ( spin_ref, i_ref, delta_vr, drhog_scf, delta_vg, d
   COMPLEX(DP)    ::   imag
   REAL(DP)       ::   xq_cryst(3)
   INTEGER        ::   isym
+  !
+  INTEGER :: nnr 
 
   ! Set to false to revert to the previous implementation of the Linear solver (consistent with QE7.1)
   new = .true.
@@ -136,6 +138,8 @@ subroutine solve_linter_koop ( spin_ref, i_ref, delta_vr, drhog_scf, delta_vg, d
   ELSE
      dvscfins(1:dffts%nnr, 1:nspin_mag, 1:1) => dvscfin
   ENDIF
+  nnr = dfftp%nnr
+  !$acc enter data create(dvscfins(1:nnr, 1:nspin_mag, 1))
   !
   !ALLOCATE (drhoscf  (dfftp%nnr, nspin, 1) )
   ALLOCATE (drhoscf  (dffts%nnr, nspin_mag) ) !! NsC
@@ -364,6 +368,8 @@ subroutine solve_linter_koop ( spin_ref, i_ref, delta_vr, drhog_scf, delta_vg, d
   DEALLOCATE (drhoscf )
   DEALLOCATE (dvscfout)
   DEALLOCATE (drhoscfh)
+  !
+  !$acc exit data delete(dvscfins)
   IF (doublegrid) DEALLOCATE (dvscfins)
   DEALLOCATE (dvscfin)
   DEALLOCATE (upert)
