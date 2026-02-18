@@ -88,7 +88,7 @@ make_w90: git_w90
 	( $(MAKE) lib || exit 1) ; \
 	( $(MAKE) PREFIX=$(BUILDDIR)/wannier90 install && \
 	  touch $(BUILDDIR)/wannier90/make_w90 && \
-	  ln -fs $(BUILDDIR)/wannier90/bin/*.x  $(TOPDIR)/bin/ ) ; \
+	  ln -fs $(BUILDDIR)/wannier90/bin/*.x  $(BUILDDIR)/bin/ ) ; \
 	mkdir $(BUILDDIR)/wannier90/obj ; \
 	cp src/obj/*.o src/obj/*mod $(BUILDDIR)/wannier90/obj ; fi
 
