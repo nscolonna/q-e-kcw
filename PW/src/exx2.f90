@@ -122,7 +122,7 @@ MODULE exx2
     !! This subroutine is run before the first H_psi() of each iteration. 
     !! It saves the wavefunctions for the right density matrix, in real space.
     !
-    USE wavefunctions,        ONLY : psic
+    USE wavefunctions,        ONLY : psic, evc
     USE io_files,             ONLY : iunwfc_exx
     USE buffers,              ONLY : get_buffer
     USE wvfct,                ONLY : nbnd, npwx
