@@ -2188,6 +2188,10 @@ SUBROUTINE exx_iosys ( ecutwfc, ecutrho )
   ELSE
      exx_bgrp_standard = .false.
   END IF
+#if defined(__CUDA)
+  IF (exx_bgrp_standard ) &
+         & Call errore('input','Standard BGRP for EXX not yet implemented on GPU (use exx_bgrp_type = band_pairs)',1)
+#endif
   !
 END SUBROUTINE exx_iosys
 

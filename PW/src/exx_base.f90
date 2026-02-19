@@ -108,11 +108,11 @@ MODULE exx_base
   REAL(DP) :: ecutvcut
   TYPE(vcut_type) :: vcut
   !
-  CHARACTER(len=80) :: exx_bgrp_type = 'standard' ! (initialized in read_namelist)
-  !! see input keyword 'exx_bgrp_type'
-  !! exx band parallelism schemes: "standard" ... regular computations
-  !!                               "massive"  ... very large systems (useful when the local DFT part becomes relevant)
-  LOGICAL :: exx_bgrp_standard = .true. ! (set in exx_iosys)
+  CHARACTER(len=80) :: exx_bgrp_type = 'band_pairs' ! (initialized in read_namelist)
+  !! exx band parallelism schemes: "standard"   ... regular computations
+  !!                               "band_pairs" ... distribute band pairs over bgrp (useful when the local DFT part becomes relevant)
+  !!                                                (Barnes et al., Computer Physics Communications, Volume 214, 2017, Pages 52-58)
+  LOGICAL :: exx_bgrp_standard = .false. ! (set in exx_iosys)
   !! a logical flag to quickly distiguish bgrp types in EXX
   !
   TYPE(fft_type_descriptor) :: dfftt 
