@@ -108,12 +108,15 @@ MODULE exx_base
   REAL(DP) :: ecutvcut
   TYPE(vcut_type) :: vcut
   !
-  CHARACTER(len=80) :: exx_bgrp_type = 'band_pairs' ! (initialized in read_namelist)
-  !! exx band parallelism schemes: "standard"   ... regular computations
-  !!                               "band_pairs" ... distribute band pairs over bgrp (useful when the local DFT part becomes relevant)
-  !!                                                (Barnes et al., Computer Physics Communications, Volume 214, 2017, Pages 52-58)
-  LOGICAL :: exx_bgrp_standard = .false. ! (set in exx_iosys)
-  !! a logical flag to quickly distiguish bgrp types in EXX
+  ! ... band parallelism types
+  enum, bind(c)
+    enumerator :: EXX_BGRP_TYP   = 0 ! unset value
+    enumerator :: EXX_BGRP_BANDS = 1 ! distribute bands over band groups
+    enumerator :: EXX_BGRP_PAIRS = 2 ! distribute band pairs over band groups 
+                                     ! (see Barnes et al., Comput. Phys. Comm., Volume 214, 2017, Pages 52-58)
+  end enum
+  !! allowed values for exx_bgrp_type
+  integer(kind(EXX_BGRP_TYP)) :: exx_bgrp_type ! (initialized in read_namelist)
   !
   TYPE(fft_type_descriptor) :: dfftt 
   !

@@ -21,7 +21,7 @@ MODULE exx
   USE io_global,            ONLY : stdout
   !
   USE control_flags,        ONLY : gamma_only, tqr, use_gpu, many_fft
-  USE exx_base,             ONLY : exx_bgrp_standard, dfftt, exxbuff , exxbuff_d, npwt, x_nbnd_occ, &
+  USE exx_base,             ONLY : exx_bgrp_type, EXX_BGRP_BANDS, dfftt, exxbuff , exxbuff_d, npwt, x_nbnd_occ, &
                                    ibnd_start, ibnd_end, gt, ggt, gcutmt, gkcut, gstart_t, ngmt_g, &
                                    eps_occ, exxalfa, x_occupation, x_occupation_d, &
                                    locbuff, exxmat, locmat, nbndproj, local_thr
@@ -131,7 +131,7 @@ MODULE exx
     !
     ! ... set up fft descriptors, including parallel stuff: sticks, planes, etc.
     !
-    IF (negrp == 1 .or. exx_bgrp_standard) THEN
+    IF (negrp == 1 .or. (exx_bgrp_type .eq. EXX_BGRP_BANDS)) THEN
        !
        ! ... no band parallelization: exx grid is a subgrid of general grid
        !
@@ -368,7 +368,7 @@ MODULE exx
     IF (.NOT. gamma_only) CALL exx_set_symm( dfftt%nr1,  dfftt%nr2,  dfftt%nr3, &
                                              dfftt%nr1x, dfftt%nr2x, dfftt%nr3x )
     !
-    if(exx_bgrp_standard) then
+    if( exx_bgrp_type .eq. EXX_BGRP_BANDS ) then
       ! prepare buffers for standard EXX scheme
       Call exxinit1( DoLoc )
     else 
@@ -423,7 +423,7 @@ MODULE exx
     !
     CALL start_clock( 'vexx' )
     !
-    if(exx_bgrp_standard) then
+    if(exx_bgrp_type .eq. EXX_BGRP_BANDS) then
        if (gamma_only ) then
           Call vexx_gamma(lda, n, m, psi, hpsi, becpsi )
        else
@@ -482,7 +482,7 @@ MODULE exx
        IF ( lsda ) current_spin = isk(ik)
        ! end setup
        IF ( nks > 1 ) THEN
-          IF ( exx_bgrp_standard ) THEN
+          IF ( exx_bgrp_type .eq. EXX_BGRP_BANDS ) THEN
              CALL get_buffer( psi, nwordwfc, iunwfc, ik )
           ELSE
              CALL get_buffer( psi, nwordwfc_exx, iunwfc_exx, ik )
@@ -493,7 +493,7 @@ MODULE exx
        !
        IF (okvan) THEN
           ! prepare the |beta> function at k+q
-          IF ( exx_bgrp_standard ) THEN
+          IF ( exx_bgrp_type .eq. EXX_BGRP_BANDS ) THEN
              CALL init_us_2( npw, igk_k(1,ik), xk(:,ik), vkb )
           ELSE
              CALL init_us_2( npw, igk_exx(1,ik), xk(:,ik), vkb )
@@ -521,7 +521,7 @@ MODULE exx
     !
     IF (gamma_only) energy = 2 * energy
     !
-    IF ( exx_bgrp_standard ) THEN
+    IF ( exx_bgrp_type .eq. EXX_BGRP_BANDS ) THEN
        CALL mp_sum( energy, intra_bgrp_comm )
     ELSE
        CALL mp_sum( energy, intra_egrp_comm )
@@ -547,7 +547,7 @@ MODULE exx
     !
     CALL start_clock( 'exxenergy' )
     !
-    IF (exx_bgrp_standard) THEN
+    IF ( exx_bgrp_type .eq. EXX_BGRP_BANDS ) THEN
        !
        exxenergy2 = exxenergy()
        !
@@ -579,7 +579,7 @@ MODULE exx
     !
     CALL start_clock( 'exx_stress' )
     !
-    IF (exx_bgrp_standard) THEN 
+    IF ( exx_bgrp_type .eq. EXX_BGRP_BANDS ) THEN 
        exx_stress = exx_stress1() 
     ELSE
        exx_stress = exx_stress2() 

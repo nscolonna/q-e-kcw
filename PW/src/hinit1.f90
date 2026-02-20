@@ -32,7 +32,7 @@ SUBROUTINE hinit1()
   USE paw_onecenter,       ONLY : paw_potential
   USE paw_symmetry,        ONLY : paw_symmetrize_ddd
   USE dfunct,              ONLY : newd
-  USE exx_base,            ONLY : exx_bgrp_standard
+  USE exx_base,            ONLY : exx_bgrp_type, EXX_BGRP_PAIRS
   USE exx2,                ONLY : coulomb_fac, coulomb_done
   !
   USE ener,                ONLY : esol, vsol
@@ -141,7 +141,7 @@ SUBROUTINE hinit1()
   ! ... It is actually needed only in case of variable-cell calculations
   ! FIXME: array coulomb_fac may take a large amount of memory: worth it? 
   !
-  IF (.not.exx_bgrp_standard) THEN
+  IF (exx_bgrp_type .eq. EXX_BGRP_PAIRS ) THEN
      IF ( ALLOCATED(coulomb_fac) ) DEALLOCATE (coulomb_fac, coulomb_done)
   END IF
   !
