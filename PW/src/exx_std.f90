@@ -5,7 +5,7 @@
 ! or http://www.gnu.org/copyleft/gpl.txt .
 !
 !-----------------------------------------------------------------------------
-MODULE exx1
+MODULE exx_std
   !
   USE kinds,                ONLY : DP
   USE control_flags,        ONLY : gamma_only, tqr
@@ -21,7 +21,7 @@ MODULE exx1
 #define _CY(A)  CMPLX(0._dp,-A,kind=DP)
   !
   !------------------------------------------------------------------------
-  SUBROUTINE exxinit1( DoLoc )
+  SUBROUTINE exxinit_std( DoLoc )
     !------------------------------------------------------------------------
     !! This subroutine is run before the first H_psi() of each iteration. 
     !! It saves the wavefunctions for the right density matrix, in real space.
@@ -329,10 +329,10 @@ MODULE exx1
        ENDDO
     ENDIF
     !
-  END SUBROUTINE exxinit1
+  END SUBROUTINE exxinit_std
   !
   !-----------------------------------------------------------------------
-  SUBROUTINE vexx_gamma(lda, n, m, psi, hpsi, becpsi)
+  SUBROUTINE vexx_std_gamma(lda, n, m, psi, hpsi, becpsi)
   !-----------------------------------------------------------------------
     !
     ! ... Gamma-specific version of vexx
@@ -612,11 +612,11 @@ MODULE exx1
     IF(okvan) DEALLOCATE( deexx )
     !
     !-----------------------------------------------------------------------
-  END SUBROUTINE vexx_gamma
+  END SUBROUTINE vexx_std_gamma
   !-----------------------------------------------------------------------
   !
   !-----------------------------------------------------------------------
-  SUBROUTINE vexx_k(lda, n, m, psi, hpsi, becpsi)
+  SUBROUTINE vexx_std_k(lda, n, m, psi, hpsi, becpsi)
   !-----------------------------------------------------------------------
     !
     ! ... generic, k-point version of vexx
@@ -905,11 +905,11 @@ MODULE exx1
     IF(okvan) DEALLOCATE( deexx)
     !
     !-----------------------------------------------------------------------
-  END SUBROUTINE vexx_k
+  END SUBROUTINE vexx_std_k
   !-----------------------------------------------------------------------
   !
   !-----------------------------------------------------------------------
-  FUNCTION exx_stress1()
+  FUNCTION exx_stress_std()
     !-----------------------------------------------------------------------
     !
     ! This is Eq.(10) of PRB 73, 125120 (2006).
@@ -941,7 +941,7 @@ MODULE exx1
     IMPLICIT NONE
     !
     ! local variables
-    REAL(DP)   :: exx_stress1(3,3), exx_stress_(3,3)
+    REAL(DP)   :: exx_stress_std(3,3), exx_stress_(3,3)
     !
     COMPLEX(DP),ALLOCATABLE :: tempphic(:), temppsic(:), RESULT(:)
     COMPLEX(DP),ALLOCATABLE :: tempphic_nc(:,:), temppsic_nc(:,:), &
@@ -1193,10 +1193,10 @@ MODULE exx1
     CALL mp_sum( exx_stress_, intra_bgrp_comm )
     CALL mp_sum( exx_stress_, inter_bgrp_comm )
     CALL mp_sum( exx_stress_, inter_pool_comm )
-    exx_stress1 = exx_stress_
+    exx_stress_std = exx_stress_
     !
     !-----------------------------------------------------------------------
-  END FUNCTION exx_stress1
+  END FUNCTION exx_stress_std
   !-----------------------------------------------------------------------
   !
-END MODULE exx1
+END MODULE exx_std

@@ -33,7 +33,7 @@ SUBROUTINE hinit1()
   USE paw_symmetry,        ONLY : paw_symmetrize_ddd
   USE dfunct,              ONLY : newd
   USE exx_base,            ONLY : exx_bgrp_type, EXX_BGRP_PAIRS
-  USE exx2,                ONLY : coulomb_fac, coulomb_done
+  USE exx_bp,              ONLY : coulomb_fac, coulomb_done
   !
   USE ener,                ONLY : esol, vsol
   USE rism_module,         ONLY : lrism, rism_update_pos, rism_calc3d

@@ -90,7 +90,7 @@ MODULE exx
     USE realus,               ONLY : qpointlist, tabxx, tabp
     USE command_line_options, ONLY : nmany_, pencil_decomposition_
     !
-    USE exx2,                 ONLY : set_dfftt_grid2
+    USE exx_bp,                 ONLY : set_dfftt_grid_bp
     !
     IMPLICIT NONE
     !
@@ -149,7 +149,7 @@ MODULE exx
     ELSE
        !
        ! initialize dfftt grid for massive EXX band parallelism
-       Call set_dfftt_grid2( )
+       Call set_dfftt_grid_bp( )
        !
     ENDIF
     ! define clock labels (this enables the corresponding fft too)
@@ -272,8 +272,8 @@ MODULE exx
     USE paw_variables,        ONLY : okpaw
     USE exx_base,             ONLY : nkqs, index_sym, index_xk, xkq_collect, exx_set_symm, exxdiv, &
                                      erfc_scrlen, gau_scrlen, exx_divergence, d_spin
-    USE exx1,                 ONLY : exxinit1
-    USE exx2,                 ONLY : exxinit2
+    USE exx_std,              ONLY : exxinit_std
+    USE exx_bp,               ONLY : exxinit_bp
     USE us_exx,               ONLY : rotate_becxx
     USE paw_exx,              ONLY : PAW_init_fock_kernel
     !
@@ -370,10 +370,10 @@ MODULE exx
     !
     if( exx_bgrp_type .eq. EXX_BGRP_BANDS ) then
       ! prepare buffers for standard EXX scheme
-      Call exxinit1( DoLoc )
+      Call exxinit_std( DoLoc )
     else 
       ! prepare buffers for massive EXX scheme (pair parallelism, DFT data transposition)
-      Call exxinit2()
+      Call exxinit_bp()
     end if
     !
     ! For US/PAW only: compute <beta_I|psi_j,k+q> for the entire 
@@ -400,8 +400,8 @@ MODULE exx
     USE uspp,           ONLY : okvan
     USE paw_variables,  ONLY : okpaw
     USE wvfct,          ONLY : nbnd
-    USE exx1,           ONLY : vexx_gamma, vexx_k
-    USE exx2,           ONLY : vexx2
+    USE exx_std,        ONLY : vexx_std_gamma, vexx_std_k
+    USE exx_bp,         ONLY : vexx_bp
     !
     IMPLICIT NONE
     !
@@ -425,12 +425,12 @@ MODULE exx
     !
     if(exx_bgrp_type .eq. EXX_BGRP_BANDS) then
        if (gamma_only ) then
-          Call vexx_gamma(lda, n, m, psi, hpsi, becpsi )
+          Call vexx_std_gamma(lda, n, m, psi, hpsi, becpsi )
        else
-          Call vexx_k(lda, n, m, psi, hpsi, becpsi )
+          Call vexx_std_k(lda, n, m, psi, hpsi, becpsi )
        end if 
     else
-       Call vexx2(lda, n, m, psi, hpsi, becpsi )
+       Call vexx_bp(lda, n, m, psi, hpsi, becpsi )
     end if 
     !
     CALL stop_clock( 'vexx' )
@@ -460,7 +460,7 @@ MODULE exx
     USE becmod,                 ONLY : bec_type, allocate_bec_type, &
                                        deallocate_bec_type, calbec
     USE uspp,                   ONLY : okvan,nkb,vkb
-    USE exx2_utils,             ONLY : nwordwfc_exx, igk_exx
+    USE exx_bp_utils,           ONLY : nwordwfc_exx, igk_exx
     USE uspp_init,              ONLY : init_us_2
     USE mp_bands,               ONLY : intra_bgrp_comm
     IMPLICIT NONE
@@ -539,7 +539,7 @@ MODULE exx
     !-----------------------------------------------------------------------
     !! Wrapper to \(\texttt{exxenergy2_gamma}\) and \(\texttt{exxenergy2_k}\).
     !
-    USE exx2,   ONLY : exxenergy2_gamma, exxenergy2_k 
+    USE exx_bp,   ONLY : exxenergy_bp_gamma, exxenergy_bp_k 
     !
     IMPLICIT NONE
     !
@@ -554,9 +554,9 @@ MODULE exx
     ELSE
        !
        IF ( gamma_only ) THEN
-          exxenergy2 = exxenergy2_gamma()
+          exxenergy2 = exxenergy_bp_gamma()
        ELSE
-          exxenergy2 = exxenergy2_k()
+          exxenergy2 = exxenergy_bp_k()
        ENDIF
        !
     END IF
@@ -570,8 +570,8 @@ MODULE exx
     !-----------------------------------------------------------------------
     !! This is Eq.(10) of PRB 73, 125120 (2006).
     !
-    USE exx1,   ONLY : exx_stress1
-    USE exx2,   ONLY : exx_stress2
+    USE exx_std,  ONLY : exx_stress_std
+    USE exx_bp,   ONLY : exx_stress_bp
     !
     IMPLICIT NONE
     !
@@ -580,9 +580,9 @@ MODULE exx
     CALL start_clock( 'exx_stress' )
     !
     IF ( exx_bgrp_type .eq. EXX_BGRP_BANDS ) THEN 
-       exx_stress = exx_stress1() 
+       exx_stress = exx_stress_std() 
     ELSE
-       exx_stress = exx_stress2() 
+       exx_stress = exx_stress_bp() 
     END IF
     !
     CALL stop_clock( 'exx_stress' )

@@ -5,7 +5,7 @@
 ! or http://www.gnu.org/copyleft/gpl.txt .
 !
 !----------------------------------------------------------------------------
-MODULE exx2_utils
+MODULE exx_bp_utils
   !---------------------------------------------------------------------------
   !! Variables and subroutines for band parallelization over pairs of bands.
   !
@@ -1486,5 +1486,5 @@ MODULE exx2_utils
     !
   END SUBROUTINE transform_to_local
 
-END MODULE exx2_utils
+END MODULE exx_bp_utils
 !-----------------------------------------------------------------------

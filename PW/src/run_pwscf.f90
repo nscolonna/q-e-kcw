@@ -416,12 +416,12 @@ END SUBROUTINE reset_gvectors
 !-------------------------------------------------------------
 SUBROUTINE reset_exx( )
 !-------------------------------------------------------------
-  USE fft_types,  ONLY : fft_type_deallocate 
-  USE exx_base,   ONLY : exx_grid_init, exx_mp_init, exx_div_check, & 
+  USE fft_types,    ONLY : fft_type_deallocate 
+  USE exx_base,     ONLY : exx_grid_init, exx_mp_init, exx_div_check, & 
                          exx_bgrp_type, EXX_BGRP_PAIRS
-  USE exx,        ONLY : dfftt, exx_fft_create, deallocate_exx 
-  USE exx2,       ONLY : coulomb_fac, coulomb_done
-  USE exx2_utils, ONLY : igk_exx 
+  USE exx,          ONLY : dfftt, exx_fft_create, deallocate_exx 
+  USE exx_bp,       ONLY : coulomb_fac, coulomb_done
+  USE exx_bp_utils, ONLY : igk_exx 
   ! 
   IMPLICIT NONE
   !

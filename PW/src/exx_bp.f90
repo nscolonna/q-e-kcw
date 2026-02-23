@@ -5,7 +5,7 @@
 ! or http://www.gnu.org/copyleft/gpl.txt .
 !
 !-----------------------------------------------------------------------------
-MODULE exx2
+MODULE exx_bp
   !
   USE kinds,                ONLY : DP
   USE control_flags,        ONLY : gamma_only, use_gpu, many_fft, tqr
@@ -76,9 +76,9 @@ MODULE exx2
   END SUBROUTINE g2_convolution_all
   !
   !------------------------------------------------------------------------
-  SUBROUTINE set_dfftt_grid2( )
+  SUBROUTINE set_dfftt_grid_bp( )
     !------------------------------------------------------------------------
-    USE exx2_utils,           ONLY : smap_exx
+    USE exx_bp_utils,         ONLY : smap_exx
     USE command_line_options, ONLY : nmany_, pencil_decomposition_
     USE mp_bands,             ONLY : nyfft
     USE symm_base,            ONLY : fft_fact
@@ -114,10 +114,10 @@ MODULE exx2
     !
     RETURN
     !
-  END SUBROUTINE set_dfftt_grid2
+  END SUBROUTINE set_dfftt_grid_bp
   !
   !------------------------------------------------------------------------
-  SUBROUTINE exxinit2( )
+  SUBROUTINE exxinit_bp( )
     !------------------------------------------------------------------------
     !! This subroutine is run before the first H_psi() of each iteration. 
     !! It saves the wavefunctions for the right density matrix, in real space.
@@ -137,7 +137,7 @@ MODULE exx2
     USE mp_orthopools,        ONLY : intra_orthopool_comm
     USE exx_base,             ONLY : nkqs, index_xk, index_sym,  &
                                      rir, working_pool, d_spin
-    USE exx2_utils,           ONLY : change_data_structure, nwordwfc_exx, &
+    USE exx_bp_utils,         ONLY : change_data_structure, nwordwfc_exx, &
                                      igk_exx, evc_exx, transform_evc_to_exx
 #if defined(__CUDA)
     USE device_memcpy_m,      ONLY : dev_memset
@@ -504,10 +504,10 @@ MODULE exx2
     !
     RETURN
     !
-  END SUBROUTINE exxinit2
+  END SUBROUTINE exxinit_bp
   !
   !-----------------------------------------------------------------------
-  SUBROUTINE vexx2( lda, n, m, psi, hpsi, becpsi )
+  SUBROUTINE vexx_bp( lda, n, m, psi, hpsi, becpsi )
     !-----------------------------------------------------------------------
     !! Wrapper routine computing V_x\psi, V_x = exchange potential. 
     !! Calls generic version vexx_k or Gamma-specific one vexx_gamma.
@@ -515,7 +515,7 @@ MODULE exx2
     USE becmod,         ONLY : bec_type
     USE mp_exx,         ONLY : negrp, inter_egrp_comm, init_index_over_band
     USE wvfct,          ONLY : nbnd
-    USE exx2_utils,     ONLY : transform_psi_to_exx, transform_hpsi_to_local, &
+    USE exx_bp_utils,   ONLY : transform_psi_to_exx, transform_hpsi_to_local, &
                                psi_exx, hpsi_exx
     !
     IMPLICIT NONE
@@ -544,19 +544,19 @@ MODULE exx2
     !
     IF ( gamma_only ) THEN
        IF (negrp == 1)THEN
-          IF (.not. use_gpu) CALL vexx2_gamma( lda, n, m, psi, hpsi, becpsi )
-          IF (      use_gpu) CALL vexx2_gamma_gpu( lda, n, m, psi, hpsi, becpsi )
+          IF (.not. use_gpu) CALL vexx_bp_gamma( lda, n, m, psi, hpsi, becpsi )
+          IF (      use_gpu) CALL vexx_bp_gamma_gpu( lda, n, m, psi, hpsi, becpsi )
        ELSE
-          IF (.not. use_gpu) CALL vexx2_gamma( lda, n, m, psi_exx, hpsi_exx, becpsi )
-          IF (      use_gpu) CALL vexx2_gamma_gpu( lda, n, m, psi_exx, hpsi_exx, becpsi )
+          IF (.not. use_gpu) CALL vexx_bp_gamma( lda, n, m, psi_exx, hpsi_exx, becpsi )
+          IF (      use_gpu) CALL vexx_bp_gamma_gpu( lda, n, m, psi_exx, hpsi_exx, becpsi )
        ENDIF
     ELSE
        IF (negrp == 1)THEN
-          IF (.not. use_gpu) CALL vexx2_k( lda, n, m, psi, hpsi, becpsi )
-          IF (      use_gpu) CALL vexx2_k_gpu( lda, n, m, psi, hpsi, becpsi )
+          IF (.not. use_gpu) CALL vexx_bp_k( lda, n, m, psi, hpsi, becpsi )
+          IF (      use_gpu) CALL vexx_bp_k_gpu( lda, n, m, psi, hpsi, becpsi )
        ELSE
-          IF (.not. use_gpu) CALL vexx2_k( lda, n, m, psi_exx, hpsi_exx, becpsi )
-          IF (      use_gpu) CALL vexx2_k_gpu( lda, n, m, psi_exx, hpsi_exx, becpsi )
+          IF (.not. use_gpu) CALL vexx_bp_k( lda, n, m, psi_exx, hpsi_exx, becpsi )
+          IF (      use_gpu) CALL vexx_bp_k_gpu( lda, n, m, psi_exx, hpsi_exx, becpsi )
        ENDIF
     ENDIF
     !
@@ -568,10 +568,10 @@ MODULE exx2
        !
     ENDIF
     !
-  END SUBROUTINE vexx2
+  END SUBROUTINE vexx_bp
   !
   !-----------------------------------------------------------------------
-  SUBROUTINE vexx2_gamma( lda, n, m, psi, hpsi, becpsi )
+  SUBROUTINE vexx_bp_gamma( lda, n, m, psi, hpsi, becpsi )
     !-----------------------------------------------------------------------
     !! Gamma-specific version of vexx.
     !
@@ -595,7 +595,7 @@ MODULE exx2
                                qvan_init, qvan_clean
     USE paw_exx,        ONLY : PAW_newdxx
     USE exx_base,       ONLY : nqs, index_xkq, index_xk, xkq_collect
-    USE exx2_utils,     ONLY : result_sum, igk_exx
+    USE exx_bp_utils,   ONLY : result_sum, igk_exx
     !
     IMPLICIT NONE
     !
@@ -919,10 +919,10 @@ MODULE exx2
     DEALLOCATE( vc )
     IF (okvan) DEALLOCATE( deexx )
     !
-  END SUBROUTINE vexx2_gamma
+  END SUBROUTINE vexx_bp_gamma
   !
   !-----------------------------------------------------------------------
-  SUBROUTINE vexx2_gamma_gpu(lda, n, m, psi, hpsi, becpsi)
+  SUBROUTINE vexx_bp_gamma_gpu(lda, n, m, psi, hpsi, becpsi)
   !-----------------------------------------------------------------------
     !
     ! ... Gamma-specific version of vexx
@@ -947,7 +947,7 @@ MODULE exx2
                                qvan_init, qvan_clean
     USE paw_exx,        ONLY : PAW_newdxx
     USE exx_base,       ONLY : nqs, index_xkq, index_xk, xkq_collect
-    USE exx2_utils,     ONLY : result_sum, igk_exx, igk_exx_d
+    USE exx_bp_utils,   ONLY : result_sum, igk_exx, igk_exx_d
 #if defined(__CUDA)
     USE device_memcpy_m, ONLY : dev_memset
 #endif
@@ -1329,11 +1329,11 @@ MODULE exx2
     IF(okvan) DEALLOCATE(deexx)
     !
     !-----------------------------------------------------------------------
-  END SUBROUTINE vexx2_gamma_gpu
+  END SUBROUTINE vexx_bp_gamma_gpu
   !-----------------------------------------------------------------------
   !
   !-----------------------------------------------------------------------
-  SUBROUTINE vexx2_k( lda, n, m, psi, hpsi, becpsi )
+  SUBROUTINE vexx_bp_k( lda, n, m, psi, hpsi, becpsi )
     !-----------------------------------------------------------------------
     !! Generic, k-point version of vexx.
     !
@@ -1357,7 +1357,7 @@ MODULE exx2
                                qvan_init, qvan_clean
     USE paw_exx,        ONLY : PAW_newdxx
     USE exx_base,       ONLY : nqs, xkq_collect, index_xkq, index_xk
-    USE exx2_utils,     ONLY : result_sum, igk_exx
+    USE exx_bp_utils,   ONLY : result_sum, igk_exx
     USE io_global,      ONLY : stdout
     !
     !
@@ -1795,10 +1795,10 @@ MODULE exx2
     DEALLOCATE( fac, facb )
     IF (okvan) DEALLOCATE( deexx )
     !
-  END SUBROUTINE vexx2_k
+  END SUBROUTINE vexx_bp_k
   !
   !-----------------------------------------------------------------------
-  SUBROUTINE vexx2_k_gpu(lda, n, m, psi, hpsi, becpsi)
+  SUBROUTINE vexx_bp_k_gpu(lda, n, m, psi, hpsi, becpsi)
   !-----------------------------------------------------------------------
     !
     ! ... generic, k-point version of vexx
@@ -1823,7 +1823,7 @@ MODULE exx2
                                qvan_init, qvan_clean
     USE paw_exx,        ONLY : PAW_newdxx
     USE exx_base,       ONLY : nqs, xkq_collect, index_xkq, index_xk
-    USE exx2_utils,     ONLY : result_sum, igk_exx, igk_exx_d
+    USE exx_bp_utils,   ONLY : result_sum, igk_exx, igk_exx_d
     !CUDA stuff
     USE mp_exx,         ONLY : iexx_istart_d
     USE io_global,      ONLY : stdout
@@ -2282,10 +2282,10 @@ end associate
     CALL stop_clock( 'vexx_k_fin' )
     !
     !------------------------------------------------------------------------
-  END SUBROUTINE vexx2_k_gpu
+  END SUBROUTINE vexx_bp_k_gpu
   !
   !-----------------------------------------------------------------------
-  FUNCTION exxenergy2_gamma()
+  FUNCTION exxenergy_bp_gamma()
     !-----------------------------------------------------------------------
     !
     USE constants,               ONLY : fpi, e2, pi
@@ -2318,14 +2318,14 @@ end associate
     USE us_exx,                  ONLY : bexg_merge, becxx, addusxx_g, &
                                         addusxx_r, qvan_init, qvan_clean
     USE exx_base,                ONLY : nqs, xkq_collect, index_xkq, index_xk
-    USE exx2_utils,              ONLY : igk_exx, change_data_structure, &
+    USE exx_bp_utils,            ONLY : igk_exx, change_data_structure, &
                                         transform_evc_to_exx, nwordwfc_exx, &
                                         evc_exx
-    USE uspp_init,            ONLY : init_us_2
+    USE uspp_init,               ONLY : init_us_2
     !
     IMPLICIT NONE
     !
-    REAL(DP)   :: exxenergy2_gamma
+    REAL(DP)   :: exxenergy_bp_gamma
     !
     ! ... local variables
     !
@@ -2590,11 +2590,11 @@ end associate
     CALL mp_sum( energy, intra_egrp_comm )
     CALL mp_sum( energy, inter_pool_comm )
     !
-    exxenergy2_gamma = energy
+    exxenergy_bp_gamma = energy
     !
     CALL change_data_structure( .FALSE. )
     !
-  END FUNCTION  exxenergy2_gamma
+  END FUNCTION  exxenergy_bp_gamma
   !
   !----------------------------------------------------------------------
   SUBROUTINE compute_becpsi( npw_, igk_, q_, evc_exx, becpsi_k )
@@ -2646,7 +2646,7 @@ end associate
   END SUBROUTINE compute_becpsi
   !
   !-----------------------------------------------------------------------
-  FUNCTION exxenergy2_k()
+  FUNCTION exxenergy_bp_k()
     !-----------------------------------------------------------------------
     !
     USE constants,               ONLY : fpi, e2, pi
@@ -2679,13 +2679,13 @@ end associate
     USE us_exx,                  ONLY : bexg_merge, becxx, addusxx_g, &
                                         addusxx_r, qvan_init, qvan_clean
     USE exx_base,                ONLY : nqs, xkq_collect, index_xkq, index_xk
-    USE exx2_utils,              ONLY : change_data_structure, &
+    USE exx_bp_utils,            ONLY : change_data_structure, &
                                         transform_evc_to_exx, nwordwfc_exx, &
                                         igk_exx, evc_exx
     !
     IMPLICIT NONE
     !
-    REAL(DP)   :: exxenergy2_k
+    REAL(DP)   :: exxenergy_bp_k
     !
     ! ... local variables
     !
@@ -2958,13 +2958,13 @@ end associate
     CALL mp_sum( energy, intra_egrp_comm )
     CALL mp_sum( energy, inter_pool_comm )
     !
-    exxenergy2_k = energy
+    exxenergy_bp_k = energy
     CALL change_data_structure( .FALSE. )
     !
-  END FUNCTION  exxenergy2_k
+  END FUNCTION  exxenergy_bp_k
   !
   !-----------------------------------------------------------------------
-  FUNCTION exx_stress2()
+  FUNCTION exx_stress_bp()
     !-----------------------------------------------------------------------
     !! This is Eq.(10) of PRB 73, 125120 (2006).
     !
@@ -2993,7 +2993,7 @@ end associate
                                      grid_factor, yukawa, erfc_scrlen,      &
                                      use_coulomb_vcut_ws, use_coulomb_vcut_spheric, &
                                      gau_scrlen, vcut, index_xkq, index_xk, index_sym
-    USE exx2_utils,           ONLY : change_data_structure, transform_evc_to_exx, &
+    USE exx_bp_utils,         ONLY : change_data_structure, transform_evc_to_exx, &
                                      g_exx, igk_exx, nwordwfc_exx, evc_exx
     USE coulomb_vcut_module,  ONLY : vcut_get,  vcut_spheric_get
     !
@@ -3001,7 +3001,7 @@ end associate
     !
     ! ... local variables
     !
-    REAL(DP) :: exx_stress2(3,3), exx_stress_(3,3)
+    REAL(DP) :: exx_stress_bp(3,3), exx_stress_(3,3)
     !
     COMPLEX(DP),ALLOCATABLE :: tempphic(:), temppsic(:), result(:)
     COMPLEX(DP),ALLOCATABLE :: tempphic_nc(:,:), temppsic_nc(:,:), &
@@ -3302,10 +3302,10 @@ end associate
     CALL mp_sum( exx_stress_, inter_egrp_comm )
     CALL mp_sum( exx_stress_, inter_pool_comm )
     !
-    exx_stress2 = exx_stress_
+    exx_stress_bp = exx_stress_
     !
     CALL change_data_structure( .FALSE. )
     !
-  END FUNCTION exx_stress2
+  END FUNCTION exx_stress_bp
   !
-END MODULE exx2
+END MODULE exx_bp
