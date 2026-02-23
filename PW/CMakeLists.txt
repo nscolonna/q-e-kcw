@@ -67,9 +67,9 @@ set(src_pw
    src/ewald_dipole.f90 
    src/extfield.f90 
    src/exx_base.f90 
-   src/exx2_utils.f90 
-   src/exx2.f90 
-   src/exx1.f90 
+   src/exx_bp_utils.f90 
+   src/exx_bp.f90 
+   src/exx_std.f90 
    src/exx.f90 
    src/fcp_capacitance.f90 
    src/fcp_dyn_calcavg.f90 
