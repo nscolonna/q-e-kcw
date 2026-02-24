@@ -60,6 +60,8 @@
        # assume_isolated     =                mt
        # io_sp               =                 F
        # io_real_space       =                 F
+       # irr_bz              =                 F
+           # use_wct         =                 F
 
       HAM 
        # qp_symm             =                 F

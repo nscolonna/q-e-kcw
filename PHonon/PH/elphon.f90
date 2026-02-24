@@ -145,7 +145,7 @@ SUBROUTINE rediagonalize_dyn( )
   INTEGER :: i,j, na, nb
   INTEGER :: ntyp_, nat_, ibrav_, nspin_mag_, mu, nu, nta, ntb, nqs_
   REAL(DP) :: celldm_(6), w1
-  CHARACTER(LEN=3) :: atm(ntyp)
+  CHARACTER(LEN=6) :: atm(ntyp)
   COMPLEX(DP), allocatable :: phip (:, :, :, :)
   !
   ! now read the eigenvalues and eigenvectors of the dynamical matrix
@@ -246,7 +246,7 @@ SUBROUTINE readmat (iudyn, ibrav, celldm, nat, ntyp, ityp, omega, &
   ! local
   REAL(DP) :: dynr (2, 3, nat, 3, nat)
   CHARACTER(len=80) :: line
-  CHARACTER(len=3)  :: atm
+  CHARACTER(len=6)  :: atm
   INTEGER :: nt, na, nb, naa, nbb, nu, mu, i, j
   !
   !
@@ -531,8 +531,9 @@ SUBROUTINE elphel (irr, npe, imode0, dvscfins)
            !  selfconsist term which comes from the dependence of D on
            !  V_{eff} on the bare change of the potential
            !
+           call adddvscf (ipert, ik, isolv==2)
+           !
            IF (isolv==1) THEN
-              call adddvscf (ipert, ik)
               !
               ! DFPT+U: add to dvpsi the scf part of the response
               ! Hubbard potential dV_hub
@@ -541,8 +542,6 @@ SUBROUTINE elphel (irr, npe, imode0, dvscfins)
                  IF (.NOT.trans) dnsscf(:,:,:,:,ipert) = dnsscf_all_modes(:,:,:,:,mode)
                  call adddvhubscf (ipert, ik)
               ENDIF
-           ELSE
-              call adddvscf_ph_mag (ipert, ik)
            END IF
            !
            !  reset the original magnetic field if it was changed

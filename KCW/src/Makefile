@@ -2,6 +2,8 @@
 
 include ../../make.inc
 
+VPATH = @srcdir@
+
 # location of needed modules and included files (if any)
 MODFLAGS= $(BASEMOD_FLAGS) \
           $(MOD_FLAG)../../PW/src \
@@ -78,11 +80,13 @@ QEMODS = ../../Modules/libqemod.a ../../KS_Solvers/libks_solvers.a ../../upflib/
          ../../FFTXlib/src/libqefft.a ../../LAXlib/libqela.a ../../UtilXlib/libutil.a ../../dft-d3/libdftd3qe.a \
          ../..//MBD/libmbd.a
 
-TLDEPS= pwlibs lrmods pp w90
+# see comments in file tldeps for explanations
+TLDEPS=pwlibs lrmods
+include ../../install/tldeps
 
-all : tldeps libs-kcw kcw.x clean_partial
+all : kcwlib kcw.x clean_partial
 
-libs-kcw : libkcw.a
+kcwlib : libkcw.a
 
 libkcw.a : $(KI_OBJS)
 	$(AR) $(ARFLAGS) $@ $?
@@ -94,10 +98,6 @@ kcw.x:  kcw.o libkcw.a $(LRMODS) $(PWOBJS) $(QEMODS) $(LIBOBJS)
         $(LIBOBJS) $(QELIBS)
 	- ( cd ../../bin ; ln -fs ../KCW/src/$@ . )
 
-tldeps :
-	if test -n "$(TLDEPS)" ; then \
-	( cd ../.. ; $(MAKE) $(TLDEPS) || exit 1 ) ; fi
-
 clean :
 	- /bin/rm -f *.x *.o *.a *~ *.F90 *.d *.mod *.i *.L *__genmod.f90 *__genmod.mod ../../bin/kcw.x
 
@@ -105,4 +105,3 @@ clean_partial :
 	- /bin/rm -f *__genmod.f90 *__genmod.mod
 
 include make.depend
-# DO NOT DELETE
