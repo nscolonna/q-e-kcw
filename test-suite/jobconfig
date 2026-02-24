@@ -147,7 +147,11 @@ inputs_args = ('scf.in', '1'), ('ph.in', '2'), ('q2r1.in', '3'), ('matdyn1.in', 
 
 [ph_1d/]
 program = PH
-inputs_args = ('ch4.scf.in','1'), ('ch4.ph.in', '2'), ('ch4.dynmat.in', '9')  
+inputs_args = ('ch4.scf.in','1'), ('ch4.ph.in', '2'), ('ch4.dynmat.in', '9')
+
+[ph_raman/]
+program = PH
+inputs_args = ('h2o.scf.in', '1'), ('h2o.ph.in', '2'), ('h2o.dynmat.in', '9')
 
 [ph_restart/]
 program = PH
