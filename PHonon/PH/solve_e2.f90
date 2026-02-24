@@ -105,6 +105,7 @@ subroutine solve_e2
      avg_iter = 0.d0
 
      dfpt_data%drhop = (0.d0, 0.d0)
+     dfpt_data%drhos = (0.d0, 0.d0)
      dfpt_data%dbecsum = (0.d0, 0.d0)
 
      do ik = 1, nksq
