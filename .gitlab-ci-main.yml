@@ -15,9 +15,6 @@ build:pw:
 #    - make run-tests-pw-serial
 #    - rm -r /tmp/save
 
-test-shared-runner:
-  script:
-    - echo "This will run on a shared runner!"
 
 build:cp:
   tags: [gitlab-org-docker]
