@@ -80,8 +80,10 @@ ewald.o \
 ewald_dipole.o \
 extfield.o \
 exx_base.o \
-exx_band.o \
 exx.o \
+exx_std.o \
+exx_bp_utils.o \
+exx_bp.o \
 fcp_capacitance.o \
 fcp_dyn_calcavg.o \
 fcp_dyn_printavg.o \

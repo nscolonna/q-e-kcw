@@ -2116,14 +2116,14 @@ SUBROUTINE exx_iosys ( ecutwfc, ecutrho )
                               exxdiv_treatment, yukawa, ecutvcut,          &
                               gau_parameter, localization_thr, scdm, ace,  &
                               scdmden, scdmgrd, nscdm, n_proj,             & 
-                              exx_fraction, screening_parameter, ecutfock 
+                              exx_fraction, exx_type, screening_parameter, ecutfock 
   USE io_global,     ONLY : stdout
   USE klist,         ONLY : tot_charge
   USE ions_base,     ONLY : nat, ityp, zv
   USE xc_lib,        ONLY:  xclib_dft_is
   USE xc_lib,        ONLY : xclib_set_exx_fraction, set_screening_parameter
   USE exx_base,      ONLY : x_gamma_extrapolation_ => x_gamma_extrapolation, &
-                            nq1, nq2, nq3, &
+                            nq1, nq2, nq3, exx_bgrp_type, EXX_BGRP_BANDS, EXX_BGRP_PAIRS, &
                             exxdiv_treatment_ => exxdiv_treatment, &
                             yukawa_           => yukawa, &
                             ecutvcut_         => ecutvcut
@@ -2176,6 +2176,20 @@ SUBROUTINE exx_iosys ( ecutwfc, ecutrho )
   !
   IF (screening_parameter >= 0.0_DP) &
         & CALL set_screening_parameter(screening_parameter)
+  !
+  write(stdout, '(/,5x,"Exact exchange band parallelism type set to ",A/)' ) trim(adjustl(exx_type))
+  !
+  select case(trim(adjustl(exx_type)))
+  case("bands")
+    exx_bgrp_type = EXX_BGRP_BANDS
+#if defined(__CUDA)
+    Call errore('input', 'EXX bands distribution on GPU NYI (use exx_type = band_pairs)',1)
+#endif
+  case("band_pairs")
+    exx_bgrp_type = EXX_BGRP_PAIRS
+  case default
+    CALL errore('input','Invalid value of exx_type (values: bands or band_pairs)',1)
+  end select
   !
 END SUBROUTINE exx_iosys
 
