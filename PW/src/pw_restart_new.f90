@@ -130,7 +130,7 @@ MODULE pw_restart_new
                                        get_screening_parameter, xclib_get_exx_fraction, exx_is_active
       USE exx_base,             ONLY : x_gamma_extrapolation, nq1, nq2, nq3, &
                                        exxdiv_treatment, yukawa, ecutvcut
-      USE exx,                  ONLY : ecutfock, local_thr 
+      USE exx,                  ONLY : ecutfock, local_thr, nbndproj, use_ace 
       USE london_module,        ONLY : scal6, lon_rcut, c6_i
       USE xdm_module,           ONLY : xdm_a1=>a1i, xdm_a2=>a2i
       USE tsvdw_module,         ONLY : vdw_isolated, vdw_econv_thr
@@ -431,7 +431,8 @@ MODULE pw_restart_new
                                    ECUTFOCK = ecutfock/e2, &
                                    EXX_FRACTION = xclib_get_exx_fraction(), SCREENING_PARAMETER = scr_par_pt, &
                                    EXXDIV_TREATMENT = exxdiv_treatment, X_GAMMA_EXTRAPOLATION = x_gamma_extrapolation,&
-                                   ECUTVCUT = ecutvcut_pt, LOCAL_THR = loc_thr_pt )
+                                   ECUTVCUT = ecutvcut_pt, LOCAL_THR = loc_thr_pt, &
+                                   USE_ACE = use_ace, NBNDPROJ = nbndproj )
          ELSE 
             hybrid_obj_opt%lwrite=.false. 
          END IF 
