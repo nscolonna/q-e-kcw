@@ -46,7 +46,8 @@ SUBROUTINE compute_map_ikq_single (iq,also_minus)
   !
   REAL(DP) :: xkq_m(3), gvect_m(3), gvect_m_(3)
   ! the k-q coordinate and the G vector that shift it into the 1 BZ
-  LOGICAL, INTENT(IN), OPTIONAL :: also_minus
+  !!LOGICAL, INTENT(IN), OPTIONAL :: also_minus
+  LOGICAL, INTENT(IN)  :: also_minus
   LOGICAL :: do_minus = .false.
   !
 #ifdef DEBUG
@@ -68,16 +69,16 @@ SUBROUTINE compute_map_ikq_single (iq,also_minus)
   map_ikq_minus (:) = 0
   shift_1bz_minus(:,:) = 0.D0 
   !
-  IF(present(also_minus)) THEN
+ ! IF(present(also_minus)) THEN
     IF (also_minus) THEN
         WRITE( stdout, '(8X,"INFO: Mapping also k-q -> p in 1BZ DONE  ",/)') 
         do_minus = .true.
     ELSE
       do_minus = .false.
     END IF
-  ELSE
-      do_minus = .false.
-  ENDIF
+!  ELSE
+!      do_minus = .false.
+!  ENDIF
   
   !
   IF (ionode) THEN 
