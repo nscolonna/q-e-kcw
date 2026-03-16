@@ -95,8 +95,9 @@ make_w90: git_w90
 clean_w90:
 	if test -d $(BUILDDIR)/wannier90 ; then \
 	   rm -f -R $(BUILDDIR)/wannier90/* ; fi
-	cd $(TOPDIR)/external/wannier90; \
-	( $(MAKE) veryclean && rm make.inc )
+	if test -d $(TOPDIR)/external/wannier90; then \
+	   cd $(TOPDIR)/external/wannier90; \
+	   ( $(MAKE) veryclean && rm make.inc ) ; fi
 
 distclean_w90:
 	if test ! -f git_w90; then rm git_w90 ; fi
