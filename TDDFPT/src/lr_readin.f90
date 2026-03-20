@@ -553,6 +553,7 @@ CONTAINS
           CALL errore ('lr_readin', 'Enable ACE in ground state or remove it from TDDFPT.', 1 )
         END IF 
       ELSE
+        use_ace = .false.
         WRITE(stdout, '(5x,"Not using ACE in TDDFPT calculation. " )') 
       END IF
       !
