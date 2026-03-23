@@ -13,6 +13,7 @@ fname=$1
 args=$(echo $fname | awk -F= '{print $NF}')
 
 scf=$(echo $fname | awk '/pw/{print 1}' )
+turbodav=$(echo $fname | awk '/-dav.in/{print 1}' )
 turbolancz=$(echo $fname | awk '/tddfpt.in/{print 1}' )
 eels=$(echo $fname | awk '/eels.in/{print 1}' )
 magnons=$(echo $fname | awk '/magnons.in/{print 1}' )
@@ -26,6 +27,11 @@ if [ "$scf" = "1" ]; then
         n1=`grep 'convergence has' $fname | tail -1 | awk '{print $6}'`
         f1=`grep "Total force" $fname | head -1 | awk '{printf "%8.4f\n", $4}'`
         p1=`grep "P= " $fname | tail -1 | awk '{print $6}'`
+fi
+
+# turbo_davidson.x
+if [ "$turbodav" = "1" ]; then
+        e3=`grep "The transition energy is" $fname | awk '{print $(NF-3)}' | sed 's/(//g' `
 fi
 
 # turbo_lanczos.x
@@ -143,6 +149,11 @@ fi
 if test "$e1" != ""; then
 	echo e1
 	echo $e1
+fi
+
+if test "$e3" != ""; then
+	echo e3
+	for x in $e3; do echo $x; done 
 fi
 
 if test "$n1" != ""; then
