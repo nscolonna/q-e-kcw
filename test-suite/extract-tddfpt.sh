@@ -14,7 +14,7 @@ args=$(echo $fname | awk -F= '{print $NF}')
 
 scf=$(echo $fname | awk '/pw/{print 1}' )
 turbodav=$(echo $fname | awk '/-dav.in/{print 1}' )
-turbolancz=$(echo $fname | awk '/tddfpt.in/{print 1}' )
+turbolancz=$(echo $fname | awk '/-lan.in/{print 1}' )
 eels=$(echo $fname | awk '/eels.in/{print 1}' )
 magnons=$(echo $fname | awk '/magnons.in/{print 1}' )
 turbospec=$(echo $fname | awk '/pp.in/{print 1}' )
