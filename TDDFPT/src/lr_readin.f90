@@ -87,7 +87,7 @@ SUBROUTINE lr_readin
                         & scissor, pseudo_hermitian, d0psi_rs, lshift_d0psi, &
                         & q1, q2, q3, approximation, calculator, alpha_mix, start, &
                         & end, increment, epsil, units, ethr_nscf, force_real_gamma, &
-                        & force_real_alpha, force_zero_alpha, lan_precondition 
+                        & force_real_alpha, force_zero_alpha, lan_precondition, ace 
   NAMELIST / lr_post /    omeg, beta_gamma_z_prefix, w_T_npol, plot_type, epsil, itermax_int,sum_rule
   namelist / lr_dav /     num_eign, num_init, num_basis_max, residue_conv_thr, precondition, ace,    &
                         & reference,single_pole, sort_contr, diag_of_h, close_pre,        &
@@ -138,6 +138,7 @@ SUBROUTINE lr_readin
      max_seconds = 1.0E+7_DP
      scissor = 0.d0
      ethr_nscf = 1.D-11
+     ace=.false.
      !
      ! For EELS
      !
@@ -169,7 +170,6 @@ SUBROUTINE lr_readin
      !
      num_eign=1
      num_init=2
-     ace=.false.
      num_basis_max=20
      broadening=0.005d0
      residue_conv_thr=1.0E-4
@@ -539,8 +539,9 @@ CONTAINS
     IMPLICIT NONE
     !
     ! Check ACE in ground state calculation and ensure consistency in TDDFPT calculations
+    ! (enabled only for optical davidson and lanczos)
     !
-    IF( davidson .and. xclib_dft_is('hybrid') ) THEN
+    IF( xclib_dft_is('hybrid') .and..not. (eels.or.magnons) ) THEN
       !
       use_ace_td = ace
       !
