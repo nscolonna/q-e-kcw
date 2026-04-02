@@ -6,7 +6,7 @@
 ! or http://www.gnu.org/copyleft/gpl.txt .
 !
 !----------------------------------------------------------------------------
-SUBROUTINE v_of_rho( rho, rho_core, rhog_core, &
+SUBROUTINE v_of_rho( rho, rho_core, rhog_core, tau_core, &
                      ehart, etxc, vtxc, eth, etotefield, charge, v )
   !----------------------------------------------------------------------------
   !! This routine computes the Hartree and Exchange and Correlation
@@ -42,6 +42,8 @@ SUBROUTINE v_of_rho( rho, rho_core, rhog_core, &
   !! the core charge
   COMPLEX(DP), INTENT(IN) :: rhog_core(ngm)
   !! the core charge in reciprocal space
+  REAL(DP), INTENT(IN) :: tau_core(dfftp%nnr)
+  !! the kinetic energy density of the core charge
   REAL(DP), INTENT(OUT) :: vtxc
   !! the integral V_xc * rho
   REAL(DP), INTENT(OUT) :: etxc
@@ -62,10 +64,10 @@ SUBROUTINE v_of_rho( rho, rho_core, rhog_core, &
   ! ... calculate exchange-correlation potential
   !
   !$acc data copyin(rho,v)
-  !$acc data copyin(rho%of_r,rho%of_g,rho_core,rhog_core) copyout(v%of_r,v%kin_r)
+  !$acc data copyin(rho%of_r,rho%of_g,rho_core,rhog_core,tau_core) copyout(v%of_r,v%kin_r)
   !
   IF (xclib_dft_is('meta')) THEN
-     CALL v_xc_meta( rho, rho_core, rhog_core, etxc, vtxc, v%of_r, v%kin_r )
+     CALL v_xc_meta( rho, rho_core, rhog_core, tau_core, etxc, vtxc, v%of_r, v%kin_r )
   ELSE
      CALL v_xc( rho, rho_core, rhog_core, etxc, vtxc, v%of_r )
   ENDIF
@@ -116,7 +118,7 @@ END SUBROUTINE v_of_rho
 !
 !
 !----------------------------------------------------------------------------
-SUBROUTINE v_xc_meta( rho, rho_core, rhog_core, etxc, vtxc, v, kedtaur )
+SUBROUTINE v_xc_meta( rho, rho_core, rhog_core, tau_core, etxc, vtxc, v, kedtaur )
   !----------------------------------------------------------------------------
   !! Exchange-Correlation potential (meta) Vxc(r) from n(r)
   !
@@ -141,6 +143,8 @@ SUBROUTINE v_xc_meta( rho, rho_core, rhog_core, etxc, vtxc, v, kedtaur )
   !! the core charge in real space
   COMPLEX(DP), INTENT(IN) :: rhog_core(ngm)
   !! the core charge in reciprocal space
+  REAL(DP), INTENT(IN) :: tau_core(dfftp%nnr)
+  !! the kinetic energy density of the core charge
   REAL(DP), INTENT(INOUT) :: v(dfftp%nnr,nspin)
   !! V_xc potential
   REAL(DP), INTENT(INOUT) :: kedtaur(dfftp%nnr,nspin)
@@ -211,7 +215,7 @@ SUBROUTINE v_xc_meta( rho, rho_core, rhog_core, etxc, vtxc, v, kedtaur )
   !$acc parallel loop collapse(2) present(rho)
   DO is = 1, nspin
     DO k = 1, dfftp_nnr
-      tau(k,is) = rho%kin_r(k,is)/e2
+      tau(k,is) = (rho%kin_r(k,is) + tau_core(k))/e2
     ENDDO
   ENDDO
   !
