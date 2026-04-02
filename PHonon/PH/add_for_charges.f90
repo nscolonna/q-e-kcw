@@ -61,6 +61,9 @@ subroutine add_for_charges (ik, uact)
 
   complex(DP), allocatable :: ps1 (:,:), ps2 (:,:,:), aux (:)
   complex(DP), allocatable :: ps1_nc (:,:,:), ps2_nc (:,:,:,:)
+  ! temporary arrays for optimization
+  complex(DP) :: temp_ps1, temp_ps2(3)
+  complex(DP) :: temp_ps1_nc(npol), temp_ps2_nc(npol,3)
   ! the scalar product
   ! the scalar product
   ! a mesh space for psi
@@ -135,65 +138,71 @@ subroutine add_for_charges (ik, uact)
   enddo
 
 
-  do nt = 1, ntyp
-     do na = 1, nat
-        ijkb0=ofsbeta(na)
-        if (ityp (na) .eq.nt) then
-           mu = 3 * (na - 1)
-           if ( abs (uact (mu + 1) ) + &
-                abs (uact (mu + 2) ) + &
-                abs (uact (mu + 3) ) > eps) then
-              do ih = 1, nh (nt)
-                 ikb = ijkb0 + ih
-                 do jh = 1, nh (nt)
-                    jkb = ijkb0 + jh
-                    do ipol = 1, 3
-                       do ibnd = 1, nbnd
-                          if (noncolin) then
-                             if (lspinorb) then
-                                ijs=0
-                                DO is=1,npol
-                                   DO js=1,npol
-                                      ijs=ijs+1
-                                      ps1_nc(ikb,is,ibnd)=ps1_nc(ikb,is,ibnd)+&
-                                      (qq_so (ih, jh, ijs, nt) *              &
-                                      alphapp(ipol)%nc(jkb,js,ibnd))*         &
-                                      uact (mu + ipol)
-                                      ps2_nc(ikb,is,ibnd,ipol)=               &
-                                               ps2_nc(ikb,is,ibnd,ipol) +     &
-                                      (qq_so (ih, jh, ijs, nt) *              &
-                                       bedp%nc (jkb, js, ibnd))*(0.d0,-1.d0)* &
-                                       uact (mu + ipol) * tpiba
-                                   ENDDO
-                                ENDDO
-                             else
-                                do is=1,npol
-                                   ps1_nc(ikb,is,ibnd)=ps1_nc(ikb,is,ibnd) + &
-                                       qq_nt (ih, jh, nt) *                     &
-                                       alphapp(ipol)%nc(jkb, is, ibnd) *     &
-                                       uact (mu + ipol)
-                                   ps2_nc(ikb,is,ibnd,ipol)=                 &
-                                       ps2_nc(ikb,is, ibnd, ipol) +          &
-                                       qq_nt (ih, jh, nt) * (0.d0, -1.d0) *     &
-                                       bedp%nc (jkb, is, ibnd) *             &
-                                       uact (mu + ipol) * tpiba
-                                end do
-                             endif
-                          else
-                             ps1 (ikb, ibnd) = ps1 (ikb, ibnd) +     &
-                                  qq_nt (ih, jh, nt)*alphapp(ipol)%k(jkb, ibnd)* &
-                                  uact (mu + ipol)
-                             ps2 (ikb, ibnd, ipol) = ps2 (ikb, ibnd, ipol) + &
-                                  qq_nt (ih, jh, nt) * (0.d0, -1.d0) *          &
-                                   bedp%k(jkb, ibnd) *uact (mu + ipol) * tpiba
-                          endif
+  do na = 1, nat
+     nt = ityp (na)
+     ijkb0=ofsbeta(na)
+     mu = 3 * (na - 1)
+     if ( abs (uact (mu + 1) ) + &
+          abs (uact (mu + 2) ) + &
+          abs (uact (mu + 3) ) > eps) then
+        do ih = 1, nh (nt)
+           ikb = ijkb0 + ih
+           do jh = 1, nh (nt)
+              jkb = ijkb0 + jh
+              do ipol = 1, 3
+                 do ibnd = 1, nbnd
+                    ! Initialize temp arrays
+                    if (noncolin) then
+                       temp_ps1_nc = (0.d0, 0.d0)
+                       temp_ps2_nc = (0.d0, 0.d0)
+                       if (lspinorb) then
+                          ijs=0
+                          DO is=1,npol
+                             DO js=1,npol
+                                ijs=ijs+1
+                                temp_ps1_nc(is) = temp_ps1_nc(is) + &
+                                (qq_so (ih, jh, ijs, nt) *              &
+                                alphapp(ipol)%nc(jkb,js,ibnd))*         &
+                                uact (mu + ipol)
+                                temp_ps2_nc(is,ipol) = temp_ps2_nc(is,ipol) + &
+                                (qq_so (ih, jh, ijs, nt) *              &
+                                 bedp%nc (jkb, js, ibnd))*(0.d0,-1.d0)* &
+                                 uact (mu + ipol) * tpiba
+                             ENDDO
+                          ENDDO
+                       else
+                          do is=1,npol
+                             temp_ps1_nc(is) = temp_ps1_nc(is) + &
+                                 qq_nt (ih, jh, nt) *                     &
+                                 alphapp(ipol)%nc(jkb, is, ibnd) *     &
+                                 uact (mu + ipol)
+                             temp_ps2_nc(is,ipol) = temp_ps2_nc(is,ipol) + &
+                                 qq_nt (ih, jh, nt) * (0.d0, -1.d0) *     &
+                                 bedp%nc (jkb, is, ibnd) *             &
+                                 uact (mu + ipol) * tpiba
+                          end do
+                       endif
+                       ! Assign temp values to main arrays
+                       do is=1,npol
+                          ps1_nc(ikb,is,ibnd) = ps1_nc(ikb,is,ibnd) + temp_ps1_nc(is)
+                          ps2_nc(ikb,is,ibnd,ipol) = ps2_nc(ikb,is,ibnd,ipol) + temp_ps2_nc(is,ipol)
                        enddo
-                    enddo
+                    else
+                       temp_ps1 = (0.d0, 0.d0)
+                       temp_ps2 = (0.d0, 0.d0)
+                       temp_ps1 = temp_ps1 + qq_nt (ih, jh, nt)*alphapp(ipol)%k(jkb, ibnd)* &
+                            uact (mu + ipol)
+                       temp_ps2(ipol) = temp_ps2(ipol) + qq_nt (ih, jh, nt) * (0.d0, -1.d0) * &
+                             bedp%k(jkb, ibnd) *uact (mu + ipol) * tpiba
+                       ! Assign temp values to main arrays
+                       ps1 (ikb, ibnd) = ps1 (ikb, ibnd) + temp_ps1
+                       ps2 (ikb, ibnd, ipol) = ps2 (ikb, ibnd, ipol) + temp_ps2(ipol)
+                    endif
                  enddo
               enddo
-           endif
-        endif
-     enddo
+           enddo
+        enddo
+     endif
   enddo
   !
   !      This term is proportional to beta(k+q+G)
