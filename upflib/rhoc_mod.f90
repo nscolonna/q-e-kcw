@@ -93,7 +93,7 @@ CONTAINS
   END IF
   nqx = INT( qmax/dq + 4)
   ALLOCATE ( tab_rhc(nqx,nsp) )
-   ALLOCATE ( tab_tac(nqx,nsp) )
+  ALLOCATE ( tab_tac(nqx,nsp) )
   !$acc enter data create(tab_rhc)
   !$acc enter data create(tab_tac)
   !
@@ -206,50 +206,50 @@ CONTAINS
   ENDDO
   !$acc end data
   !
-END SUBROUTINE interp_rhc
-!
-!----------------------------------------------------------------------------
-SUBROUTINE interp_tac( nt, ngl, gl, tpiba2, tacg )
-   !--------------------------------------------------------------------------
-   !! Calculates the radial Fourier transform of the core kinetic density.
-   !
-   INTEGER :: nt
-   !! input: atomic type
-   INTEGER :: ngl
-   !! input: the number of g shell
-   REAL(DP) :: gl(ngl)
-   !! input: the number of G shells
-   REAL(DP) :: tpiba2
-   !! input: 2 times pi / alat
-   REAL(DP) :: tacg(ngl)
-   !! output: the Fourier transform of the core kinetic density
-   !
-   REAL(DP) :: gx, px, ux, vx, wx
-   INTEGER :: igl, i0, i1, i2, i3
-   !
-   !$acc data present_or_copyin(gl) present_or_copyout(tacg) present(tab_tac)
-   !$acc parallel loop
-   DO igl = 1, ngl
-       gx = SQRT(gl(igl) * tpiba2)
-       px = gx / dq - int (gx/dq)
-       ux = 1.d0 - px
-       vx = 2.d0 - px
-       wx = 3.d0 - px
-       i0 = INT(gx/dq) + 1
-       i1 = i0 + 1
-       i2 = i0 + 2
-       i3 = i0 + 3
-       tacg (igl) = tab_tac(i0, nt) * ux * vx * wx / 6.d0 + &
-                           tab_tac(i1, nt) * px * vx * wx / 2.d0 - &
-                           tab_tac(i2, nt) * px * ux * wx / 2.d0 + &
-                           tab_tac(i3, nt) * px * ux * vx / 6.d0
-   ENDDO
-   !$acc end data
-   !
-END SUBROUTINE interp_tac
-!
-!----------------------------------------------------------------------------
-SUBROUTINE interp_drhc( nt, ngl, gl, tpiba2, drhocg )
+  END SUBROUTINE interp_rhc
+  !
+  !----------------------------------------------------------------------------
+  SUBROUTINE interp_tac( nt, ngl, gl, tpiba2, tacg )
+  !--------------------------------------------------------------------------
+  !! Calculates the radial Fourier transform of the core kinetic density.
+  !
+  INTEGER :: nt
+  !! input: atomic type
+  INTEGER :: ngl
+  !! input: the number of g shell
+  REAL(DP) :: gl(ngl)
+  !! input: the number of G shells
+  REAL(DP) :: tpiba2
+  !! input: 2 times pi / alat
+  REAL(DP) :: tacg(ngl)
+  !! output: the Fourier transform of the core kinetic density
+  !
+  REAL(DP) :: gx, px, ux, vx, wx
+  INTEGER :: igl, i0, i1, i2, i3
+  !
+  !$acc data present_or_copyin(gl) present_or_copyout(tacg) present(tab_tac)
+  !$acc parallel loop
+  DO igl = 1, ngl
+     gx = SQRT(gl(igl) * tpiba2)
+     px = gx / dq - int (gx/dq)
+     ux = 1.d0 - px
+     vx = 2.d0 - px
+     wx = 3.d0 - px
+     i0 = INT(gx/dq) + 1
+     i1 = i0 + 1
+     i2 = i0 + 2
+     i3 = i0 + 3
+     tacg (igl) = tab_tac(i0, nt) * ux * vx * wx / 6.d0 + &
+                  tab_tac(i1, nt) * px * vx * wx / 2.d0 - &
+                  tab_tac(i2, nt) * px * ux * wx / 2.d0 + &
+                  tab_tac(i3, nt) * px * ux * vx / 6.d0
+  ENDDO
+  !$acc end data
+  !
+  END SUBROUTINE interp_tac
+  !
+  !----------------------------------------------------------------------------
+  SUBROUTINE interp_drhc( nt, ngl, gl, tpiba2, drhocg )
   !--------------------------------------------------------------------------
   !! Calculates the Fourier transform of \(d\text{Rho}_c/dG\).
   !
@@ -266,7 +266,7 @@ SUBROUTINE interp_drhc( nt, ngl, gl, tpiba2, drhocg )
   !
   ! ... local variables
   !
-    REAL(DP) :: gx, px, ux, vx, wx
+  REAL(DP) :: gx, px, ux, vx, wx
   ! the modulus of g for a given shell
   ! variables used for interpolation
   INTEGER :: igl, i0, i1, i2, i3
@@ -291,40 +291,40 @@ SUBROUTINE interp_drhc( nt, ngl, gl, tpiba2, drhocg )
   ENDDO
   !$acc end data
   !
-END SUBROUTINE interp_drhc
+  END SUBROUTINE interp_drhc
   !
   subroutine scale_tab_rhc( vol_ratio_m1 )
      ! vol_ratio_m1 = omega_old / omega
      real(DP), intent(in) :: vol_ratio_m1
      !
      if ( allocated(tab_rhc) ) then
-         tab_rhc(:,:)  = tab_rhc(:,:) * vol_ratio_m1
-         !$acc update device (tab_rhc)
+        tab_rhc(:,:)  = tab_rhc(:,:) * vol_ratio_m1
+        !$acc update device (tab_rhc)
      end if
-    if ( allocated(tab_tac) ) then
-       tab_tac(:,:)  = tab_tac(:,:) * vol_ratio_m1
-       !$acc update device (tab_tac)
-    end if
+     if ( allocated(tab_tac) ) then
+        tab_tac(:,:)  = tab_tac(:,:) * vol_ratio_m1
+        !$acc update device (tab_tac)
+     end if
      !
   end subroutine scale_tab_rhc
   !
   subroutine deallocate_tab_rhc(  )
      !
      if ( allocated(tab_rhc) ) then
-         !$acc exit data delete(tab_rhc)
-         deallocate (tab_rhc)
+        !$acc exit data delete(tab_rhc)
+        deallocate (tab_rhc)
      end if
      !
   end subroutine deallocate_tab_rhc
   !
-   subroutine deallocate_tab_tac(  )
-       !
-       if ( allocated(tab_tac) ) then
-          !$acc exit data delete(tab_tac)
-          deallocate (tab_tac)
-       end if
-       !
-   end subroutine deallocate_tab_tac
+  subroutine deallocate_tab_tac(  )
+     !
+     if ( allocated(tab_tac) ) then
+        !$acc exit data delete(tab_tac)
+        deallocate (tab_tac)
+     end if
+     !
+  end subroutine deallocate_tab_tac
   !
 END MODULE rhoc_mod
 
