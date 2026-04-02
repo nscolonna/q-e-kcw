@@ -108,7 +108,7 @@ SUBROUTINE v_of_rho( rho, rho_core, rhog_core, tau_core, &
     call mbd_interface() ! self-consistent but only up to TS level
   END IF
   !
-  IF (sic) CALL add_vsic(rho, rho_core, rhog_core, v)
+  IF (sic) CALL add_vsic(rho, rho_core, rhog_core, tau_core, v)
   !
   CALL stop_clock( 'v_of_rho' )
   !
