@@ -17,7 +17,7 @@ subroutine add_for_charges (ik, uact)
   USE gvect, ONLY : g
   USE lsda_mod, ONLY: lsda, current_spin, isk
   USE klist, ONLY : xk, ngk, igk_k
-  USE uspp, ONLY : nkb, qq_nt, qq_so, vkb
+  USE uspp, ONLY : nkb, qq_nt, qq_so, vkb, ofsbeta
   USE wvfct, ONLY : npwx, nbnd
   USE becmod, ONLY: calbec, bec_type, allocate_bec_type, deallocate_bec_type
   USE noncollin_module, ONLY : noncolin, npol, lspinorb
@@ -135,9 +135,9 @@ subroutine add_for_charges (ik, uact)
   enddo
 
 
-  ijkb0 = 0
   do nt = 1, ntyp
      do na = 1, nat
+        ijkb0=ofsbeta(na)
         if (ityp (na) .eq.nt) then
            mu = 3 * (na - 1)
            if ( abs (uact (mu + 1) ) + &
@@ -192,7 +192,6 @@ subroutine add_for_charges (ik, uact)
                  enddo
               enddo
            endif
-           ijkb0 = ijkb0 + nh (nt)
         endif
      enddo
   enddo
