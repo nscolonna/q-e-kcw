@@ -21,9 +21,11 @@ MODULE rhoc_mod
   PRIVATE
   PUBLIC :: init_tab_rhc
   PUBLIC :: interp_rhc
+  PUBLIC :: interp_tac
   PUBLIC :: interp_drhc
   PUBLIC :: scale_tab_rhc
   PUBLIC :: deallocate_tab_rhc
+  PUBLIC :: deallocate_tab_tac
   !
   SAVE
   !
@@ -35,16 +37,18 @@ MODULE rhoc_mod
   !! max q covered by the interpolation table
   REAL(DP), ALLOCATABLE :: tab_rhc(:,:)
   !! interpolation table for atomic pseudo-core charge density
+  REAL(DP), ALLOCATABLE :: tab_tac(:,:)
+  !! interpolation table for atomic pseudo-core kinetic energy density
   !
 CONTAINS
   !
   !----------------------------------------------------------------------
   SUBROUTINE init_tab_rhc (qmax_, omega, comm, ierr)
   !----------------------------------------------------------------------
-  !
-  !! Compute interpolation table for atomic core (pseudo-)charge density
-  !! tab_rhc(i,nt) = \rhoc_nt(q_i) for atom of type nt, on grid q_i
-  !! Output in tab_rhc
+   !! Compute interpolation table for atomic core (pseudo-)charge density
+   !! and kinetic-energy density:
+   !! tab_rhc(i,nt) = rhoc_nt(q_i), tab_tac(i,nt) = tauc_nt(q_i)
+   !! for atom of type nt, on grid q_i
   !
   USE atom,         ONLY : rgrid, msh
   USE uspp_param,   ONLY : upf, nsp
@@ -68,25 +72,30 @@ CONTAINS
   !! Work space
   !
   ierr = 0
-  IF ( .NOT. ANY(upf(1:nsp)%nlcc)  ) RETURN
+  IF ( .NOT. ANY(upf(1:nsp)%nlcc) .AND. .NOT. ANY(upf(1:nsp)%with_metagga_info) ) RETURN
   !
-  IF ( .NOT. ALLOCATED(tab_rhc) ) THEN
-     !! table not yet allocated
+  IF ( .NOT. ALLOCATED(tab_rhc) .OR. .NOT. ALLOCATED(tab_tac) ) THEN
+     !! one of the tables not yet allocated
+     IF ( ALLOCATED(tab_rhc) ) CALL deallocate_tab_rhc ( )
+     IF ( ALLOCATED(tab_tac) ) CALL deallocate_tab_tac ( )
      qmax = qmax_
   ELSE IF ( qmax_ > qmax ) THEN
-     !! table ìs allocated but dimension insufficient: re-allocate
+     !! tables are allocated but dimension insufficient: re-allocate
      !! (with some margin so that this does not happen too often)
      CALL deallocate_tab_rhc ( )
+     CALL deallocate_tab_tac ( )
      qmax = qmax_ + MAX(dq*100,qmax_-qmax)
      ierr =-1
   ELSE
-     !! table already computed: exit
+     !! tables already computed: exit
      ierr =-2
      RETURN
   END IF
   nqx = INT( qmax/dq + 4)
   ALLOCATE ( tab_rhc(nqx,nsp) )
+   ALLOCATE ( tab_tac(nqx,nsp) )
   !$acc enter data create(tab_rhc)
+  !$acc enter data create(tab_tac)
   !
   ndm = MAXVAL( msh(1:nsp) )
   ALLOCATE (aux(ndm))
@@ -96,7 +105,34 @@ CONTAINS
   DO nt = 1, nsp
      !
      tab_rhc(:,nt)= 0.d0
-     IF ( .NOT. upf(nt)%nlcc ) CYCLE
+     DO iq = startq, lastq
+        !
+        IF ( upf(nt)%nlcc ) THEN
+           q = (iq - 1) * dq
+           DO ir = 1, msh(nt)
+              IF ( iq > 1 .AND. rgrid(nt)%r(ir) > eps8 ) then
+                 !! check above prevents divide by zero
+                 aux (ir) = upf(nt)%rho_atc(ir) * rgrid(nt)%r2(ir) * &
+                      sin(q*rgrid(nt)%r(ir)) / (q*rgrid(nt)%r(ir))
+              ELSE
+                 aux (ir) = upf(nt)%rho_atc(ir) * rgrid(nt)%r2(ir)
+              ENDIF
+           ENDDO
+           !
+           CALL simpson ( msh(nt), aux, rgrid(nt)%rab, tab_rhc(iq,nt) )
+           tab_rhc (iq,nt) = fpi * tab_rhc (iq,nt) / omega
+        END IF
+     ENDDO
+     !
+  END DO
+  !
+  CALL mp_sum ( tab_rhc (:,1:nsp), comm )
+  !$acc update device(tab_rhc)
+  !
+  DO nt = 1, nsp
+     !
+     tab_tac(:,nt)= 0.d0
+     IF ( .NOT. upf(nt)%with_metagga_info ) CYCLE
      !
      DO iq = startq, lastq
         !
@@ -104,22 +140,22 @@ CONTAINS
         DO ir = 1, msh(nt)
            IF ( iq > 1 .AND. rgrid(nt)%r(ir) > eps8 ) then
               !! check above prevents divide by zero
-              aux (ir) = upf(nt)%rho_atc(ir) * rgrid(nt)%r2(ir) * &
+              aux (ir) = upf(nt)%tau_core(ir) * rgrid(nt)%r2(ir) * &
                    sin(q*rgrid(nt)%r(ir)) / (q*rgrid(nt)%r(ir))
            ELSE
-              aux (ir) = upf(nt)%rho_atc(ir) * rgrid(nt)%r2(ir) 
+              aux (ir) = upf(nt)%tau_core(ir) * rgrid(nt)%r2(ir)
            ENDIF
         ENDDO
         !
-        CALL simpson ( msh(nt), aux, rgrid(nt)%rab, tab_rhc(iq,nt) )
-        tab_rhc (iq,nt) = fpi * tab_rhc (iq,nt) / omega 
+        CALL simpson ( msh(nt), aux, rgrid(nt)%rab, tab_tac(iq,nt) )
+        tab_tac (iq,nt) = fpi * tab_tac (iq,nt) / omega
         !
      ENDDO
      !
   END DO
   !
-  CALL mp_sum ( tab_rhc (:,1:nsp), comm )
-  !$acc update device(tab_rhc)
+  CALL mp_sum ( tab_tac (:,1:nsp), comm )
+  !$acc update device(tab_tac)
   !
   DEALLOCATE (aux)
   RETURN
@@ -171,6 +207,46 @@ CONTAINS
   !$acc end data
   !
 END SUBROUTINE interp_rhc
+!
+!----------------------------------------------------------------------------
+SUBROUTINE interp_tac( nt, ngl, gl, tpiba2, tacg )
+   !--------------------------------------------------------------------------
+   !! Calculates the radial Fourier transform of the core kinetic density.
+   !
+   INTEGER :: nt
+   !! input: atomic type
+   INTEGER :: ngl
+   !! input: the number of g shell
+   REAL(DP) :: gl(ngl)
+   !! input: the number of G shells
+   REAL(DP) :: tpiba2
+   !! input: 2 times pi / alat
+   REAL(DP) :: tacg(ngl)
+   !! output: the Fourier transform of the core kinetic density
+   !
+   REAL(DP) :: gx, px, ux, vx, wx
+   INTEGER :: igl, i0, i1, i2, i3
+   !
+   !$acc data present_or_copyin(gl) present_or_copyout(tacg) present(tab_tac)
+   !$acc parallel loop
+   DO igl = 1, ngl
+       gx = SQRT(gl(igl) * tpiba2)
+       px = gx / dq - int (gx/dq)
+       ux = 1.d0 - px
+       vx = 2.d0 - px
+       wx = 3.d0 - px
+       i0 = INT(gx/dq) + 1
+       i1 = i0 + 1
+       i2 = i0 + 2
+       i3 = i0 + 3
+       tacg (igl) = tab_tac(i0, nt) * ux * vx * wx / 6.d0 + &
+                           tab_tac(i1, nt) * px * vx * wx / 2.d0 - &
+                           tab_tac(i2, nt) * px * ux * wx / 2.d0 + &
+                           tab_tac(i3, nt) * px * ux * vx / 6.d0
+   ENDDO
+   !$acc end data
+   !
+END SUBROUTINE interp_tac
 !
 !----------------------------------------------------------------------------
 SUBROUTINE interp_drhc( nt, ngl, gl, tpiba2, drhocg )
@@ -225,6 +301,10 @@ END SUBROUTINE interp_drhc
          tab_rhc(:,:)  = tab_rhc(:,:) * vol_ratio_m1
          !$acc update device (tab_rhc)
      end if
+    if ( allocated(tab_tac) ) then
+       tab_tac(:,:)  = tab_tac(:,:) * vol_ratio_m1
+       !$acc update device (tab_tac)
+    end if
      !
   end subroutine scale_tab_rhc
   !
@@ -236,6 +316,15 @@ END SUBROUTINE interp_drhc
      end if
      !
   end subroutine deallocate_tab_rhc
+  !
+   subroutine deallocate_tab_tac(  )
+       !
+       if ( allocated(tab_tac) ) then
+          !$acc exit data delete(tab_tac)
+          deallocate (tab_tac)
+       end if
+       !
+   end subroutine deallocate_tab_tac
   !
 END MODULE rhoc_mod
 
