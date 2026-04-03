@@ -21,7 +21,7 @@ subroutine add_for_charges (ik, uact)
   USE wvfct, ONLY : npwx, nbnd
   USE becmod, ONLY: calbec, bec_type, allocate_bec_type, deallocate_bec_type
   USE noncollin_module, ONLY : noncolin, npol, lspinorb
-  USE uspp_param, only: nh
+  USE uspp_param, only: nh, nhm
   USE eqv, ONLY : dvpsi, dpsi
   USE control_lr, ONLY : lgamma
   USE qpoint,  ONLY : ikks
@@ -64,6 +64,10 @@ subroutine add_for_charges (ik, uact)
   ! temporary arrays for optimization
   complex(DP) :: temp_ps1, temp_ps2(3)
   complex(DP) :: temp_ps1_nc(npol), temp_ps2_nc(npol,3)
+  ! small buffers for loop optimization (allocated once with max size)
+  complex(DP) :: alphapp_buf_nc(nhm, npol), bedp_buf_nc(nhm, npol)
+  complex(DP) :: alphapp_buf_k(nhm), bedp_buf_k(nhm)
+  complex(DP) :: qq_so_buf(nhm, npol*npol), qq_nt_buf(nhm)
   ! the scalar product
   ! the scalar product
   ! a mesh space for psi
@@ -149,6 +153,28 @@ subroutine add_for_charges (ik, uact)
            ikb = ijkb0 + ih
            do ipol = 1, 3
               do ibnd = 1, nbnd
+                 ! Populate small buffers for this iteration
+                 qq_nt_buf(1:nh(nt)) = qq_nt(ih, 1:nh(nt), nt)
+                 
+                 if (noncolin) then
+                    do jh = 1, nh(nt)
+                       jkb = ijkb0 + jh
+                       alphapp_buf_nc(jh, 1:npol) = alphapp(ipol)%nc(jkb, 1:npol, ibnd)
+                       bedp_buf_nc(jh, 1:npol) = bedp%nc(jkb, 1:npol, ibnd)
+                    enddo
+                    if (lspinorb) then
+                       do jh = 1, nh(nt)
+                          qq_so_buf(jh, 1:npol*npol) = qq_so(ih, jh, 1:npol*npol, nt)
+                       enddo
+                    endif
+                 else
+                    do jh = 1, nh(nt)
+                       jkb = ijkb0 + jh
+                       alphapp_buf_k(jh) = alphapp(ipol)%k(jkb, ibnd)
+                       bedp_buf_k(jh) = bedp%k(jkb, ibnd)
+                    enddo
+                 endif
+                 
                  ! Initialize temp arrays
                  if (noncolin) then
                     temp_ps1_nc = (0.d0, 0.d0)
@@ -159,7 +185,6 @@ subroutine add_for_charges (ik, uact)
                  endif
                  
                  do jh = 1, nh (nt)
-                    jkb = ijkb0 + jh
                     if (noncolin) then
                        if (lspinorb) then
                           ijs=0
@@ -167,32 +192,32 @@ subroutine add_for_charges (ik, uact)
                              DO js=1,npol
                                 ijs=ijs+1
                                 temp_ps1_nc(is) = temp_ps1_nc(is) + &
-                                (qq_so (ih, jh, ijs, nt) *              &
-                                alphapp(ipol)%nc(jkb,js,ibnd))*         &
+                                (qq_so_buf(jh,ijs) *              &
+                                alphapp_buf_nc(jh,js))*         &
                                 uact (mu + ipol)
                                 temp_ps2_nc(is,ipol) = temp_ps2_nc(is,ipol) + &
-                                (qq_so (ih, jh, ijs, nt) *              &
-                                 bedp%nc (jkb, js, ibnd))*(0.d0,-1.d0)* &
+                                (qq_so_buf(jh,ijs) *              &
+                                 bedp_buf_nc(jh,js))*(0.d0,-1.d0)* &
                                  uact (mu + ipol) * tpiba
                              ENDDO
                           ENDDO
                        else
                           do is=1,npol
                              temp_ps1_nc(is) = temp_ps1_nc(is) + &
-                                 qq_nt (ih, jh, nt) *                     &
-                                 alphapp(ipol)%nc(jkb, is, ibnd) *     &
+                                 qq_nt_buf(jh) *                     &
+                                 alphapp_buf_nc(jh,is) *     &
                                  uact (mu + ipol)
                              temp_ps2_nc(is,ipol) = temp_ps2_nc(is,ipol) + &
-                                 qq_nt (ih, jh, nt) * (0.d0, -1.d0) *     &
-                                 bedp%nc (jkb, is, ibnd) *             &
+                                 qq_nt_buf(jh) * (0.d0, -1.d0) *     &
+                                 bedp_buf_nc(jh,is) *             &
                                  uact (mu + ipol) * tpiba
                           end do
                        endif
                     else
-                       temp_ps1 = temp_ps1 + qq_nt (ih, jh, nt)*alphapp(ipol)%k(jkb, ibnd)* &
+                       temp_ps1 = temp_ps1 + qq_nt_buf(jh)*alphapp_buf_k(jh)* &
                             uact (mu + ipol)
-                       temp_ps2(ipol) = temp_ps2(ipol) + qq_nt (ih, jh, nt) * (0.d0, -1.d0) * &
-                             bedp%k(jkb, ibnd) *uact (mu + ipol) * tpiba
+                       temp_ps2(ipol) = temp_ps2(ipol) + qq_nt_buf(jh) * (0.d0, -1.d0) * &
+                             bedp_buf_k(jh) *uact (mu + ipol) * tpiba
                     endif
                  enddo
                  
