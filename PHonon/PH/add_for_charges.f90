@@ -64,6 +64,7 @@ subroutine add_for_charges (ik, uact)
   ! temporary arrays for optimization
   complex(DP) :: temp_ps1, temp_ps2(3)
   complex(DP) :: temp_ps1_nc(npol), temp_ps2_nc(npol,3)
+  complex(DP) :: temp_ps2_nc_1, temp_ps2_nc_2, temp_ps2_k
   ! small buffers for loop optimization (allocated once with max size)
   complex(DP) :: alphapp_buf_nc(nhm, npol), bedp_buf_nc(nhm, npol)
   complex(DP) :: alphapp_buf_k(nhm), bedp_buf_k(nhm)
@@ -254,15 +255,12 @@ subroutine add_for_charges (ik, uact)
   !
   do ikb = 1, nkb
      do ipol = 1, 3
-        ok = .false.
-        do ibnd = 1, nbnd
-           if (noncolin) then
-              ok = ok .or. (abs (ps2_nc (ikb, 1, ibnd, ipol) ) .gt.eps) &
-                      .or. (abs (ps2_nc (ikb, 2, ibnd, ipol) ) .gt.eps)
-           else
-              ok = ok.or. (abs (ps2 (ikb, ibnd, ipol) ) .gt.eps)
-           endif
-        enddo
+        if (noncolin) then
+           ok = ANY(ABS(ps2_nc(ikb, 1, 1:nbnd, ipol)) > eps) .OR. &
+                ANY(ABS(ps2_nc(ikb, 2, 1:nbnd, ipol)) > eps)
+        else
+           ok = ANY(ABS(ps2(ikb, 1:nbnd, ipol)) > eps)
+        endif
         if (ok) then
            do ig = 1, npw
               igg = igk_k (ig,ikq)
@@ -270,15 +268,16 @@ subroutine add_for_charges (ik, uact)
            enddo
            do ibnd = 1, nbnd
               if (noncolin) then
+                 temp_ps2_nc_1 = ps2_nc(ikb, 1, ibnd, ipol)
+                 temp_ps2_nc_2 = ps2_nc(ikb, 2, ibnd, ipol)
                  do ig = 1, npw
-                    dvpsi(ig,ibnd)=ps2_nc(ikb,1,ibnd,ipol)*aux(ig)+ &
-                                   dvpsi(ig,ibnd)
-                    dvpsi(ig+npwx,ibnd)=ps2_nc(ikb,2,ibnd,ipol)*aux(ig)+  &
-                                        dvpsi(ig+npwx,ibnd)
+                    dvpsi(ig,      ibnd) = temp_ps2_nc_1*aux(ig) + dvpsi(ig,      ibnd)
+                    dvpsi(ig+npwx, ibnd) = temp_ps2_nc_2*aux(ig) + dvpsi(ig+npwx, ibnd)
                  enddo
               else
+                 temp_ps2_k = ps2(ikb, ibnd, ipol)
                  do ig = 1, npw
-                    dvpsi(ig,ibnd)=ps2(ikb,ibnd,ipol)*aux(ig)+dvpsi(ig,ibnd)
+                    dvpsi(ig, ibnd) = temp_ps2_k*aux(ig) + dvpsi(ig, ibnd)
                  enddo
               endif
            enddo
