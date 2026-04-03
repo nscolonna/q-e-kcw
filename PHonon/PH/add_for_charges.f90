@@ -147,14 +147,20 @@ subroutine add_for_charges (ik, uact)
           abs (uact (mu + 3) ) > eps) then
         do ih = 1, nh (nt)
            ikb = ijkb0 + ih
-           do jh = 1, nh (nt)
-              jkb = ijkb0 + jh
-              do ipol = 1, 3
-                 do ibnd = 1, nbnd
-                    ! Initialize temp arrays
+           do ipol = 1, 3
+              do ibnd = 1, nbnd
+                 ! Initialize temp arrays
+                 if (noncolin) then
+                    temp_ps1_nc = (0.d0, 0.d0)
+                    temp_ps2_nc = (0.d0, 0.d0)
+                 else
+                    temp_ps1 = (0.d0, 0.d0)
+                    temp_ps2 = (0.d0, 0.d0)
+                 endif
+                 
+                 do jh = 1, nh (nt)
+                    jkb = ijkb0 + jh
                     if (noncolin) then
-                       temp_ps1_nc = (0.d0, 0.d0)
-                       temp_ps2_nc = (0.d0, 0.d0)
                        if (lspinorb) then
                           ijs=0
                           DO is=1,npol
@@ -182,23 +188,24 @@ subroutine add_for_charges (ik, uact)
                                  uact (mu + ipol) * tpiba
                           end do
                        endif
-                       ! Assign temp values to main arrays
-                       do is=1,npol
-                          ps1_nc(ikb,is,ibnd) = ps1_nc(ikb,is,ibnd) + temp_ps1_nc(is)
-                          ps2_nc(ikb,is,ibnd,ipol) = ps2_nc(ikb,is,ibnd,ipol) + temp_ps2_nc(is,ipol)
-                       enddo
                     else
-                       temp_ps1 = (0.d0, 0.d0)
-                       temp_ps2 = (0.d0, 0.d0)
                        temp_ps1 = temp_ps1 + qq_nt (ih, jh, nt)*alphapp(ipol)%k(jkb, ibnd)* &
                             uact (mu + ipol)
                        temp_ps2(ipol) = temp_ps2(ipol) + qq_nt (ih, jh, nt) * (0.d0, -1.d0) * &
                              bedp%k(jkb, ibnd) *uact (mu + ipol) * tpiba
-                       ! Assign temp values to main arrays
-                       ps1 (ikb, ibnd) = ps1 (ikb, ibnd) + temp_ps1
-                       ps2 (ikb, ibnd, ipol) = ps2 (ikb, ibnd, ipol) + temp_ps2(ipol)
                     endif
                  enddo
+                 
+                 ! Assign temp values to main arrays
+                 if (noncolin) then
+                    do is=1,npol
+                       ps1_nc(ikb,is,ibnd) = ps1_nc(ikb,is,ibnd) + temp_ps1_nc(is)
+                       ps2_nc(ikb,is,ibnd,ipol) = ps2_nc(ikb,is,ibnd,ipol) + temp_ps2_nc(is,ipol)
+                    enddo
+                 else
+                    ps1 (ikb, ibnd) = ps1 (ikb, ibnd) + temp_ps1
+                    ps2 (ikb, ibnd, ipol) = ps2 (ikb, ibnd, ipol) + temp_ps2(ipol)
+                 endif
               enddo
            enddo
         enddo
