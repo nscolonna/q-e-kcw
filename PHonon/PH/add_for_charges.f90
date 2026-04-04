@@ -62,8 +62,8 @@ SUBROUTINE add_for_charges (ik, uact)
   COMPLEX(DP), ALLOCATABLE :: ps1 (:,:), ps2 (:,:,:), aux (:)
   COMPLEX(DP), ALLOCATABLE :: ps1_nc (:,:,:), ps2_nc (:,:,:,:)
   ! temporary arrays for optimization
-  COMPLEX(DP) :: temp_ps1, temp_ps2(3)
-  COMPLEX(DP) :: temp_ps1_nc(npol), temp_ps2_nc(npol,3)
+  COMPLEX(DP) :: temp_ps1, temp_ps2
+  COMPLEX(DP) :: temp_ps1_nc(npol), temp_ps2_nc(npol)
   COMPLEX(DP) :: ps2_col(nbnd)
   ! small buffers for loop optimization (allocated once with max size)
   COMPLEX(DP) :: alphapp_buf_nc(nhm, npol), bedp_buf_nc(nhm, npol)
@@ -196,7 +196,7 @@ SUBROUTINE add_for_charges (ik, uact)
                                 (qq_so_buf(jh,ijs) *              &
                                 alphapp_buf_nc(jh,js))*         &
                                 uact (mu + ipol)
-                                temp_ps2_nc(is,ipol) = temp_ps2_nc(is,ipol) + &
+                                temp_ps2_nc(is) = temp_ps2_nc(is) + &
                                 (qq_so_buf(jh,ijs) *              &
                                  bedp_buf_nc(jh,js))*(0.d0,-1.d0)* &
                                  uact (mu + ipol) * tpiba
@@ -208,7 +208,7 @@ SUBROUTINE add_for_charges (ik, uact)
                                  qq_nt_buf(jh) *                     &
                                  alphapp_buf_nc(jh,is) *     &
                                  uact (mu + ipol)
-                             temp_ps2_nc(is,ipol) = temp_ps2_nc(is,ipol) + &
+                             temp_ps2_nc(is) = temp_ps2_nc(is) + &
                                  qq_nt_buf(jh) * (0.d0, -1.d0) *     &
                                  bedp_buf_nc(jh,is) *             &
                                  uact (mu + ipol) * tpiba
@@ -217,7 +217,7 @@ SUBROUTINE add_for_charges (ik, uact)
                     ELSE
                        temp_ps1 = temp_ps1 + qq_nt_buf(jh)*alphapp_buf_k(jh)* &
                             uact (mu + ipol)
-                       temp_ps2(ipol) = temp_ps2(ipol) + qq_nt_buf(jh) * (0.d0, -1.d0) * &
+                       temp_ps2 = temp_ps2 + qq_nt_buf(jh) * (0.d0, -1.d0) * &
                              bedp_buf_k(jh) *uact (mu + ipol) * tpiba
                     ENDIF
                  ENDDO
@@ -226,11 +226,11 @@ SUBROUTINE add_for_charges (ik, uact)
                  IF (noncolin) THEN
                     DO is=1,npol
                        ps1_nc(ikb,is,ibnd) = ps1_nc(ikb,is,ibnd) + temp_ps1_nc(is)
-                       ps2_nc(ikb,is,ibnd,ipol) = ps2_nc(ikb,is,ibnd,ipol) + temp_ps2_nc(is,ipol)
+                       ps2_nc(ikb,is,ibnd,ipol) = temp_ps2_nc(is)
                     ENDDO
                  ELSE
                     ps1 (ikb, ibnd) = ps1 (ikb, ibnd) + temp_ps1
-                    ps2 (ikb, ibnd, ipol) = ps2 (ikb, ibnd, ipol) + temp_ps2(ipol)
+                    ps2 (ikb, ibnd, ipol) =  temp_ps2
                  ENDIF
               ENDDO
            ENDDO
