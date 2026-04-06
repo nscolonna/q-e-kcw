@@ -8,7 +8,9 @@
 !----------------------------------------------------------------------
 SUBROUTINE add_for_charges (ik, uact)
   !----------===============-----------------------------------------------
-  !! This subroutine calculates: \(\frac{dS}{du} P_c [x, H-eS] |\psi\rangle\)
+  !! Applies \(\frac{dS}{du}\) to \(\text{dpsi}\) and accumulates the result into \(\text{dvpsi}\).
+  !! On input \(\text{dpsi}\) is expected to contain \(P_c x |\psi_{ik}\rangle\), as computed by
+  !! \(\texttt{dvpsi\_e}\) and stored to disk via the \(\texttt{iucom}\) buffer.
   !
 
   USE kinds, ONLY : DP
@@ -198,8 +200,8 @@ SUBROUTINE add_for_charges (ik, uact)
                                 uact (mu + ipol)
                                 temp_ps2_nc(is) = temp_ps2_nc(is) + &
                                 (qq_so_buf(jh,ijs) *              &
-                                 bedp_buf_nc(jh,js))*(0.d0,-1.d0)* &
-                                 uact (mu + ipol) * tpiba
+                                 bedp_buf_nc(jh,js)) *            &
+                                 uact (mu + ipol)
                              ENDDO
                           ENDDO
                        ELSE
@@ -209,20 +211,21 @@ SUBROUTINE add_for_charges (ik, uact)
                                  alphapp_buf_nc(jh,is) *     &
                                  uact (mu + ipol)
                              temp_ps2_nc(is) = temp_ps2_nc(is) + &
-                                 qq_nt_buf(jh) * (0.d0, -1.d0) *     &
+                                 qq_nt_buf(jh) *                  &
                                  bedp_buf_nc(jh,is) *             &
-                                 uact (mu + ipol) * tpiba
+                                 uact (mu + ipol)
                           END DO
                        ENDIF
                     ELSE
                        temp_ps1 = temp_ps1 + qq_nt_buf(jh)*alphapp_buf_k(jh)* &
                             uact (mu + ipol)
-                       temp_ps2 = temp_ps2 + qq_nt_buf(jh) * (0.d0, -1.d0) * &
-                             bedp_buf_k(jh) *uact (mu + ipol) * tpiba
+                       temp_ps2 = temp_ps2 + qq_nt_buf(jh) * &
+                             bedp_buf_k(jh) * uact (mu + ipol)
                     ENDIF
                  ENDDO
 
-                 ! Assign temp values to main arrays
+                 ! ps1(ikb,ibnd)      = sum_{jh,ipol} q_{ih,jh} <d(beta_{jh})/d(tau)*u | dpsi_ibnd>
+                 ! ps2(ikb,ibnd,ipol) = sum_{jh}      q_{ih,jh} <beta_{jh} | dpsi_ibnd> * uact(ipol)
                  IF (noncolin) THEN
                     DO is=1,npol
                        ps1_nc(ikb,is,ibnd) = ps1_nc(ikb,is,ibnd) + temp_ps1_nc(is)
@@ -242,7 +245,8 @@ SUBROUTINE add_for_charges (ik, uact)
      CALL deallocate_bec_type(alphapp(ipol))
   END DO
   !
-  !      This term is proportional to beta(k+q+G)
+  !  ps1(ikb,ibnd)   = sum_{jh,ipol} q_{ih,jh} <d(beta_{jh})/d(tau)*u | dpsi_ibnd>
+  !  adds sum_{ih,jh} |beta_{ih}> q_{ih,jh} <d(beta_{jh})/d(tau)*u | dpsi> to dvpsi
   !
   IF (nkb.GT.0) THEN
      IF (noncolin) THEN
@@ -259,7 +263,8 @@ SUBROUTINE add_for_charges (ik, uact)
      DEALLOCATE (ps1)
   END IF
   !
-  !      This term is proportional to (k+q+G)_\alpha*beta(k+q+G)
+  !  ps2(ikb,ibnd,ipol) = sum_{jh} q_{ih,jh} <beta_{jh} | dpsi_ibnd> * uact(ipol)
+  !  adds sum_{ih,jh} |d(beta_{ih})/d(tau)*u> q_{ih,jh} <beta_{jh} | dpsi> to dvpsi
   !
   DO ikb = 1, nkb
      DO ipol = 1, 3
@@ -272,7 +277,7 @@ SUBROUTINE add_for_charges (ik, uact)
         IF (ok) THEN
            DO ig = 1, npw
               igg = igk_k (ig,ikq)
-              aux (ig) =  vkb(ig, ikb) * (xk(ipol, ikq) + g(ipol, igg) )
+              aux (ig) = vkb(ig, ikb) * (0.d0,-1.d0) * tpiba * (xk(ipol, ikq) + g(ipol, igg) )
            ENDDO
            IF (noncolin) THEN
               ps2_col(1:nbnd) = ps2_nc(ikb, 1, 1:nbnd, ipol)
@@ -293,7 +298,7 @@ SUBROUTINE add_for_charges (ik, uact)
      DEALLOCATE (ps2)
   END IF
 !
-!    Now dvpsi contains dS/du P_c [x, H-eS] |psi>
+!    Now dvpsi contains dS/du applied to dpsi, i.e. (dS/du) P_c x |psi>
 !
   RETURN
 END SUBROUTINE add_for_charges
