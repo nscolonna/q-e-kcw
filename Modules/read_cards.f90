@@ -911,9 +911,11 @@ CONTAINS
      CHARACTER(len=*),INTENT(in) :: input_line
      CHARACTER(len=256) :: input_line_aux
      REAL(DP),ALLOCATABLE :: xk_old(:,:), wk_old(:)
+       CHARACTER(len=50), ALLOCATABLE :: labelk_old(:)
      INTEGER :: nk1_old, nk2_old, nk3_old, nkstot_old
      INTEGER :: k1_old,  k2_old,  k3_old
      LOGICAL, EXTERNAL  :: matches
+       LOGICAL :: has_labelk_old
      CHARACTER(len=80) :: k_points_old
      !
      IF(.not.allocated(xk) .or. .not.allocated(wk))&
@@ -936,6 +938,12 @@ CONTAINS
      k1_old  = k1
      k2_old  = k2
      k3_old  = k3
+     has_labelk_old = ALLOCATED(labelk)
+     IF (has_labelk_old) THEN
+        ALLOCATE(labelk_old(nkstot_old))
+        labelk_old = labelk
+        DEALLOCATE(labelk)
+     END IF
      DEALLOCATE(xk,wk)
 
      ! Prepare to read k-points again
@@ -954,9 +962,15 @@ CONTAINS
 
      ! Put back previous stuff
      DEALLOCATE(xk, wk)
+     IF (ALLOCATED(labelk)) DEALLOCATE(labelk)
      nkstot = nkstot_old
      ALLOCATE(xk(3,nkstot))
      ALLOCATE(wk(nkstot))
+     IF (has_labelk_old) THEN
+         ALLOCATE(labelk(nkstot))
+         labelk = labelk_old
+         DEALLOCATE(labelk_old)
+     END IF
      k_points = k_points_old
      xk  = xk_old
      wk  = wk_old
