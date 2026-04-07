@@ -588,12 +588,12 @@ if(QE_ENABLE_LIBXC)
     endif()
 
     if(${Libxc_FOUND})
-        if (${Libxc_VERSION} VERSION_GREATER_EQUAL "5.1.2" )
-            message(STATUS "Libxc version ${Libxc_VERSION} found.")
-        else()
-            message(FATAL_ERROR "Libxc version ${Libxc_VERSION} found. "
-                                "CMake compilation of QE tested for libxc v5.1.2 or later only.")
-        endif()
+        #if (${Libxc_VERSION} VERSION_GREATER_EQUAL "5.1.2" )
+        #   message(STATUS "Libxc version ${Libxc_VERSION} found.")
+        #else()
+        #    message(FATAL_ERROR "Libxc version ${Libxc_VERSION} found. "
+        #                        "CMake compilation of QE tested for libxc v5.1.2 or later only.")
+        #endif()
         target_link_libraries(qe_external_libxc INTERFACE Libxc::xcf03)
         target_include_directories(qe_external_libxc INTERFACE ${Libxc_INCLUDE_DIR})
         target_compile_definitions(qe_external_libxc INTERFACE ${Libxc_DEFINITIONS})

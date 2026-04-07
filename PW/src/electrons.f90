@@ -409,7 +409,7 @@ SUBROUTINE electrons_scf ( printout, exxen )
                                    egrand, vsol, esol, esic, esci
   USE scf,                  ONLY : scf_type, scf_type_COPY, bcast_scf_type,&
                                    create_scf_type, destroy_scf_type, &
-                                   scf_ns_copy, rho, rho_core, rhog_core, &
+                                   scf_ns_copy, rho, rho_core, rhog_core, tau_core, &
                                    v, vltot, vrs, kedtau, vnew
   USE mix,                  ONLY : open_mix_file, close_mix_file, mix_rho
   USE control_flags,        ONLY : mixing_beta, tr2, ethr, niter, nmix, &
