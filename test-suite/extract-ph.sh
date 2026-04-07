@@ -94,8 +94,8 @@ raman_au=$(awk '/Raman tensor \(au\^-1\)/{found=1; next} /Raman tensor \(A/{foun
 raman_A2=$(awk '/Raman tensor \(A\^2\)/{found=1; next} found && /Representation/{found=0} found && /atom #/{next} found && NF==3 && $1 ~ /^[+-]?[0-9]/{print $1; print $2; print $3}' $fname)
 # RAMAN (from dynmat.x output)
 polariz=$(awk '/Polarizability \(A\^3/{found=1; next} found && /multiply/{next} found && NF==3 && $1 ~ /^[+-]?[0-9]/{print $1; print $2; print $3}' $fname)
-raman_act=$(awk '/# mode/{found=1; next} found && NF>=6 && $1 ~ /^[0-9]+$/{print $5}' $fname)
-depol=$(awk '/# mode/{found=1; next} found && NF>=6 && $1 ~ /^[0-9]+$/{print $6}' $fname)
+raman_act=$(awk '/# mode/{found=1; next} found && NF>=6 && $1 ~ /^[0-9]+$/ && $2+0!=0{print $5}' $fname)
+depol=$(awk '/# mode/{found=1; next} found && NF>=6 && $1 ~ /^[0-9]+$/ && $2+0!=0{print $6}' $fname)
 # LAMBDA
 lambda2=`grep "lambda =" $fname | awk '{print $3; print $5; print $9 ;print $12; print $15}'`
 

@@ -4,7 +4,7 @@ Normal modes for H2O
   reduce_io = .true.,
   amass(1)  = 15.999,
   amass(2)  = 1.0078,
-  tr2_ph    = 1.0d-14,
+  tr2_ph    = 1.0d-25,
   epsil     = .true.,
   trans     = .true.,
   lraman    = .true.,
