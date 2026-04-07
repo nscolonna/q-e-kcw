@@ -956,7 +956,7 @@ CONTAINS
       IF ( xclib_get_id('MGGA','EXCH') == 0 ) THEN
          ! no MetaGGA, rVV10 with default b=6.3 as in Phys. Rev. B 87, 041108(R) (2013)
         CALL xc_rVV10  (rho_valence(:,1), rho_core, nspin, enl, vnl, v)  ! default b=6.3
-      ELSE IF ( xclib_get_id( 'MGGA','EXCH' ) == 497 ) THEN
+      ELSE IF (xclib_dft_is_libxc('MGGA','EXCH') .AND. xclib_get_id('MGGA','EXCH')==497 ) THEN
          ! rVV10-R2SCAN, with b=11.95, read Phys. Rev. B 106, 075422 (2022)
          CALL xc_rVV10 (rho_valence(:,1), rho_core, nspin, enl, vnl, v, 11.95_dp)
       ELSE
