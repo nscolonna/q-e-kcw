@@ -12,7 +12,7 @@
     ecutwfc   = 30.D0,
  /
  &electrons
-    conv_thr    = 1.D-8,
+    conv_thr    = 1.D-13
     mixing_beta = 0.7,
  /
 ATOMIC_SPECIES
