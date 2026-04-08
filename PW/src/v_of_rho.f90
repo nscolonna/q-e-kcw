@@ -215,7 +215,7 @@ SUBROUTINE v_xc_meta( rho, rho_core, rhog_core, tau_core, etxc, vtxc, v, kedtaur
   !$acc parallel loop collapse(2) present(rho)
   DO is = 1, nspin
     DO k = 1, dfftp_nnr
-      tau(k,is) = (rho%kin_r(k,is) + fac*tau_core(k))/e2
+      tau(k,is) = (rho%kin_r(k,is))/e2 + fac*tau_core(k)
     ENDDO
   ENDDO
   ! Not sure if the above expression for the kinetic energy density is correct, needs checking...
