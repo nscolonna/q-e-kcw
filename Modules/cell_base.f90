@@ -125,10 +125,6 @@
           MODULE PROCEDURE cell_init_ht, cell_init_a
         END INTERFACE
         !
-        INTERFACE pbcs
-          MODULE PROCEDURE pbcs_components, pbcs_vectors
-        END INTERFACE
-        !
         INTERFACE s_to_r
           MODULE PROCEDURE s_to_r1, s_to_r1b, s_to_r3
         END INTERFACE
@@ -517,24 +513,6 @@
 !
 !------------------------------------------------------------------------------!
 !
-      FUNCTION pbc(rin,box,nl) RESULT (rout)
-        IMPLICIT NONE
-        TYPE (boxdimensions) :: box
-        REAL (DP) :: rin(3)
-        REAL (DP) :: rout(3), s(3)
-        INTEGER, OPTIONAL :: nl(3)
-
-        s = matmul(box%hinv(:,:),rin)
-        s = s - box%perd*nint(s)
-        rout = matmul(box%hmat(:,:),s)
-        IF (present(nl)) THEN
-          s = REAL( nl, DP )
-          rout = rout + matmul(box%hmat(:,:),s)
-        END IF
-      END FUNCTION pbc
-!
-!------------------------------------------------------------------------------!
-!
           SUBROUTINE get_cell_param(box,cell,ang)
           IMPLICIT NONE
           TYPE(boxdimensions), INTENT(in) :: box
@@ -570,7 +548,7 @@
 
 !------------------------------------------------------------------------------!
 
-      SUBROUTINE pbcs_components(x1, y1, z1, x2, y2, z2, m)
+      SUBROUTINE pbcs(x1, y1, z1, x2, y2, z2, m)
         !! This subroutine compute the periodic boundary conditions in the scaled
         !! variables system.
         USE kinds
@@ -583,24 +561,7 @@
         Y2 = Y1 - DNINT(Y1/MIC)*MIC
         Z2 = Z1 - DNINT(Z1/MIC)*MIC
         RETURN
-      END SUBROUTINE pbcs_components
-
-!------------------------------------------------------------------------------!
-
-      SUBROUTINE pbcs_vectors(v, w, m)
-        !! This subroutine compute the periodic boundary conditions in the scaled
-        !! variables system.
-        USE kinds
-        INTEGER, INTENT(IN)  :: m
-        REAL(DP),  INTENT(IN)  :: v(3)
-        REAL(DP),  INTENT(OUT) :: w(3)
-        REAL(DP) :: MIC
-        MIC = REAL( M, DP )
-        w(1) = v(1) - DNINT(v(1)/MIC)*MIC
-        w(2) = v(2) - DNINT(v(2)/MIC)*MIC
-        w(3) = v(3) - DNINT(v(3)/MIC)*MIC
-        RETURN
-      END SUBROUTINE pbcs_vectors
+      END SUBROUTINE pbcs
 
 !------------------------------------------------------------------------------!
 
