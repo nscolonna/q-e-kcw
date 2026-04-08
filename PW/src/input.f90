@@ -2183,7 +2183,7 @@ SUBROUTINE exx_iosys ( ecutwfc, ecutrho )
   case("bands")
     exx_bgrp_type = EXX_BGRP_BANDS
 #if defined(__CUDA)
-    Call errore('input', 'EXX bands distribution on GPU NYI (use exx_type = band_pairs)',1)
+    Call errore('input', 'exx_type = bands on GPU not present in this version (use exx_type = band_pairs)',1)
 #endif
   case("band_pairs")
     exx_bgrp_type = EXX_BGRP_PAIRS
