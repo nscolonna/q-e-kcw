@@ -548,23 +548,6 @@
 
 !------------------------------------------------------------------------------!
 
-      SUBROUTINE pbcs(x1, y1, z1, x2, y2, z2, m)
-        !! This subroutine compute the periodic boundary conditions in the scaled
-        !! variables system.
-        USE kinds
-        INTEGER, INTENT(IN)  :: M
-        REAL(DP),  INTENT(IN)  :: X1,Y1,Z1
-        REAL(DP),  INTENT(OUT) :: X2,Y2,Z2
-        REAL(DP) MIC
-        MIC = REAL( M, DP )
-        X2 = X1 - DNINT(X1/MIC)*MIC
-        Y2 = Y1 - DNINT(Y1/MIC)*MIC
-        Z2 = Z1 - DNINT(Z1/MIC)*MIC
-        RETURN
-      END SUBROUTINE pbcs
-
-!------------------------------------------------------------------------------!
-
   SUBROUTINE set_h_ainv()
     !! CP-PW compatibility: align CP arrays H and ainv to at and bg.
     !
