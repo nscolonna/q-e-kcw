@@ -135,6 +135,27 @@
         !
   CONTAINS
   !
+  !-----------------------------------------------------------------------
+  FUNCTION pbc( vect )
+    !-----------------------------------------------------------------------
+    !
+    !! Periodic boundary conditions ( vect is assumed to be given
+    !! in cartesian coordinates and in atomic units )
+    !
+    REAL(DP), INTENT(in) :: vect(3)
+    REAL(DP)             :: pbc(3)
+    !
+    !
+    pbc(:) = matmul( vect(:), bg(:,:) )/alat
+    !
+    pbc(:) = pbc(:) - anint( pbc(:) )
+    !
+    pbc(:) = matmul( at(:,:), pbc(:) )*alat
+    !
+    RETURN
+    !
+  END FUNCTION pbc
+  !
   !------------------------------------------------------------------------------!
   SUBROUTINE cell_base_init( ibrav_, celldm_, a_, b_, c_, cosab_, cosac_, &
                              cosbc_, trd_ht, rd_ht, cell_units_ )
