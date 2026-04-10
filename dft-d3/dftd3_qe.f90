@@ -320,11 +320,11 @@ MODULE dftd3_qe
     integer, intent(in) :: nat
     character(len=*), intent(in) :: atm(nsp)
     integer, intent(in) :: ityp(nat)
-    real*8, intent(in) :: coord(3,nat)
-    real*8, intent(in) :: lat(3,3)
+    real(wp), intent(in) :: coord(3,nat)
+    real(wp), intent(in) :: lat(3,3)
 
-    integer :: i,j,ata,z,iz(nat)
-    real*8  :: cn(nat),rtmp3(3),c6,c8,dum,x
+    integer :: i,j,ata,iz(nat)
+    real(wp)  :: cn(nat),rtmp3(3),c6,c8,dum,x
     !
     !
     write(stdout,'( /, 5X, "--------------------------------------------" )' )
@@ -372,9 +372,9 @@ MODULE dftd3_qe
                                 & iz(ata),iz(j),cn(ata),cn(j),dum)
           x = x + dum
         enddo
-        z = get_atomic_number(trim(atm(ityp(ata))))
         write(stdout,'( 9X, A3 , 7X, F6.3, 10X, F7.3, F10.2, F10.2)') &
-                atm(ityp(ata)), cn(ata), 0.5*this%r0ab(z,z),c6*2.d0,c8*2.d0
+                atm(ityp(ata)), cn(ata), 0.5*this%r0ab(iz(ata),iz(ata)), &
+                c6*2.d0,c8*2.d0
     end do
     write(stdout,'(/, 9X, "Molecular C6 ( Ry / a.u.^6 ) = ",F12.2,/)') x*2.d0
 
