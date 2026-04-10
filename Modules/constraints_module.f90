@@ -7,7 +7,7 @@
 !
 #define __REMOVE_CONSTRAINT_FORCE
 !#define __DEBUG_CONSTRAINTS
-! comment out next line to remove periodic buondaru conditions
+! comment out next line to remove periodic boundary conditions
 #define __PBC pbc
 !
 !----------------------------------------------------------------------------
