@@ -299,7 +299,7 @@ SUBROUTINE d2ionq_dispd3_debug( alat, nat, ityp, at, tau )
 
   mat(:,:,:,:) = cmplx( der2disp_frc(:,:,:,:), kind=dp )
 
-  CALL print_dftd3_hessian( mat, nat, 'debug' )
+  CALL print_dftd3_hessian( stdout, mat, nat, 'debug' )
 
   deallocate( mat )
  
