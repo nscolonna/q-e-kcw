@@ -1,4 +1,5 @@
 Fixed in 7.5.1 version:
+  * pw2wannier90: Fix gamma_only bug in write_plot (Jae-Mo Lihm)
   * Calculation of Raman coefficients with second-order response was broken
     since v.7.4.1
   * Bug in ELF normalization for nspin=1 (courtesy Nicolas F. Barrera)

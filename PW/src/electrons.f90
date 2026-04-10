@@ -386,7 +386,7 @@ SUBROUTINE electrons_scf ( printout, exxen )
   USE kinds,                ONLY : DP
   USE check_stop,           ONLY : check_stop_now, stopped_by_user
   USE io_global,            ONLY : stdout, ionode
-  USE cell_base,            ONLY : at, bg, alat, omega, tpiba2
+  USE cell_base,            ONLY : at, bg, alat, omega, tpiba2, pbc
   USE ions_base,            ONLY : zv, nat, nsp, ityp, tau, compute_eextfor, atm, &
                                    ntyp => nsp
   USE starting_scf,         ONLY : starting_pot
@@ -572,14 +572,11 @@ SUBROUTINE electrons_scf ( printout, exxen )
      CALL start_clock('energy_dftd3')
      ! taupbc are atomic positions in alat units, centered around r=0
      ALLOCATE ( taupbc(3,nat) )
-     taupbc(:,:) = tau(:,:)
-     CALL cryst_to_cart( nat, taupbc, bg, -1 ) 
-     taupbc(:,:) = taupbc(:,:) - NINT(taupbc(:,:))
-     CALL cryst_to_cart( nat, taupbc, at,  1 ) 
      DO na = 1, nat
+        taupbc(:,na) = pbc( tau(:,na)*alat )
         atnum(na) = get_atomic_number(TRIM(atm(ityp(na))))
      ENDDO
-     call dftd3_pbc_dispersion(dftd3, alat*taupbc, atnum, alat*at, edftd3)
+     call dftd3_pbc_dispersion(dftd3, taupbc, atnum, alat*at, edftd3)
      edftd3=edftd3*2.d0
      DEALLOCATE( taupbc)
      CALL stop_clock('energy_dftd3')
