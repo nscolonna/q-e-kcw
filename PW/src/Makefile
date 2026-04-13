@@ -58,6 +58,7 @@ compute_ux.o \
 Coul_cut_2D.o \
 d_matrix.o \
 data_structure.o \
+diag_direct.o \
 divide_class.o \
 divide_class_so.o \
 divide_et_impera.o \
