@@ -7,7 +7,7 @@ inputs_args = ('atom.in', ''), ('atom-lsda.in',''), ('atom-occ1.in',''), ('atom-
 
 [pw_b3lyp/]
 program = PW
-inputs_args = ('b3lyp-O.in', ''), ('b3lyp-h2o.in',''), ('x3lyp-O.in', ''), ('x3lyp-h2o.in','')
+inputs_args = ('b3lyp-O.in', ''), ('b3lyp-O_std.in', ''), ('b3lyp-h2o.in',''), ('b3lyp-h2o_std.in',''), ('x3lyp-O.in', ''), ('x3lyp-h2o.in','')
 
 [pw_berry/]
 program = PW
@@ -35,7 +35,7 @@ inputs_args = ('metal.in' ,''), ('metal-2.in' ,''), ('metal-fermi_dirac.in' ,'')
 
 [pw_noncolin/]
 program = PW
-inputs_args = ('noncolin.in' ,''), ('noncolin-1.in' ,''), ('noncolin-2.in' ,''), ('noncolin-cg.in' ,''), ('noncolin-rmm.in',''), ('noncolin-constrain_angle.in' ,''), ('noncolin-constrain_atomic.in' ,''), ('noncolin-constrain_total.in' ,''), ('noncolin-hyb.in' ,''), ('noncolin-pbe.in','')
+inputs_args = ('noncolin.in' ,''), ('noncolin-1.in' ,''), ('noncolin-2.in' ,''), ('noncolin-cg.in' ,''), ('noncolin-rmm.in',''), ('noncolin-constrain_angle.in' ,''), ('noncolin-constrain_atomic.in' ,''), ('noncolin-constrain_total.in' ,''), ('noncolin-hyb.in' ,''), ('noncolin-hyb_std.in' ,''), ('noncolin-pbe.in','')
 
 [pw_electric/]
 program = PW
@@ -63,7 +63,7 @@ inputs_args = ('scf_twochem.in', ''), ('nscf_twochem.in','2'), ('relax_twochem.i
 
 [pw_uspp/]
 program = PW
-inputs_args = ('uspp.in' ,''), ('uspp-2.in' ,''), ('uspp-cg.in' ,''), ('uspp-cg-gamma.in' ,''), ('uspp-hyb-g.in' ,''), ('uspp-hyb-k.in',''), ('uspp-mixing_TF.in' ,''), ('uspp-mixing_localTF.in' ,''), ('uspp-mixing_ndim.in' ,''), ('uspp-singlegrid.in' ,''), ('uspp1-coulomb.in' ,''), ('uspp1.in' ,''), ('uspp2.in' ,''), ('uspp-paro-gamma.in',''), ('uspp-paro-k.in','')
+inputs_args = ('uspp.in' ,''), ('uspp-2.in' ,''), ('uspp-cg.in' ,''), ('uspp-cg-gamma.in' ,''), ('uspp-hyb-g.in' ,''), ('uspp-hyb-g_std.in' ,''), ('uspp-hyb-k.in',''), ('uspp-hyb-k_std.in',''), ('uspp-mixing_TF.in' ,''), ('uspp-mixing_localTF.in' ,''), ('uspp-mixing_ndim.in' ,''), ('uspp-singlegrid.in' ,''), ('uspp1-coulomb.in' ,''), ('uspp1.in' ,''), ('uspp2.in' ,''), ('uspp-paro-gamma.in',''), ('uspp-paro-k.in','')
 
 [pw_md/]
 program = PW
@@ -88,6 +88,10 @@ inputs_args = ('scf-dos-1.in' ,'1'), ('scf-dos-2.in' ,'2')
 [pw_workflow_exx_nscf/]
 program = PW
 inputs_args = ('ncpp-k-1.in' ,'1'), ('ncpp-k-2.in' ,'2'), ('uspp-gamma-1.in' ,'1'), ('uspp-gamma-2.in' ,'2'), ('uspp-k-smearing-1.in' ,'1'), ('uspp-k-smearing-2.in' ,'2'), ('ncpp-gamma-restart-1.in','1'), ('ncpp-gamma-restart-2.in','2'), ('uspp-k-restart-1.in','1'), ('uspp-k-restart-2.in','2')
+
+[pw_diag_direct/]
+program = PW
+inputs_args = ('scf-davidson.in', ''), ('scf-direct.in', '')
 
 [ph_2d_metal/]
 program = PH
@@ -147,7 +151,11 @@ inputs_args = ('scf.in', '1'), ('ph.in', '2'), ('q2r1.in', '3'), ('matdyn1.in', 
 
 [ph_1d/]
 program = PH
-inputs_args = ('ch4.scf.in','1'), ('ch4.ph.in', '2'), ('ch4.dynmat.in', '9')  
+inputs_args = ('ch4.scf.in','1'), ('ch4.ph.in', '2'), ('ch4.dynmat.in', '9')
+
+[ph_raman/]
+program = PH
+inputs_args = ('h2o.scf.in', '1'), ('h2o.ph.in', '2'), ('h2o.dynmat.in', '9')
 
 [ph_restart/]
 program = PH
@@ -159,7 +167,11 @@ inputs_args = ('scf_twochem.in', '1'), ('phG_twochem.in','11'), ('scf2.in', '1')
 
 [ph_multipole/]
 program = PH
-inputs_args = ('scf.in', '12'), ('ph.in.01','2'), ('ph.in.02', '2'), ('ph.in.03', '2'),  ('ph.in.04', '13')  
+inputs_args = ('scf.in', '12'), ('ph.in.01','2'), ('ph.in.02', '2'), ('ph.in.03', '2'),  ('ph.in.04', '13')
+
+[ph_diag_direct/]
+program = PH
+inputs_args = ('scf.in', '1'), ('ph-davidson.in', '2'), ('ph-direct.in', '2')
 
 [epw_base/]
 program = EPW

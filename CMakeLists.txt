@@ -9,8 +9,9 @@ cmake_minimum_required(VERSION 3.20 FATAL_ERROR)
 # CMake < 3.20 does not support NVHPC compiler id
 # https://cmake.org/cmake/help/latest/release/3.20.html#compilers
 
-# Policy CMP0048: The project() command manages VERSION variables
-set(CMAKE_POLICY_DEFAULT_CMP0048 NEW)
+if(POLICY CMP0144)
+  cmake_policy(SET CMP0144 NEW) # v3.27+ find_package() uses upper-case <PACKAGENAME>_ROOT variables.
+endif()
 
 project(qe
     VERSION 7.5
@@ -587,8 +588,8 @@ if(QE_ENABLE_LIBXC)
         find_package(Libxc COMPONENTS Fortran CONFIG)
     endif()
 
-    if(${Libxc_FOUND})
-        if (${Libxc_VERSION} VERSION_GREATER_EQUAL "5.1.2" )
+    if(Libxc_FOUND)
+        if (Libxc_VERSION VERSION_GREATER_EQUAL "5.1.2" )
             message(STATUS "Libxc version ${Libxc_VERSION} found.")
         else()
             message(FATAL_ERROR "Libxc version ${Libxc_VERSION} found. "

@@ -58,6 +58,7 @@ compute_ux.o \
 Coul_cut_2D.o \
 d_matrix.o \
 data_structure.o \
+diag_direct.o \
 divide_class.o \
 divide_class_so.o \
 divide_et_impera.o \
@@ -80,8 +81,10 @@ ewald.o \
 ewald_dipole.o \
 extfield.o \
 exx_base.o \
-exx_band.o \
 exx.o \
+exx_std.o \
+exx_bp_utils.o \
+exx_bp.o \
 fcp_capacitance.o \
 fcp_dyn_calcavg.o \
 fcp_dyn_printavg.o \

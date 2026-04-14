@@ -161,6 +161,7 @@ clean:
 	        ph_U_metal_us/iron.* ph_U_insulator_us/bn.* ph_U_metal_paw/nickel.* ph_U_insulator_paw/bn.*
 	@rm -rf ph_*/*.wfc* ph_*/*.hub*
 	@rm -rf ph_1d/dynmat.axsf ph_1d/dynmat.mold
+	@rm -rf ph_raman/dynmat.axsf ph_raman/dynmat.mold
 	@rm -rf ph_2d/bn.frc ph_2d/bn.frq ph_2d/bn.frq.gp
 	@rm -rf ph_twochem/dynq1
 	@rm -rf ph_multipole/*npz ph_multipole/*fmt ph_multipole/*dat* ph_multipole/*pkl ph_multipole/*processing*

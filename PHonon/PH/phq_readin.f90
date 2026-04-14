@@ -383,6 +383,8 @@ SUBROUTINE phq_readin()
      isolve = 0
   CASE ('cg')
      isolve = 1
+  CASE ('direct')
+     isolve = 5
   CASE DEFAULT
      CALL errore('phq_readin','diagonalization '//trim(diagonalization)//' not implemented',1)
   END SELECT

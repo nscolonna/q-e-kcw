@@ -234,7 +234,7 @@ contains
            s18 =0.906564
            rs18=3.593680
       case DEFAULT
-            call stoprun( 'functional name unknown' )
+           call errore('dft-d3', 'functional name unknown', 1)
     end select
     endif
 
@@ -277,7 +277,7 @@ contains
            s18 =1.280619
            rs18=0.003160
       case DEFAULT
-            call stoprun( 'functional name unknown' )
+           call errore('dft-d3', 'functional name unknown', 1)
     end select
     endif
 
@@ -528,7 +528,7 @@ contains
         rs18=5.7308
 
       case DEFAULT
-        call stoprun( 'functional name unknown' )
+        call errore('dft-d3', 'functional name unknown', 1)
       end select
     end if
 
@@ -695,7 +695,7 @@ contains
           rs6=1.221
           s18=1.206
         case DEFAULT
-          call stoprun( 'functional name unknown' )
+          call errore('dft-d3', 'functional name unknown', 1)
         end select
       else
         ! special TZVPP parameter
@@ -735,7 +735,7 @@ contains
           s18=1.109
           s6=0.5
         case DEFAULT
-          call stoprun( 'functional name unknown (TZ case)' )
+          call errore('dft-d3', 'functional name unknown (TZ case)', 1)
         end select
       end if
     end if
@@ -773,7 +773,7 @@ contains
         s6=0.41
         alp=60.0d0
       case DEFAULT
-        call stoprun( 'functional name unknown' )
+        call errore('dft-d3', 'functional name unknown', 1)
       end select
 
     end if
@@ -1703,17 +1703,6 @@ contains
 
   end subroutine setr0ab
 
-
-  !CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
-
-  subroutine stoprun(s)
-    character*(*) s
-    write(*,*)'program stopped due to: ',s
-    open(99, file='dscf_problem', action='write', status='replace')
-    close(99)
-    !call system('touch dscf_problem')
-    stop 'must stop!'
-  end subroutine stoprun
 
   !CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
   ! Returns the number of a given element string (h-pu, 1-94)

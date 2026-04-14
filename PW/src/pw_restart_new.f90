@@ -54,6 +54,7 @@ MODULE pw_restart_new
   PRIVATE
   PUBLIC :: pw_write_schema, write_collected_wfc
   PUBLIC :: read_xml_file, read_collected_wfc
+  PUBLIC :: gk_l2gmap_kdip
   !
   CONTAINS
     !------------------------------------------------------------------------
@@ -1052,11 +1053,30 @@ MODULE pw_restart_new
     !-----------------------------------------------------------------------
     SUBROUTINE gk_l2gmap_kdip( npw_g, ngk_g, ngk, igk_l2g, igk_l2g_kdip, igwk )
       !-----------------------------------------------------------------------
-      !
-      ! ... This subroutine maps local G+k index to the global G vector index
-      ! ... the mapping is used to collect wavefunctions subsets distributed
-      ! ... across processors.
-      ! ... This map is used to obtained the G+k grids related to each kpt
+      !! This subroutine maps local G+k index to the global G vector index
+      !! the mapping is used to collect wavefunctions subsets distributed
+      !! across processors.
+      !!
+      !! There are 4 lists of G vectors:
+      !!   1) Local G vectors inside k-specific k+G sphere, size ngk(ik) (often called npw)
+      !!   2) Local G vectors shared for all k points, size ngm
+      !!   3) Global G vectors inside k-specific k+G sphere, size ngk_g
+      !!   4) Global G vectors shared for all k points, size ngm_g
+      !!
+      !! ngk_g is the size of the Hamiltonian at the given k point.
+      !!
+      !! The existing mapping are:
+      !!   - (1) -> (2) : igk_k(:, ik) in MODULE klist
+      !!   - (2) -> (4) : ig_l2g in MODULE gvect
+      !!
+      !! This subroutine builds the following mappings:
+      !!   - (1) -> (4) : igk_l2g = ig_l2g(igk_k(:, ik)) (internal only)
+      !!   - (4) -> (3) : igwk (optional output)
+      !!   - (3) -> (4) : igwk_lup (inverse of igwk, internal only)
+      !!   - (1) -> (3) : igk_l2g_kdip = igwk_lup(igk_l2g) (output)
+      !!
+      !! itmp is used to find which G vectors in list 4 are present in list 3.
+      !-----------------------------------------------------------------------
       !
       USE mp_bands,             ONLY : intra_bgrp_comm
       USE mp,                   ONLY : mp_sum
