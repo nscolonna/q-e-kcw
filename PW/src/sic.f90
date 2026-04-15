@@ -117,8 +117,8 @@ MODULE sic_mod
          !
          vxc(:,:)     = 0.d0
          vxc_aux(:,:) = 0.d0
-         CALL v_xc(rho,      rho_core, rhog_core, tau_core, etxc_aux, vtxc_aux, vxc)
-         CALL v_xc(rho_aux,  rho_core, rhog_core, tau_core, etxc_aux, vtxc_aux, vxc_aux)
+         CALL v_xc(rho,      rho_core, rhog_core, etxc_aux, vtxc_aux, vxc)
+         CALL v_xc(rho_aux,  rho_core, rhog_core, etxc_aux, vtxc_aux, vxc_aux)
          v%of_r(:,:) = v%of_r(:,:) + sic_gamma*(vxc(:,:) - vxc_aux(:,:))
          !
          ! ... SIC energy

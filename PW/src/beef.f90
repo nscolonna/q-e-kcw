@@ -52,20 +52,20 @@ SUBROUTINE beef_energies( )
         !calculate exchange contributions in Legendre polynomial
         !basis
         call beefsetmode(i-1)
-        CALL v_xc( rho, rho_core, rhog_core, tau_core, beefxc(i), vtxc, v%of_r)
+        CALL v_xc( rho, rho_core, rhog_core, beefxc(i), vtxc, v%of_r)
      enddo
         !calculate lda correlation contribution
         call beefsetmode(-3)
-        CALL v_xc( rho, rho_core, rhog_core, tau_core, beefxc(31), vtxc, v%of_r)
+        CALL v_xc( rho, rho_core, rhog_core, beefxc(31), vtxc, v%of_r)
         !calculate pbe correlation contribution
         call beefsetmode(-2)
-        CALL v_xc( rho, rho_core, rhog_core, tau_core, beefxc(32), vtxc, v%of_r)
+        CALL v_xc( rho, rho_core, rhog_core, beefxc(32), vtxc, v%of_r)
         !calculate lda xc energy
         call beefsetmode(-4)
-        CALL v_xc( rho, rho_core, rhog_core, tau_core, ldaxc, vtxc, v%of_r )
+        CALL v_xc( rho, rho_core, rhog_core, ldaxc, vtxc, v%of_r )
         !restore original, unperturbed xc potential and energy
         call beefsetmode(-1)
-        CALL v_xc( rho, rho_core, rhog_core, tau_core, etxc, vtxc, v%of_r )
+        CALL v_xc( rho, rho_core, rhog_core, etxc, vtxc, v%of_r )
   else
      do i=1,30
         !calculate exchange contributions in Legendre polynomial

@@ -21,7 +21,7 @@ SUBROUTINE stres_cc( sigmaxcc )
   USE ener,                 ONLY : etxc, vtxc
   USE lsda_mod,             ONLY : nspin
   USE rhoc_mod,             ONLY : interp_rhc, interp_drhc
-  USE scf,                  ONLY : rho, rho_core, rhog_core, tau_core
+  USE scf,                  ONLY : rho, rho_core, rhog_core
   USE vlocal,               ONLY : strf
   USE control_flags,        ONLY : gamma_only
   USE mp_bands,             ONLY : intra_bgrp_comm
@@ -52,7 +52,7 @@ SUBROUTINE stres_cc( sigmaxcc )
   !
   ALLOCATE( vxc(dfftp%nnr,nspin), vaux(dfftp%nnr,1) )
   !
-  CALL v_xc( rho, rho_core, rhog_core, tau_core, etxc, vtxc, vxc )
+  CALL v_xc( rho, rho_core, rhog_core, etxc, vtxc, vxc )
   !
   !$acc data create( vaux )
   !$acc data copyin( vxc )

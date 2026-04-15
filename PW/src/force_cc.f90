@@ -22,7 +22,7 @@ SUBROUTINE force_cc( forcecc )
   USE gvect,                ONLY : ngm, gstart, g, gg, ngl, gl, igtongl
   USE ener,                 ONLY : etxc, vtxc
   USE lsda_mod,             ONLY : nspin
-  USE scf,                  ONLY : rho, rho_core, rhog_core, tau_core
+  USE scf,                  ONLY : rho, rho_core, rhog_core
   USE control_flags,        ONLY : gamma_only
   USE noncollin_module,     ONLY : noncolin
   USE mp_bands,             ONLY : intra_bgrp_comm
@@ -66,7 +66,7 @@ SUBROUTINE force_cc( forcecc )
   !
   ALLOCATE( vxc(dfftp%nnr,nspin), vaux(dfftp%nnr,1) )
   !
-  CALL v_xc( rho, rho_core, rhog_core, tau_core, etxc, vtxc, vxc )
+  CALL v_xc( rho, rho_core, rhog_core, etxc, vtxc, vxc )
   !
   !$acc data copyin(vxc) create(vaux)
   !
