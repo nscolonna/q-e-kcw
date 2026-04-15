@@ -819,7 +819,8 @@ SUBROUTINE phq_readin()
   IF (noncolin.and.(lraman.or.elop)) CALL errore('phq_readin', &
       'lraman, elop, and noncolin not programmed',1)
 #if defined(__CUDA)
-     CALL errore('phq_readin','Raman for GPU not present in this version', 1)
+  IF (lraman) CALL errore('phq_readin', &
+          'Raman for GPU not present in this version', 1)
 #endif
   IF ( domag .and. lspinorb .and. elph ) CALL errore('phq_readin', & 
     'el-ph coefficient calculation disabled in magnetic spinorbit case',1)
