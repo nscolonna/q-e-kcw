@@ -993,6 +993,9 @@ SUBROUTINE control_iosys()
      isolve = 5
      WRITE( stdout, '(/5X,"Using direct diagonalization")')
      WRITE( stdout, '(5X,"WARNING: Use only when you need a lot of unoccupied states")')
+#if defined(__CUDA)
+    Call errore('input', 'direct diagonalization on GPU not present in this version',1)
+#endif
      !
   CASE DEFAULT
      !
