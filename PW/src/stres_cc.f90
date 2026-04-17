@@ -18,7 +18,6 @@ SUBROUTINE stres_cc( sigmaxcc )
   USE fft_base,             ONLY : dfftp
   USE fft_rho,              ONLY : rho_r2g
   USE gvect,                ONLY : ngm, gstart, ngl, gl, igtongl, g, gg
-  USE ener,                 ONLY : etxc, vtxc
   USE lsda_mod,             ONLY : nspin
   USE rhoc_mod,             ONLY : interp_rhc, interp_drhc
   USE scf,                  ONLY : rho, rho_core, rhog_core
@@ -38,6 +37,7 @@ SUBROUTINE stres_cc( sigmaxcc )
   REAL(DP), ALLOCATABLE :: rhocg(:), vxc(:,:)
   COMPLEX(DP), ALLOCATABLE :: vaux(:,:)
   !
+  REAL(DP) :: etxc_loc, vtxc_loc
   REAL(DP) :: rhocg1, sigma_rid, sigmadiag
   REAL(DP) :: sigma1, sigma2, sigma3, &
               sigma4, sigma5, sigma6
@@ -52,7 +52,7 @@ SUBROUTINE stres_cc( sigmaxcc )
   !
   ALLOCATE( vxc(dfftp%nnr,nspin), vaux(dfftp%nnr,1) )
   !
-  CALL v_xc( rho, rho_core, rhog_core, etxc, vtxc, vxc )
+  CALL v_xc( rho, rho_core, rhog_core, etxc_loc, vtxc_loc, vxc )
   !
   !$acc data create( vaux )
   !$acc data copyin( vxc )
