@@ -20,7 +20,6 @@ SUBROUTINE force_cc( forcecc )
   USE fft_base,             ONLY : dfftp
   USE fft_rho,              ONLY : rho_r2g
   USE gvect,                ONLY : ngm, gstart, g, gg, ngl, gl, igtongl
-  USE ener,                 ONLY : etxc, vtxc
   USE lsda_mod,             ONLY : nspin
   USE scf,                  ONLY : rho, rho_core, rhog_core
   USE control_flags,        ONLY : gamma_only
@@ -49,6 +48,7 @@ SUBROUTINE force_cc( forcecc )
   COMPLEX(DP), ALLOCATABLE :: vaux(:,:)
   REAL(DP) :: prod, arg, fact
   REAL(DP) :: forcecc_x, forcecc_y, forcecc_z, tau1, tau2, tau3
+  REAL(DP) :: etxc_loc, vtxc_loc
   !
   forcecc(:,:) = 0.d0
   !
@@ -66,7 +66,7 @@ SUBROUTINE force_cc( forcecc )
   !
   ALLOCATE( vxc(dfftp%nnr,nspin), vaux(dfftp%nnr,1) )
   !
-  CALL v_xc( rho, rho_core, rhog_core, etxc, vtxc, vxc )
+  CALL v_xc( rho, rho_core, rhog_core, etxc_loc, vtxc_loc, vxc )
   !
   !$acc data copyin(vxc) create(vaux)
   !
