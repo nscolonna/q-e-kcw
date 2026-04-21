@@ -16,6 +16,7 @@ New in 7.5.1 version:
     for eps_calc, now allowing USPP/PAW pseudos. Calculations that previously 
     used nonlocal pseudopotentials (ex: ONCVs) may yield different (more 
     accurate) numerical results
+  * Expose BEEF vdW functional using LibXC, named BEEF_LXC (A. Fonari).
 
 Incompatible changes in 7.5 version:
   * The Simpson routine for radial integration has been modified for the case
