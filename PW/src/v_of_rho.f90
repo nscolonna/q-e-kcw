@@ -252,7 +252,7 @@ SUBROUTINE v_xc_meta( rho, rho_core, rhog_core, tau_core, etxc, vtxc, v, kedtaur
        kedtaur(k,1) = (v3x(k,1)+v3c(k,1)) * 0.5d0 * e2
        !
        etxc = etxc + (ex(k)+ec(k)) * e2
-       vtxc = vtxc + (v1x(k,1)+v1c(k,1)) * e2 * ABS(rho%of_r(k,1))
+       vtxc = vtxc + (v1x(k,1)+v1c(k,1)) * e2 * ABS(rhotot(k,1))
        !
        IF (rho%of_r(k,1) < zero) rhoneg1 = rhoneg1-rho%of_r(k,1)
        !
