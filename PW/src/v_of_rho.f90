@@ -170,7 +170,7 @@ SUBROUTINE v_xc_meta( rho, rho_core, rhog_core, tau_core, etxc, vtxc, v, kedtaur
   REAL(DP), DIMENSION(3) :: grhoup, grhodw
   !
   REAL(DP), ALLOCATABLE :: h(:,:,:), dh(:)
-  REAL(DP), ALLOCATABLE :: rho_updw(:,:), grho(:,:,:), tau(:,:)
+  REAL(DP), ALLOCATABLE :: rho_updw(:,:), rhotot(:,:), grho(:,:,:), tau(:,:)
   COMPLEX(DP), ALLOCATABLE :: rhogsum(:)
   REAL(DP), PARAMETER :: eps12 = 1.0d-12, zero=0._dp
   !
@@ -229,7 +229,14 @@ SUBROUTINE v_xc_meta( rho, rho_core, rhog_core, tau_core, etxc, vtxc, v, kedtaur
   !$acc data create( ex, ec, v1x, v2x, v3x, v1c, v2c, v3c )
   IF (nspin == 1) THEN
     !
-    CALL xc_metagcx( dfftp_nnr, 1, np, rho%of_r, grho, tau, ex, ec, &
+    ALLOCATE( rhotot(dfftp%nnr, 1) )
+    !$acc data create( rhotot )
+    !$acc parallel loop present( rho_core )
+    DO k = 1, dfftp_nnr
+      rhotot(k,1) = rho%of_r(k,1) + rho_core(k)
+    ENDDO
+    !
+    CALL xc_metagcx( dfftp_nnr, 1, np, rhotot, grho, tau, ex, ec, &
                      v1x, v2x, v3x, v1c, v2c, v3c, gpu_args_=.TRUE. )
     !
     !$acc parallel loop reduction(+:etxc,vtxc,rhoneg1,rhoneg2) present(rho)
@@ -245,21 +252,24 @@ SUBROUTINE v_xc_meta( rho, rho_core, rhog_core, tau_core, etxc, vtxc, v, kedtaur
        kedtaur(k,1) = (v3x(k,1)+v3c(k,1)) * 0.5d0 * e2
        !
        etxc = etxc + (ex(k)+ec(k)) * e2
-       vtxc = vtxc + (v1x(k,1)+v1c(k,1)) * e2 * ABS(rho%of_r(k,1))
+       vtxc = vtxc + (v1x(k,1)+v1c(k,1)) * e2 * ABS(rhotot(k,1))
        !
        IF (rho%of_r(k,1) < zero) rhoneg1 = rhoneg1-rho%of_r(k,1)
        !
     ENDDO
+    !
+    !$acc end data
+    DEALLOCATE( rhotot )
     !
   ELSE
     !
     ALLOCATE( rho_updw(dfftp%nnr,2) )
     !$acc data create( rho_updw )
     !
-    !$acc parallel loop present(rho)
-    DO k = 1, dfftp_nnr  
-        rho_updw(k,1) = ( rho%of_r(k,1) + rho%of_r(k,2) ) * 0.5d0
-        rho_updw(k,2) = ( rho%of_r(k,1) - rho%of_r(k,2) ) * 0.5d0
+    !$acc parallel loop present(rho, rho_core)
+    DO k = 1, dfftp_nnr
+        rho_updw(k,1) = ( rho%of_r(k,1) + rho%of_r(k,2) ) * 0.5d0 + fac*rho_core(k)
+        rho_updw(k,2) = ( rho%of_r(k,1) - rho%of_r(k,2) ) * 0.5d0 + fac*rho_core(k)
     ENDDO
     !
     CALL xc_metagcx( dfftp_nnr, 2, np, rho_updw, grho, tau, ex, ec, &

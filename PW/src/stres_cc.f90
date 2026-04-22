@@ -19,10 +19,11 @@ SUBROUTINE stres_cc( sigmaxcc )
   USE fft_rho,              ONLY : rho_r2g
   USE gvect,                ONLY : ngm, gstart, ngl, gl, igtongl, g, gg
   USE lsda_mod,             ONLY : nspin
-  USE rhoc_mod,             ONLY : interp_rhc, interp_drhc
-  USE scf,                  ONLY : rho, rho_core, rhog_core
+  USE rhoc_mod,             ONLY : interp_rhc, interp_drhc, interp_tac
+  USE scf,                  ONLY : rho, rho_core, rhog_core, tau_core
   USE vlocal,               ONLY : strf
   USE control_flags,        ONLY : gamma_only
+  USE xc_lib,               ONLY : xclib_dft_is
   USE mp_bands,             ONLY : intra_bgrp_comm
   USE mp,                   ONLY : mp_sum
   !
@@ -34,7 +35,7 @@ SUBROUTINE stres_cc( sigmaxcc )
   !
   INTEGER :: nt, ng, l, m, ir, dfftp_nnr
   REAL(DP) :: fact
-  REAL(DP), ALLOCATABLE :: rhocg(:), vxc(:,:)
+  REAL(DP), ALLOCATABLE :: rhocg(:), vxc(:,:), kedtaur(:,:)
   COMPLEX(DP), ALLOCATABLE :: vaux(:,:)
   !
   REAL(DP) :: etxc_loc, vtxc_loc
@@ -52,7 +53,14 @@ SUBROUTINE stres_cc( sigmaxcc )
   !
   ALLOCATE( vxc(dfftp%nnr,nspin), vaux(dfftp%nnr,1) )
   !
-  CALL v_xc( rho, rho_core, rhog_core, etxc_loc, vtxc_loc, vxc )
+  IF ( xclib_dft_is('meta') ) THEN
+     ALLOCATE( kedtaur(dfftp%nnr,nspin) )
+     vxc = 0._DP
+     kedtaur = 0._DP
+     CALL v_xc_meta( rho, rho_core, rhog_core, tau_core, etxc_loc, vtxc_loc, vxc, kedtaur )
+  ELSE
+     CALL v_xc( rho, rho_core, rhog_core, etxc_loc, vtxc_loc, vxc )
+  END IF
   !
   !$acc data create( vaux )
   !$acc data copyin( vxc )
@@ -139,6 +147,36 @@ SUBROUTINE stres_cc( sigmaxcc )
   DO l = 1, 3
      sigmaxcc(l,l) = sigmaxcc(l,l) + sigmadiag
   ENDDO
+  !
+  ! ... tau_core measure term: Sigma_G v_kin*(G) S(G) tac(|G|) (meta-GGA only)
+  !
+  IF ( xclib_dft_is('meta') ) THEN
+     IF ( nspin==2 ) kedtaur(:,1) = 0.5_DP * ( kedtaur(:,1) + kedtaur(:,2) )
+     CALL rho_r2g( dfftp, kedtaur(:,1), vaux(:,1:1) )
+     DEALLOCATE( kedtaur )
+     sigmadiag = 0._DP
+     !$acc data create( rhocg )
+     DO nt = 1, ntyp
+        IF ( upf(nt)%nlcc .AND. ALLOCATED(upf(nt)%tau_core) ) THEN
+           CALL interp_tac( nt, ngl, gl, tpiba2, rhocg )
+           IF (gstart==2) THEN
+             !$acc kernels
+             rhocg1 = rhocg(igtongl(1))
+             sigmadiag = sigmadiag + DBLE(CONJG(vaux(1,1)) * strf(1,nt)) * rhocg1
+             !$acc end kernels
+           ENDIF
+           !$acc parallel loop reduction(+:sigmadiag)
+           DO ng = gstart, ngm
+              sigmadiag = sigmadiag + DBLE(CONJG(vaux(ng,1)) * &
+                                      strf(ng,nt)) * rhocg(igtongl(ng)) * fact
+           ENDDO
+        ENDIF
+     ENDDO
+     !$acc end data
+     DO l = 1, 3
+        sigmaxcc(l,l) = sigmaxcc(l,l) + sigmadiag
+     ENDDO
+  ENDIF
   !
   CALL mp_sum( sigmaxcc, intra_bgrp_comm )
   !
