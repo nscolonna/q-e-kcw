@@ -16,7 +16,7 @@ SUBROUTINE stres_mgga( sigmaxc )
   USE noncollin_module,       ONLY : noncolin
   USE cell_base,              ONLY : omega
   USE gvect,                  ONLY : g
-  USE scf,                    ONLY : rho, v, tau_core
+  USE scf,                    ONLY : rho, v
   USE wavefunctions,          ONLY : evc
   USE xc_lib,                 ONLY : xclib_dft_is
   USE klist,                  ONLY : nks, xk, ngk
@@ -148,8 +148,6 @@ SUBROUTINE stres_mgga( sigmaxc )
      !
      vkin = v%kin_r(1:dffts%nnr,iss)
      rhokin = rho%kin_r(1:dffts%nnr,iss)
-     ! FIXME: fuse into !$acc parallel loop (present_or_copyin tau_core) to avoid CPU addition + host->device transfer
-     rhokin(1:dffts%nnr) = rhokin(1:dffts%nnr) + e2 * tau_core(1:dffts%nnr) / DBLE(nspin)
      !$acc update device(vkin,rhokin)
      !
      !$acc parallel loop reduction(+:sigma1,sigma2,sigma3,sigma4,sigma5,sigma6)
