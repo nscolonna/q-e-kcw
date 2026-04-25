@@ -32,7 +32,7 @@ MODULE dft_setting_routines
             exx_is_active, igcc_is_lyp, xclib_reset_dft, dft_force_hybrid, &
             xclib_finalize_libxc
   PUBLIC :: set_libxc_ext_param, get_libxc_ext_param
-  PUBLIC :: capital
+  PUBLIC :: capital, matches
 #if (__LIBXC && XC_MAJOR_VERSION < 5)
   INTEGER,PARAMETER :: XC_FAMILY_HYB_LDA=-1, XC_FAMILY_HYB_GGA=-1, XC_FAMILY_HYB_MGGA=-1
 #endif 

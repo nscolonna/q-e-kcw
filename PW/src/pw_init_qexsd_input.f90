@@ -89,6 +89,7 @@
   USE xc_lib,            ONLY:   xclib_dft_is
   USE uspp_param,        ONLY:   upf
   USE control_flags,     ONLY:   cf_nstep => nstep 
+  USE upf_utils,         ONLY:   capital
   USE qes_types_module
   USE qes_libs_module
   USE qexsd_init,        ONLY: qexsd_init_atomic_species, qexsd_init_atomic_structure, qexsd_init_dft, &
@@ -138,7 +139,6 @@
   CHARACTER(LEN=3),ALLOCATABLE             :: species_(:)
   INTEGER, POINTER                         :: nr_1,nr_2, nr_3, nrs_1, nrs_2, nrs_3, nrb_1, nrb_2, nrb_3 
   INTEGER,ALLOCATABLE                      :: nr_(:), nrs_(:), nrb_(:)
-  CHARACTER,EXTERNAL                       :: capital
   INTEGER                                  :: i, nt1, nt2, na, nb
   REAL(DP), PARAMETER                      :: ev_to_Ha = 1 / e2 / RYTOEV 
   !

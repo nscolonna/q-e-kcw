@@ -41,6 +41,7 @@ SUBROUTINE run_pwscf( exit_status )
   USE io_global,            ONLY : stdout, ionode, ionode_id
   USE parameters,           ONLY : ntypx, npk
   USE upf_params,           ONLY : lmaxx
+  USE upf_utils,            ONLY : matches
   USE cell_base,            ONLY : fix_volume, fix_area
   USE control_flags,        ONLY : conv_elec, gamma_only, ethr, lscf, treinit_gvecs
   USE control_flags,        ONLY : conv_ions, istep, nstep, restart, lmd, lbfgs,&
@@ -81,7 +82,6 @@ SUBROUTINE run_pwscf( exit_status )
   INTEGER, INTENT(OUT) :: exit_status
   !! Gives the exit status at the end
   !
-  LOGICAL, EXTERNAL :: matches
   ! checks if first string is contained in the second
   !
   ! ... local variables

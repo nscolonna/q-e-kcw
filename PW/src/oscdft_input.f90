@@ -104,10 +104,10 @@ MODULE oscdft_input
       END SUBROUTINE oscdft_read_input_work
 
       SUBROUTINE capitalize(string)
+         USE upf_utils,  ONLY : capital
          IMPLICIT NONE
 
          CHARACTER(LEN=*), INTENT(INOUT) :: string
-         CHARACTER(LEN=1), EXTERNAL      :: capital
          INTEGER                         :: idx
 
          DO idx=1,LEN(string)
