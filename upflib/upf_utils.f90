@@ -93,19 +93,15 @@ LOGICAL FUNCTION isnumeric ( in_char )
 END FUNCTION isnumeric
 !
 !-----------------------------------------------------------------------
-FUNCTION matches( string1, string2 )  
+LOGICAL FUNCTION matches( string1, string2 )  
   !-----------------------------------------------------------------------
   !! TRUE if string1 is contained in string2, FALSE otherwise.
   !
   IMPLICIT NONE
   !
   CHARACTER (LEN=*), INTENT(IN) :: string1, string2
-  LOGICAL                       :: matches
-  INTEGER                       :: len1, len2, l  
   !
   matches = ( INDEX (string2, string1) /= 0 )
-  !
-  RETURN
   !
 END FUNCTION matches
 !
