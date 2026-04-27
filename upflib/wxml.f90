@@ -148,7 +148,7 @@ CONTAINS
     if ( xf%unit == -1 ) then
        print *, 'xml file not opened'
     else
-       write(cvalue,*) value
+       write(cvalue,'(1p3es24.15e3)' ) value
        call add_attr(name, cvalue)
     end if
     !
@@ -164,7 +164,7 @@ CONTAINS
     if ( xf%unit == -1 ) then
        print *, 'xml file not opened'
     else
-       write(cvalue,*) value
+       write(cvalue,'(i12)' ) value
        call add_attr(name, cvalue)
     end if
     !
