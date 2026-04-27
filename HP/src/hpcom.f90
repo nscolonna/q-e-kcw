@@ -32,7 +32,7 @@ MODULE ldaU_hp
              no_metq0,                &     ! If .true. the metallic response term at q=0 is ignored
              disable_type_analysis,   &     ! If .true. disable the algorithm which detects whether
                                             ! there are atoms of the same type but with different occupations
-             skip_atom(500)                 ! If .true. no LR calculation will be performed 
+             skip_atom(1000)                 ! If .true. no LR calculation will be performed 
                                             ! for a selected atomic site.
                                             ! skip_atom(i), where i runs over atoms. If skip_atom(i)=.true.
                                             ! then no linear-response calculation will be performed for the
@@ -86,7 +86,7 @@ MODULE ldaU_hp
   CHARACTER(LEN=16)  :: background          ! Background correction
   CHARACTER(LEN=256) :: tmp_dir_save,  &    ! Temprary directory  
                         tmp_dir_hp                  
-  CHARACTER(LEN=5)   :: atm_new(500)        ! Label for atomic types
+  CHARACTER(LEN=5)   :: atm_new(1000)        ! Label for atomic types
   CHARACTER(LEN=2)   :: code = 'HP'         ! Name of the code
   !
   INTEGER, PARAMETER :: maxter = 500        ! Maximum number of iterations
