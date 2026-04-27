@@ -22,7 +22,7 @@ MODULE funct
   USE kinds,          ONLY: DP
   USE beef_interface, ONLY: beef_set_type
   USE xc_lib
-  USE dft_setting_routines, ONLY: matches, capital
+  USE upf_utils,      ONLY: matches, capital
   !
   IMPLICIT NONE
   !
