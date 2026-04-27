@@ -131,7 +131,7 @@ MODULE pw_restart_new
                                        get_screening_parameter, xclib_get_exx_fraction, exx_is_active
       USE exx_base,             ONLY : x_gamma_extrapolation, nq1, nq2, nq3, &
                                        exxdiv_treatment, yukawa, ecutvcut
-      USE exx,                  ONLY : ecutfock, local_thr 
+      USE exx,                  ONLY : ecutfock, local_thr, nbndproj, use_ace 
       USE london_module,        ONLY : scal6, lon_rcut, c6_i
       USE xdm_module,           ONLY : xdm_a1=>a1i, xdm_a2=>a2i
       USE tsvdw_module,         ONLY : vdw_isolated, vdw_econv_thr
@@ -432,7 +432,8 @@ MODULE pw_restart_new
                                    ECUTFOCK = ecutfock/e2, &
                                    EXX_FRACTION = xclib_get_exx_fraction(), SCREENING_PARAMETER = scr_par_pt, &
                                    EXXDIV_TREATMENT = exxdiv_treatment, X_GAMMA_EXTRAPOLATION = x_gamma_extrapolation,&
-                                   ECUTVCUT = ecutvcut_pt, LOCAL_THR = loc_thr_pt )
+                                   ECUTVCUT = ecutvcut_pt, LOCAL_THR = loc_thr_pt, &
+                                   USE_ACE = use_ace, NBNDPROJ = nbndproj )
          ELSE 
             hybrid_obj_opt%lwrite=.false. 
          END IF 
@@ -1206,7 +1207,7 @@ MODULE pw_restart_new
       USE tsvdw_module,    ONLY : vdw_isolated
       USE exx_base,        ONLY : x_gamma_extrapolation, nq1, nq2, nq3, &
            exxdiv_treatment, yukawa, ecutvcut
-      USE exx,             ONLY : ecutfock, local_thr
+      USE exx,             ONLY : ecutfock, local_thr, use_ace, nbndproj
       USE control_flags,   ONLY : noinv, gamma_only, tqr, llondon, ldftd3, &
            lxdm, ts_vdw, mbd_vdw, do_makov_payne 
       USE Coul_cut_2D,     ONLY : do_cutoff_2D
@@ -1316,7 +1317,7 @@ MODULE pw_restart_new
       !! DFT section
       CALL qexsd_copy_dft ( output_obj%dft, nsp, atm, &
            dft_name, nq1, nq2, nq3, ecutfock, exx_fraction, screening_parameter, &
-           exxdiv_treatment, x_gamma_extrapolation, ecutvcut, local_thr, &
+           exxdiv_treatment, x_gamma_extrapolation, ecutvcut, local_thr, use_ace, nbndproj, &
            lda_plus_u, apply_u,lda_plus_u_kind, Hubbard_projectors, Hubbard_n, Hubbard_l, Hubbard_lmax, Hubbard_occ,&
            Hubbard_n2, Hubbard_l2, Hubbard_n3, Hubbard_l3, backall, Hubbard_lmax_back, Hubbard_alpha_back, &
            Hubbard_U, Hubbard_Um, Hubbard_U2, Hubbard_J0, Hubbard_alpha, Hubbard_alpha_m, Hubbard_beta, Hubbard_J, Hubbard_V, &

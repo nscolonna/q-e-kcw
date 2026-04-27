@@ -256,9 +256,13 @@ inputs_args = ('scf.in', '1'), ('ph.in', '2'), ('nscf.in', '1'), ('epw1.in', '3'
 program = ZG
 inputs_args = ('zg.in', '0')
 
+[tddfpt_hyb/]
+program = TDDFPT
+inputs_args = ('pw.in', '1'), ('td-dav.in', '8'), ('acetd-dav.in', '8'), ('tda-dav.in', '8'), ('acetda-dav.in', '8'), ('td-lan.in', '2'), ('td-lan_pp.in', '3'), ('acetd-lan.in', '2'), ('acetd-lan_pp.in', '3'), ('tda-lan.in', '2'), ('tda-lan_pp.in', '3'), ('acetda-lan.in', '2'), ('acetda-lan_pp.in', '3')
+
 [tddfpt_CH4/]
 program = TDDFPT
-inputs_args = ('CH4.pw.in', '1'), ('CH4.tddfpt.in', '2'), ('CH4.tddfpt_pp.in', '3')
+inputs_args = ('CH4.pw.in', '1'), ('CH4.td-lan.in', '2'), ('CH4.td-lan_pp.in', '3')
 
 [tddfpt_eels-si/]
 program = TDDFPT
