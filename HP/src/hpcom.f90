@@ -18,7 +18,7 @@ MODULE ldaU_hp
   LOGICAL :: skip_type(ntypx),        &     ! If .true. skip the calculation for a specific type 
                                             ! (e.g. Ni_up can be used for Ni_down with some spin 
                                             ! considerations)
-             perturb_only_atom(500),  &     ! If perturb_only_atom(i)=.true. perterb only i-th atom
+             perturb_only_atom(1000),  &     ! If perturb_only_atom(i)=.true. perterb only i-th atom
              recalc_sym,              &     ! If .true. we recalculate the number of symmetries
                                             ! of the unperturbed lattice due to the change of 
                                             ! the atomic type of one of the atoms
