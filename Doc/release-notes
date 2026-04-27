@@ -4,6 +4,7 @@ Fixed in 7.5.1 version:
     since v.7.4.1
   * Bug in ELF normalization for nspin=1 (courtesy Nicolas F. Barrera)
   * Phonon bug for GPU + 1 k-point + finite wave-vector (courtesy A. Dal Corso)
+  * Bug in TDDFPT codes when restart is used (courtesy Ermanno Botti)
 
 Incompatible changes in 7.5.1 version:
   * Removed the option to compile PW with the pre-processor flag

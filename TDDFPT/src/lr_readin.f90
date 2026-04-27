@@ -1,5 +1,5 @@
 !
-! Copyright (C) 2001-2023 Quantum ESPRESSO group
+! Copyright (C) 2001-2026 Quantum ESPRESSO group
 ! This file is distributed under the terms of the
 ! GNU General Public License. See the file `License'
 ! in the root directory of the present distribution,
@@ -681,7 +681,7 @@ CONTAINS
        !
     ENDIF
     !
-    ! MAgnons restrictions
+    ! Magnons restrictions
     !
     IF (magnons) THEN
        IF (okvan.OR.okpaw) &     
@@ -698,6 +698,20 @@ CONTAINS
           CALL errore ('lr_readin', ' Magnons linear response calculation ' // &
                       & 'non-magnetic system', 1 )
     ENDIF
+    !
+    ! Restart functionality in TDDFPT requires a modification in FFTXlib.
+    ! Specifically, all occurrences of FFTW_MEASURE must be replaced with
+    ! FFTW_ESTIMATE in FFTXlib/src/fft_scalar.FFTW3.f90.
+    ! See q-e/TDDFPT/README for detailed instructions.
+    !
+#if defined(__FFTW3)
+    IF (restart) THEN
+       WRITE(stdout,*) 'ERROR: Restart requested, but required FFTXlib modification not implemented.'
+       WRITE(stdout,*) 'Please follow the instructions in q-e/TDDFPT/README to enable restart support.'
+       WRITE(stdout,*) 'After the fix, please comment out these lines and recompile the code.'
+       CALL errore('lr_readin', 'restart not available without FFTXlib modification', 1)
+    ENDIF
+#endif
     !
     RETURN
     !
