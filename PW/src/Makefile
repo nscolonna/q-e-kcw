@@ -180,6 +180,7 @@ plus_u_full.o \
 potinit.o \
 print_clock_pw.o \
 print_ks_energies.o \
+printpot.o \
 punch.o \
 pw_restart_new.o \
 add_qexsd_step.o \
