@@ -135,6 +135,7 @@ PROGRAM pw2bgw
   USE fft_base,  ONLY : dfftp    
   USE noncollin_module,   ONLY : noncolin, npol, m_loc, ux, angle1, angle2  !FZ: test for spinors
   USE ions_base,          ONLY : nat, tau, ntyp => nsp, ityp, zv  !FZ: test for spinors
+  USE upf_utils, ONLY : lowercase
 
   IMPLICIT NONE
 
@@ -212,7 +213,6 @@ PROGRAM pw2bgw
   logical :: allow_spinors
 
   character (len=256), external :: trimcheck
-  character (len=1), external :: lowercase
   REAL(DP) :: etxc, vtxc  !FZ: change062320
   INTEGER  :: na   !FZ: test for spinors
 

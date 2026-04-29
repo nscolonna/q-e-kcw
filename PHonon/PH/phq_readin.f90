@@ -80,6 +80,7 @@ SUBROUTINE phq_readin()
   USE open_close_input_file, ONLY : open_input_file, close_input_file
   USE el_phon,       ONLY : kx, ky, kz, elph_print
   USE two_chem,      ONLY : twochem
+  USE upf_utils,     ONLY : imatches
   !
   IMPLICIT NONE
   !
@@ -102,7 +103,6 @@ SUBROUTINE phq_readin()
   LOGICAL      :: q2d, q_in_band_form
   INTEGER, EXTERNAL  :: atomic_number
   REAL(DP), EXTERNAL :: atom_weight
-  LOGICAL, EXTERNAL  :: imatches
   LOGICAL, EXTERNAL  :: has_xml
   LOGICAL :: exst, parallelfs
   REAL(DP), ALLOCATABLE :: xqaux(:,:)

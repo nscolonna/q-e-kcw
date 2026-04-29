@@ -21,6 +21,7 @@ subroutine el_config &
   !
   use kinds, only: dp
   use ld1_parameters
+  use upf_utils, only : capital
   implicit none
   ! input: electronic configuration
   character(len=*), intent(in):: config
@@ -34,7 +35,6 @@ subroutine el_config &
   logical :: toomany
   integer ::  i, n, l, len, n0, first, start(nwfx), finish(nwfx)
   character ::  occup*10, core*2, prev*1, curr*1
-  character(len=1), external :: capital
   ! core states
   character(len=2) :: elc(15)
   integer :: nwfc, nnc(15), llc(15)
@@ -227,6 +227,7 @@ subroutine read_config(rel, lsd, nwf, el, nn, ll, oc, isw, jj)
   use kinds, only: dp
   use ld1_parameters, only: nwfx
   use io_global, only : qestdin
+  use upf_utils, only : capital
   implicit none
   ! input
   integer :: rel, lsd
@@ -237,7 +238,6 @@ subroutine read_config(rel, lsd, nwf, el, nn, ll, oc, isw, jj)
   ! local variables
   integer :: ios, n, ncheck
   character (len=2) :: label
-  character (len=1), external :: capital
   !
   !
   read(qestdin,*,err=200,iostat=ios) nwf
@@ -310,6 +310,7 @@ subroutine read_psconfig (rel, lsd, nwfs, els, nns, lls, ocs, &
   use kinds, only: dp
   use ld1_parameters, only: nwfsx
   use io_global, only : qestdin
+  use upf_utils, only : capital
   implicit none
   ! input
   integer :: rel, lsd
@@ -321,7 +322,6 @@ subroutine read_psconfig (rel, lsd, nwfs, els, nns, lls, ocs, &
   ! local variables
   integer :: ios, n
   character (len=2) :: label
-  character (len=1), external :: capital
 
   read(qestdin,*,err=600,iostat=ios) nwfs
 600 call errore('read_psconfig','reading number of pseudo wavefunctions (nwfs)',abs(ios))

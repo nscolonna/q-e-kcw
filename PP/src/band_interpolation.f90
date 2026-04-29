@@ -100,13 +100,13 @@ USE read_cards_module, ONLY : card_kpoints
 USE globalmod,         ONLY : method
 USE fouriermod,        ONLY : miller_max, check_periodicity, card_user_stars, card_roughness
 USE idwmod,            ONLY : p_metric, scale_sphere
+USE upf_utils,         ONLY : capital
 implicit none
   integer, parameter :: iunit = 5
   integer :: ios, i
   CHARACTER(len=256)         :: input_line
   LOGICAL                    :: tend
   CHARACTER(len=80)          :: card
-  CHARACTER(len=1), EXTERNAL :: capital
   !
   NAMELIST / interpolation / method, miller_max, check_periodicity, p_metric, scale_sphere
   !

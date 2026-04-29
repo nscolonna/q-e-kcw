@@ -36,6 +36,7 @@ PROGRAM postahc
   USE cell_base,   ONLY : at, bg
   USE ions_base,   ONLY : ntyp => nsp, nat, ityp
   USE wvfct,       ONLY : nbnd
+  USE upf_utils,   ONLY : imatches
   !
   IMPLICIT NONE
   !
@@ -204,7 +205,6 @@ PROGRAM postahc
   COMPLEX(DP), ALLOCATABLE :: selfen_diag_avg(:, :, :)
   !! Diagonal self-energy averaged over degenerate states
   !
-  LOGICAL, EXTERNAL  :: imatches
   CHARACTER(LEN=256), EXTERNAL :: trimcheck
   CHARACTER(len=6), EXTERNAL :: int_to_char
   REAL(DP), EXTERNAL :: wgauss

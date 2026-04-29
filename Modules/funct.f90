@@ -22,6 +22,7 @@ MODULE funct
   USE kinds,          ONLY: DP
   USE beef_interface, ONLY: beef_set_type
   USE xc_lib
+  USE upf_utils,      ONLY: matches, capital
   !
   IMPLICIT NONE
   !
@@ -355,7 +356,6 @@ CONTAINS
     LOGICAL :: dft_defined
     LOGICAL :: check_libxc
     !
-    CHARACTER(LEN=1), EXTERNAL :: capital
     CHARACTER(LEN=4) :: lda_exch, lda_corr, gga_exch, gga_corr
     !
     INTEGER :: save_inlc, lnt, ln_nlc
@@ -615,7 +615,6 @@ CONTAINS
     CHARACTER(LEN=*), INTENT(IN):: name(0:n)
     CHARACTER(LEN=*), INTENT(IN):: dft
     INTEGER :: i
-    LOGICAL, EXTERNAL :: matches
     !
     matching = notset
     !

@@ -72,7 +72,9 @@ MODULE autopilot
   !---------------------------------------------------------------------------
 
   USE kinds
-  USE parser, ONLY :  read_line
+  USE parser,    ONLY : read_line
+  USE upf_utils, ONLY : matches, capital
+  USE io_global, ONLY : ionode
 
   IMPLICIT NONE
   SAVE
@@ -230,7 +232,7 @@ CONTAINS
     !---------------------------------------------------------------------
     !! Checks if restart files are present.
     !
-    USE io_global, ONLY: ionode, ionode_id
+    USE io_global, ONLY : ionode_id
     USE mp,        ONLY : mp_bcast
     USE mp_world,  ONLY : world_comm
     IMPLICIT NONE
@@ -334,8 +336,6 @@ CONTAINS
     !--------------------------------------------------------------------
     !! Called in READ_CARDS and in PARSE_MAILBOX.
     !
-    USE io_global, ONLY: ionode
-    !
     IMPLICIT NONE
     !
     CHARACTER(LEN=256) :: input_line
@@ -347,8 +347,6 @@ CONTAINS
     LOGICAL            :: endrules = .FALSE.
     LOGICAL            :: tend = .FALSE.
     LOGICAL, SAVE      :: tread = .FALSE.
-    LOGICAL, EXTERNAL  :: matches
-    CHARACTER(LEN=1), EXTERNAL :: capital
 
     !ASU: copied this here since it seems not to be executed during each
     !     call of the routine. Needed for multiple rules in same block
@@ -439,8 +437,6 @@ CONTAINS
     !---------------------------------------------------------------------
     !! ADD RULE
     !
-    USE io_global, ONLY: ionode
-    !
     IMPLICIT NONE
     !
     CHARACTER(LEN=256) :: input_line
@@ -455,7 +451,6 @@ CONTAINS
     integer            :: ios
     integer            :: event
 
-    LOGICAL, EXTERNAL  :: matches
     LOGICAL            :: new_event
 
 
@@ -708,8 +703,6 @@ CONTAINS
     !---------------------------------------------------------------------
     !! ASSIGN RULE
     !
-    USE io_global, ONLY: ionode
-    !
     IMPLICIT NONE
     !
     INTEGER :: event
@@ -724,8 +717,6 @@ CONTAINS
     REAL      :: real_value
     REAL(DP) :: realDP_value
     LOGICAL   :: assigned
-    LOGICAL, EXTERNAL  :: matches
-    CHARACTER(LEN=1), EXTERNAL :: capital
 
 
     var = TRIM(var)
@@ -840,17 +831,11 @@ CONTAINS
     !! * if it starts with ON_STEP, then apply to event table etc;
     !! * if not the try to establish that its a variable to set right now.
     !
-    USE io_global, ONLY: ionode
-    !
     IMPLICIT NONE
     !
     INTEGER :: i
     CHARACTER(LEN=256) :: input_line
     LOGICAL            :: tend
-
-    CHARACTER(LEN=1), EXTERNAL :: capital
-    LOGICAL, EXTERNAL  :: matches
-
 
     ! we can use this parser routine, since parse_unit=pilot_unit
     CALL read_line( input_line, end_of_file=tend )
