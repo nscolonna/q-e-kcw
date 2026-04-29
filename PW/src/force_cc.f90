@@ -21,11 +21,12 @@ SUBROUTINE force_cc( forcecc )
   USE fft_rho,              ONLY : rho_r2g
   USE gvect,                ONLY : ngm, gstart, g, gg, ngl, gl, igtongl
   USE lsda_mod,             ONLY : nspin
-  USE scf,                  ONLY : rho, rho_core, rhog_core
+  USE scf,                  ONLY : rho, rho_core, rhog_core, tau_core
   USE control_flags,        ONLY : gamma_only
   USE noncollin_module,     ONLY : noncolin
   USE mp_bands,             ONLY : intra_bgrp_comm
   USE mp,                   ONLY : mp_sum
+  USE xc_lib,               ONLY : xclib_dft_is
   USE rhoc_mod,             ONLY : interp_rhc
   !
   IMPLICIT NONE
@@ -42,7 +43,7 @@ SUBROUTINE force_cc( forcecc )
   ! counter on types of atoms
   ! counter on atoms
   INTEGER :: dfftp_nnr
-  REAL(DP), ALLOCATABLE :: vxc(:,:), rhocg(:)
+  REAL(DP), ALLOCATABLE :: vxc(:,:), rhocg(:), kedtaur(:,:)
   ! exchange-correlation potential
   ! radial fourier transform of rho core
   COMPLEX(DP), ALLOCATABLE :: vaux(:,:)
@@ -66,7 +67,15 @@ SUBROUTINE force_cc( forcecc )
   !
   ALLOCATE( vxc(dfftp%nnr,nspin), vaux(dfftp%nnr,1) )
   !
-  CALL v_xc( rho, rho_core, rhog_core, etxc_loc, vtxc_loc, vxc )
+  IF ( xclib_dft_is('meta') ) THEN
+     ALLOCATE( kedtaur(dfftp%nnr,nspin) )
+     vxc = 0._DP
+     kedtaur = 0._DP
+     CALL v_xc_meta( rho, rho_core, rhog_core, tau_core, etxc_loc, vtxc_loc, vxc, kedtaur )
+     DEALLOCATE( kedtaur )
+  ELSE
+     CALL v_xc( rho, rho_core, rhog_core, etxc_loc, vtxc_loc, vxc )
+  END IF
   !
   !$acc data copyin(vxc) create(vaux)
   !
