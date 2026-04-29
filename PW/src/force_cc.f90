@@ -36,19 +36,11 @@ SUBROUTINE force_cc( forcecc )
   !
   ! ... local variables
   !
-  INTEGER :: ig, ir, nt, na
-  ! counter on polarizations
-  ! counter on G vectors
-  ! counter on FFT grid points
-  ! counter on types of atoms
-  ! counter on atoms
+  INTEGER :: ir, nt
   INTEGER :: dfftp_nnr
   REAL(DP), ALLOCATABLE :: vxc(:,:), rhocg(:), kedtaur(:,:)
-  ! exchange-correlation potential
-  ! radial fourier transform of rho core
   COMPLEX(DP), ALLOCATABLE :: vaux(:,:)
-  REAL(DP) :: prod, arg, fact
-  REAL(DP) :: forcecc_x, forcecc_y, forcecc_z, tau1, tau2, tau3
+  REAL(DP) :: fact
   REAL(DP) :: etxc_loc, vtxc_loc
   !
   forcecc(:,:) = 0.d0
@@ -99,41 +91,7 @@ SUBROUTINE force_cc( forcecc )
      IF ( upf(nt)%nlcc ) THEN
         !
         CALL interp_rhc( nt, ngl, gl, tpiba2, rhocg )
-        !
-#if !defined(_OPENACC)
-        !$omp parallel do private( tau1,tau2,tau3,forcecc_x,forcecc_y,forcecc_z,&
-        !$omp                      ig,arg,prod )
-#endif
-        DO na = 1, nat
-          IF (nt == ityp(na) ) THEN
-             !
-             tau1 = tau(1,na)
-             tau2 = tau(2,na)
-             tau3 = tau(3,na)
-             forcecc_x = 0.d0
-             forcecc_y = 0.d0
-             forcecc_z = 0.d0
-             !
-             !$acc parallel loop reduction(+:forcecc_x,forcecc_y,forcecc_z)
-             DO ig = gstart, ngm
-                arg = (g(1,ig)*tau1 + g(2,ig)*tau2 + g(3,ig)*tau3) * tpi
-                prod = tpiba * omega * rhocg(igtongl(ig)) * &
-                       DBLE( CONJG(vaux(ig,1)) * &
-                       CMPLX(SIN(arg), COS(arg), KIND=DP) ) * fact
-                forcecc_x = forcecc_x + g(1,ig) * prod
-                forcecc_y = forcecc_y + g(2,ig) * prod
-                forcecc_z = forcecc_z + g(3,ig) * prod
-             ENDDO
-             !
-             forcecc(1,na) = forcecc_x
-             forcecc(2,na) = forcecc_y
-             forcecc(3,na) = forcecc_z
-             !
-          ENDIF
-        ENDDO
-#if !defined(_OPENACC)
-        !$omp end parallel do
-#endif
+        CALL add_nlcc_force( nt, 1.0_DP )
      ENDIF
   ENDDO
   !
@@ -152,36 +110,7 @@ SUBROUTINE force_cc( forcecc )
      DO nt = 1, ntyp
         IF ( upf(nt)%nlcc .AND. ALLOCATED(upf(nt)%tau_core) ) THEN
            CALL interp_tac( nt, ngl, gl, tpiba2, rhocg )
-#if !defined(_OPENACC)
-           !$omp parallel do private( tau1,tau2,tau3,forcecc_x,forcecc_y,forcecc_z,&
-           !$omp                      ig,arg,prod )
-#endif
-           DO na = 1, nat
-              IF ( nt == ityp(na) ) THEN
-                 tau1 = tau(1,na)
-                 tau2 = tau(2,na)
-                 tau3 = tau(3,na)
-                 forcecc_x = 0.d0
-                 forcecc_y = 0.d0
-                 forcecc_z = 0.d0
-                 !$acc parallel loop reduction(+:forcecc_x,forcecc_y,forcecc_z)
-                 DO ig = gstart, ngm
-                    arg = (g(1,ig)*tau1 + g(2,ig)*tau2 + g(3,ig)*tau3) * tpi
-                    prod = tpiba * omega * rhocg(igtongl(ig)) * e2 * &
-                           DBLE( CONJG(vaux(ig,1)) * &
-                           CMPLX(SIN(arg), COS(arg), KIND=DP) ) * fact
-                    forcecc_x = forcecc_x + g(1,ig) * prod
-                    forcecc_y = forcecc_y + g(2,ig) * prod
-                    forcecc_z = forcecc_z + g(3,ig) * prod
-                 ENDDO
-                 forcecc(1,na) = forcecc(1,na) + forcecc_x
-                 forcecc(2,na) = forcecc(2,na) + forcecc_y
-                 forcecc(3,na) = forcecc(3,na) + forcecc_z
-              ENDIF
-           ENDDO
-#if !defined(_OPENACC)
-           !$omp end parallel do
-#endif
+           CALL add_nlcc_force( nt, e2 )
         ENDIF
      ENDDO
      !$acc end data
@@ -195,4 +124,43 @@ SUBROUTINE force_cc( forcecc )
   !
   RETURN
   !
+CONTAINS
+
+  SUBROUTINE add_nlcc_force( nt_, scale )
+    !! Accumulates into forcecc the G-space sum: i*G * exp(-i*R*G) * rhocg(G) * scale * vaux(G)
+    INTEGER,  INTENT(IN) :: nt_
+    REAL(DP), INTENT(IN) :: scale
+    INTEGER  :: na, ig
+    REAL(DP) :: tau1, tau2, tau3, arg, prod, fx, fy, fz
+    !
+#if !defined(_OPENACC)
+    !$omp parallel do private( tau1,tau2,tau3,fx,fy,fz,ig,arg,prod )
+#endif
+    DO na = 1, nat
+       IF ( nt_ == ityp(na) ) THEN
+          tau1 = tau(1,na)
+          tau2 = tau(2,na)
+          tau3 = tau(3,na)
+          fx = 0.d0 ;  fy = 0.d0 ;  fz = 0.d0
+          !$acc parallel loop reduction(+:fx,fy,fz)
+          DO ig = gstart, ngm
+             arg = (g(1,ig)*tau1 + g(2,ig)*tau2 + g(3,ig)*tau3) * tpi
+             prod = tpiba * omega * rhocg(igtongl(ig)) * scale * &
+                    DBLE( CONJG(vaux(ig,1)) * &
+                    CMPLX(SIN(arg), COS(arg), KIND=DP) ) * fact
+             fx = fx + g(1,ig) * prod
+             fy = fy + g(2,ig) * prod
+             fz = fz + g(3,ig) * prod
+          ENDDO
+          forcecc(1,na) = forcecc(1,na) + fx
+          forcecc(2,na) = forcecc(2,na) + fy
+          forcecc(3,na) = forcecc(3,na) + fz
+       ENDIF
+    ENDDO
+#if !defined(_OPENACC)
+    !$omp end parallel do
+#endif
+    !
+  END SUBROUTINE add_nlcc_force
+
 END SUBROUTINE force_cc
