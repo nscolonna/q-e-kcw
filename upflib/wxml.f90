@@ -139,7 +139,7 @@ CONTAINS
   end subroutine xml_addattribute_r
   !
   subroutine xml_addattribute_rv( xf, name, value )
-    !
+    ! Not actually used in QE
     type(xmlf_t), intent(in) :: xf
     character(len=*), intent(in) :: name
     real(DP_XML), intent(in) :: value(:)
@@ -148,7 +148,7 @@ CONTAINS
     if ( xf%unit == -1 ) then
        print *, 'xml file not opened'
     else
-       write(cvalue,'(1p3es24.15e3)' ) value
+       write(cvalue,*) value
        call add_attr(name, cvalue)
     end if
     !
@@ -164,8 +164,9 @@ CONTAINS
     if ( xf%unit == -1 ) then
        print *, 'xml file not opened'
     else
-       write(cvalue,'(i12)' ) value
-       call add_attr(name, cvalue)
+       ! Explicit format due to cray and gfortran free-format weirdness
+       write(cvalue,'(*(i12))' ) value
+       call add_attr(name, TRIM(ADJUSTL(cvalue)))
     end if
     !
   end subroutine xml_addattribute_iv
