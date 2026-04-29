@@ -8,8 +8,9 @@ if(CMAKE_Fortran_COMPILER_VERSION VERSION_GREATER_EQUAL 10.0)
 endif()
 
 if(QE_ENABLE_OFFLOAD)
-  if(NOT DEFINED QE_GPU_ARCHS)
-    message(FATAL_ERROR "Requires QE_GPU_ARCHS option. For example, sm_80 for NVIDIA A100 or gfx90a for AMD MI250X.")
+  if(NOT QE_GPU_ARCHS)
+      message(FATAL_ERROR "Requires QE_GPU_ARCHS option set to the target GPU architecture when using GCC. "
+                          "For example, sm_80 for NVIDIA A100 or gfx90a for AMD MI250X.")
   endif()
 
   if(QE_GPU_ARCHS MATCHES "sm_")

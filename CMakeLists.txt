@@ -65,7 +65,7 @@ include(GNUInstallDirs)
 if(DEFINED QE_ENABLE_CUDA OR DEFINED QE_ENABLE_ROCM OR DEFINED QE_ENABLE_ONEAPI OR DEFINED QE_ENABLE_OFFLOAD OR DEFINED QE_ENABLE_OPENACC)
     message(
         FATAL_ERROR "QE_ENABLE_CUDA, QE_ENABLE_ROCM, QE_ENABLE_ONEAPI, QE_ENABLE_OFFLOAD and QE_ENABLE_OPENACC CMake options are removed. "
-                    "Use QE_GPU instead. See details of this option explained in the user guide. "
+                    "Use QE_GPU and/or QE_GPU_ARCHS instead. See details of this option explained in the user guide. "
                     "When not building from scratch, their cached entries in CMakeCache.txt needs to be removed.")
 endif()
 include(DetermineGPUFeatures)
