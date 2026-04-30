@@ -18,8 +18,8 @@ CONTAINS
     !!
     !! Compute planar average of charge density, Hartree potential, local
     !! potential (from vltot), and their sum including the dipole correction
-    !! sawtooth (via add_efield) along direction idir.  Mirrors pp.x plot_num=11.
-    !! Output is written to file <prefix>.ef1.
+    !! sawtooth (via add_efield) along direction idir. Mirrors pp.x plot_num=11,
+    !! and then average.x. Output is written to file <prefix>.ef1.
     !!
     !! For LSDA (nspin=2), spin-up and spin-down charge density columns are
     !! added between total charge and the potentials.

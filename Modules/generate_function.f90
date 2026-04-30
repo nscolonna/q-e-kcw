@@ -28,10 +28,14 @@ CONTAINS
       !
       IMPLICIT NONE
       !
+      ! ... Declares variables
+      !
       INTEGER, INTENT(IN)       :: nnr, naxis, axis, shift
       LOGICAL, INTENT(IN)       :: reverse
       REAL( DP ), INTENT(INOUT) :: f( nnr )
       REAL( DP ), INTENT(INOUT) :: f1d( naxis )
+      !
+      ! ... Local variables
       !
       INTEGER :: i, j, k, ir, idx, narea
       LOGICAL :: offrange
