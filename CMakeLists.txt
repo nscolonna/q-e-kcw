@@ -62,26 +62,28 @@ include(GNUInstallDirs)
 ###########################################################
 # Build Options
 ###########################################################
-include(CMakeDependentOption)
-option(QE_ENABLE_CUDA
-    "enable CUDA acceleration on NVIDIA GPUs" OFF)
-if(QE_ENABLE_CUDA)
-    option(QE_ENABLE_OPENACC "enable OpenACC acceleration" ON)
-    # OpenMP enabled by default if CUDA is enable
-    option(QE_ENABLE_OPENMP
-        "enable distributed execution support via OpenMP" ON)
-else()
-    option(QE_ENABLE_OPENACC "enable OpenACC acceleration" OFF)
-    option(QE_ENABLE_OPENMP
-        "enable distributed execution support via OpenMP" OFF)
+if(DEFINED QE_ENABLE_CUDA OR DEFINED QE_ENABLE_ROCM OR DEFINED QE_ENABLE_ONEAPI OR DEFINED QE_ENABLE_OFFLOAD OR DEFINED QE_ENABLE_OPENACC)
+    message(
+        FATAL_ERROR "QE_ENABLE_CUDA, QE_ENABLE_ROCM, QE_ENABLE_ONEAPI, QE_ENABLE_OFFLOAD and QE_ENABLE_OPENACC CMake options are removed. "
+                    "Use QE_GPU and/or QE_GPU_ARCHS instead. See details of this option explained in the user guide. "
+                    "When not building from scratch, their cached entries in CMakeCache.txt needs to be removed.")
 endif()
-cmake_dependent_option(QE_ENABLE_OFFLOAD
-    "enable OpenMP offload"
-    OFF "QE_ENABLE_OPENMP" OFF)
+include(DetermineGPUFeatures)
+include(DetermineDeviceArchitectures)
+
+include(CMakeDependentOption)
 option(QE_ENABLE_MPI
     "enable distributed execution support via MPI" ON)
 option(QE_ENABLE_MPI_GPU_AWARE
     "enable GPU aware MPI operations" OFF)
+if(QE_ENABLE_CUDA OR QE_ENABLE_ROCM OR ENABLE_ONEAPI OR QE_ENABLE_OFFLOAD OR QE_ENABLE_OPENACC)
+    # OpenMP threading enabled by default if any GPU feature is enabled
+    set(QE_ENABLE_OPENMP_DEFAULT ON)
+else()
+    set(QE_ENABLE_OPENMP_DEFAULT OFF)
+endif()
+option(QE_ENABLE_OPENMP
+    "enable distributed execution support via OpenMP" ${QE_ENABLE_OPENMP_DEFAULT})
 option(QE_ENABLE_TEST
     "enable unit and system tests" ON)
 cmake_dependent_option(QE_ENABLE_BENCHMARK
@@ -170,9 +172,6 @@ endif()
 # least in C, not sure about Fortran), change all feature
 # macros to avoid weird behaviors
 
-if(QE_ENABLE_CUDA)
-    qe_add_global_compile_definitions(__CUDA)
-endif()
 if(QE_ENABLE_TRACE)
     qe_add_global_compile_definitions(__TRACE)
 endif()
@@ -228,6 +227,9 @@ if(QE_ENABLE_CUDA AND NOT (CMAKE_Fortran_COMPILER_ID MATCHES "PGI" OR CMAKE_Fort
 endif()
 if(QE_ENABLE_OPENACC AND NOT (CMAKE_Fortran_COMPILER_ID MATCHES "PGI" OR CMAKE_Fortran_COMPILER_ID MATCHES "NVHPC"))
     message(FATAL_ERROR "NVHPC compiler is mandatory when OpenACC is enabled")
+endif()
+if(QE_ENABLE_OFFLOAD AND NOT QE_ENABLE_OPENMP)
+    message(FATAL_ERROR "QE_ENABLE_OPENMP=ON required when OpenMP offload is enabled!")
 endif()
 if(QE_ENABLE_MPI_GPU_AWARE AND NOT (QE_ENABLE_CUDA AND QE_ENABLE_MPI))
     message(FATAL_ERROR "GPU aware MPI requires both MPI and CUDA features enabled")
@@ -374,7 +376,69 @@ if(QE_ENABLE_CUDA OR QE_ENABLE_PROFILE_NVTX)
     else()
         find_package(CUDAToolkit REQUIRED)
     endif()
+    qe_add_global_compile_definitions(__CUDA)
 endif(QE_ENABLE_CUDA OR QE_ENABLE_PROFILE_NVTX)
+
+###########################################################
+# ROCM
+###########################################################
+if(QE_ENABLE_ROCM)
+  if(NOT QE_ENABLE_OFFLOAD)
+    message(FATAL_ERROR "QE_ENABLE_ROCM=ON requires QE_ENABLE_OFFLOAD=ON")
+  endif()
+  if(CMAKE_VERSION VERSION_LESS 3.21.0)
+    message(FATAL_ERROR "QE_ENABLE_ROCM=ON require CMake 3.21.0 or later")
+  endif()
+  enable_language(HIP)
+  set(CMAKE_HIP_LINKER_PREFERENCE_PROPAGATES 0)
+  if(DEFINED ROCM_ROOT)
+    message(STATUS "Using ROCM_ROOT: ${ROCM_ROOT}")
+    # explicit ROCM_ROOT takes precedence
+    list(PREPEND CMAKE_PREFIX_PATH ${ROCM_ROOT})
+  elseif(CMAKE_HIP_COMPILER_ROCM_ROOT)
+    list(PREPEND CMAKE_PREFIX_PATH ${CMAKE_HIP_COMPILER_ROCM_ROOT})
+  endif()
+
+  # use hip package to supply the hip runtime for CXX source code.
+  find_package(hip CONFIG)
+  if(NOT hip_FOUND)
+    message(
+      FATAL_ERROR
+        "The HIP runtime library cmake configure file hip-config.cmake cannot be found! "
+        "This happens when the ROCm installation cannot be found by CMake. "
+        "Rerun cmake with -DROCM_ROOT=<your ROCm installation root directory> added.")
+  endif()
+  find_package(hipfft CONFIG REQUIRED)
+  find_package(rocblas CONFIG REQUIRED)
+  qe_add_global_compile_definitions(__HIP)
+  qe_add_global_compile_definitions(__ROCBLAS)
+endif()
+
+###########################################################
+# OneAPI
+###########################################################
+if(QE_ENABLE_ONEAPI)
+  if(NOT QE_ENABLE_OFFLOAD)
+    message(FATAL_ERROR "QE_ENABLE_ONEAPI=ON requires QE_ENABLE_OFFLOAD=ON")
+  endif()
+  add_library(MKL::sycl INTERFACE IMPORTED)
+  find_path(MKL_OMP_OFFLOAD_INCLUDE mkl_omp_offload.f90
+    HINTS ${MKL_ROOT} $ENV{MKLROOT} $ENV{MKL_ROOT} $ENV{MKL_HOME}
+    PATH_SUFFIXES include
+    REQUIRED
+  )
+  target_include_directories(MKL::sycl INTERFACE "${MKL_OMP_OFFLOAD_INCLUDE}")
+
+  find_library(MKL_SYCL mkl_sycl
+    HINTS ${MKL_ROOT} $ENV{MKLROOT} $ENV{MKL_ROOT} $ENV{MKL_HOME}
+    PATH_SUFFIXES lib/intel64 lib
+    REQUIRED
+  )
+  target_link_libraries(MKL::sycl INTERFACE ${MKL_SYCL})
+  #qe_add_global_compile_definitions(__SYCL) # for SYCL kernels
+  qe_add_global_compile_definitions(__ONEMKL) # for OneAPI MKL OpenMP offload fortran interfaces
+  qe_add_global_compile_definitions(__NO_HIPKERN)
+endif()
 
 ###########################################################
 # MPI
