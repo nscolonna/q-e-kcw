@@ -20,11 +20,11 @@ CONTAINS
       SUBROUTINE planar_average( nnr, naxis, axis, shift, reverse, f, f1d )
 !----------------------------------------------------------------------
       !
-      USE kinds,     ONLY : DP
-      USE fft_base,  ONLY : dfftp
-      USE fft_types, ONLY : fft_index_to_3d
-      USE mp,        ONLY : mp_sum
-      USE mp_bands,  ONLY : intra_bgrp_comm
+      USE kinds,            ONLY : DP
+      USE fft_base,         ONLY : dfftp
+      USE fft_types,        ONLY : fft_index_to_3d
+      USE mp,               ONLY : mp_sum
+      USE mp_bands,         ONLY : intra_bgrp_comm
       !
       IMPLICIT NONE
       !
@@ -37,7 +37,8 @@ CONTAINS
       !
       ! ... Local variables
       !
-      INTEGER :: i, j, k, ir, idx, narea
+      INTEGER                   :: i, j, k, ir
+      INTEGER                   :: idx, narea
       LOGICAL :: offrange
       !
       narea = dfftp%nr1*dfftp%nr2*dfftp%nr3 / naxis
