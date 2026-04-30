@@ -49,6 +49,7 @@ CONTAINS
     INTEGER :: ix, naxis
     INTEGER :: ig
     REAL(DP) :: L, S, dummy
+    CHARACTER(len=1)   :: axis_label
     CHARACTER(len=256) :: filename
     COMPLEX(DP), ALLOCATABLE :: aux(:)
     REAL(DP),    ALLOCATABLE :: pot3d(:), work(:)
@@ -56,9 +57,9 @@ CONTAINS
     REAL(DP),    ALLOCATABLE :: vh1d(:), vloc1d(:), vtot1d(:)
     !
     SELECT CASE (idir)
-    CASE (1); naxis = dfftp%nr1
-    CASE (2); naxis = dfftp%nr2
-    CASE (3); naxis = dfftp%nr3
+    CASE (1); naxis = dfftp%nr1; axis_label = 'x'
+    CASE (2); naxis = dfftp%nr2; axis_label = 'y'
+    CASE (3); naxis = dfftp%nr3; axis_label = 'z'
     CASE DEFAULT
       CALL errore('printpot', 'idir must be 1, 2, or 3', 1)
     END SELECT
@@ -106,7 +107,7 @@ CONTAINS
       filename = TRIM(tmp_dir)//TRIM(prefix)//".ef1"
       OPEN(UNIT=4, FILE=filename, STATUS="UNKNOWN", ACTION="WRITE")
       IF (nspin == 2) THEN
-        WRITE(UNIT=4, FMT=9060)
+        WRITE(UNIT=4, FMT=9060) axis_label
         DO ix = 1, naxis
           WRITE(UNIT=4, FMT=9061) &
             DBLE(ix - 1) / DBLE(naxis) * L * BOHR_RADIUS_ANGS, &
@@ -118,7 +119,7 @@ CONTAINS
             vtot1d(ix) * AUTOEV / e2
         END DO
       ELSE
-        WRITE(UNIT=4, FMT=9050)
+        WRITE(UNIT=4, FMT=9050) axis_label
         DO ix = 1, naxis
           WRITE(UNIT=4, FMT=9051) &
             DBLE(ix - 1) / DBLE(naxis) * L * BOHR_RADIUS_ANGS, &
@@ -133,10 +134,10 @@ CONTAINS
     !
     DEALLOCATE(aux, pot3d, work, rho1d, spup1d, spdn1d, vh1d, vloc1d, vtot1d)
     !
-9050 FORMAT('#x (A)', 2X, 'Avg charge (e/A)', 2X, 'Avg V_hartree (eV)', 2X, &
+9050 FORMAT('#', A1, ' (A)', 2X, 'Avg charge (e/A)', 2X, 'Avg V_hartree (eV)', 2X, &
             'Avg V_local (eV)', 2X, 'Avg V_hart+V_loc (eV)')
 9051 FORMAT(F8.4, F20.7, F20.7, F18.7, F18.7)
-9060 FORMAT('#x (A)', 2X, 'Avg charge (e/A)', 2X, 'Avg spin-up (e/A)', 2X, &
+9060 FORMAT('#', A1, ' (A)', 2X, 'Avg charge (e/A)', 2X, 'Avg spin-up (e/A)', 2X, &
             'Avg spin-dn (e/A)', 2X, 'Avg V_hartree (eV)', 2X, &
             'Avg V_local (eV)', 2X, 'Avg V_hart+V_loc (eV)')
 9061 FORMAT(F8.4, F20.7, F20.7, F20.7, F20.7, F18.7, F18.7)
