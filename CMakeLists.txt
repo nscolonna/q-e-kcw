@@ -335,6 +335,8 @@ endif(QE_ENABLE_OPENACC)
 ############################################################
 if(CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
     include(GNUFortranCompiler)
+elseif(CMAKE_Fortran_COMPILER_ID MATCHES "LLVMFlang")
+    include(LLVMFlangCompiler)
 elseif(CMAKE_Fortran_COMPILER_ID MATCHES "PGI" OR CMAKE_Fortran_COMPILER_ID MATCHES "NVHPC")
     include(NVFortranCompiler)
 elseif(CMAKE_Fortran_COMPILER_ID MATCHES "Cray")
