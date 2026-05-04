@@ -11,8 +11,7 @@ target_link_libraries(qe_dftd3
     PUBLIC
         qe_openacc_fortran
     PRIVATE
-        qe_modules
-        qe_upflib)
+        qe_utilx)
 
 ###########################################################
 # test.x

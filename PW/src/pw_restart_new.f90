@@ -1231,7 +1231,6 @@ MODULE pw_restart_new
       USE mp_images,       ONLY : intra_image_comm
       USE mp,              ONLY : mp_bcast
       USE dftd3_qe,        ONLY : dftd3_in, dftd3, dftd3_xc 
-      USE dftd3_api,       ONLY : dftd3_init, dftd3_set_functional 
       USE tsvdw_module,    ONLY : vdw_econv_thr
       USE london_module,   ONLY : init_london
       USE xdm_module,      ONLY : init_xdm
