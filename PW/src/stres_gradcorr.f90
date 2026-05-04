@@ -13,7 +13,7 @@ SUBROUTINE stres_gradcorr( rho, rho_core, rhog_core, nspin, domag, &
   !
   USE kinds,            ONLY: DP
   USE xc_lib,           ONLY: xclib_dft_is, xclib_get_id, xc_gcx, xc_metagcx
-  USE scf,              ONLY: scf_type
+  USE scf,              ONLY: scf_type, tau_core
   USE mp_bands,         ONLY: intra_bgrp_comm
   USE mp,               ONLY: mp_sum
   USE fft_types,        ONLY: fft_type_descriptor
@@ -36,7 +36,7 @@ SUBROUTINE stres_gradcorr( rho, rho_core, rhog_core, nspin, domag, &
   INTEGER :: k, l, m, ipol, ir, ig, is, nspin0, np
   INTEGER :: nr1, nr2, nr3, nrxx, ngm
   REAL(DP), ALLOCATABLE :: grho(:,:,:), grho2(:,:), rhoaux(:,:), &
-                           segni(:), kedtaue2(:,:)
+                           segni(:), taue2(:,:)
   COMPLEX(DP), ALLOCATABLE :: rhogaux(:,:)
   !
   REAL(DP), ALLOCATABLE :: sx(:), sc(:)
@@ -75,7 +75,7 @@ SUBROUTINE stres_gradcorr( rho, rho_core, rhog_core, nspin, domag, &
   ALLOCATE( grho(3,nrxx,nspin0) )
   ALLOCATE( rhoaux(nrxx,nspin0) )
   ALLOCATE( rhogaux(ngm,nspin0) )
-  IF (xclib_dft_is('meta')) ALLOCATE( kedtaue2(dfft%nnr,nspin) )
+  IF (xclib_dft_is('meta')) ALLOCATE( taue2(dfft%nnr,nspin) )
   !$acc data create( grho, rhoaux )
   !$acc data create( rhogaux )
   !
@@ -153,12 +153,12 @@ SUBROUTINE stres_gradcorr( rho, rho_core, rhog_core, nspin, domag, &
      ENDDO
      !
      IF ( xclib_dft_is('meta') .AND. xclib_get_id('MGGA','EXCH') /= 4 ) THEN
-        !$acc data present_or_copyin(rho%kin_r) create( kedtaue2, v2cm, v3x, v3c )
+        !$acc data present_or_copyin(rho%kin_r) create( taue2, v2cm, v3x, v3c )
         !$acc parallel loop
         DO k = 1, nrxx
-          kedtaue2(k,1) = rho%kin_r(k,1) / e2
+          taue2(k,1) = rho%kin_r(k,1) / e2  + tau_core(k)
         ENDDO
-        CALL xc_metagcx( nrxx, 1, np, rhoaux, grho, kedtaue2, sx, sc, &
+        CALL xc_metagcx( nrxx, 1, np, rhoaux, grho, taue2, sx, sc, &
                          v1x, v2x, v3x, v1c, v2cm, v3c, gpu_args_=.TRUE. )
         !$acc parallel loop
         DO k = 1, nrxx
@@ -193,12 +193,12 @@ SUBROUTINE stres_gradcorr( rho, rho_core, rhog_core, nspin, domag, &
      !
      IF ( xclib_dft_is('meta') ) THEN
         !
-        !$acc data present_or_copyin(rho%kin_r) create( kedtaue2, v2cm, v3x, v3c )
+        !$acc data present_or_copyin(rho%kin_r) create( taue2, v2cm, v3x, v3c )
         !$acc parallel loop
         DO k = 1, nrxx
-          kedtaue2(k,1:nspin0) = rho%kin_r(k,1:nspin0) / e2
+          taue2(k,1:nspin0) = rho%kin_r(k,1:nspin0) / e2
         ENDDO
-        CALL xc_metagcx( nrxx, nspin0, np, rhoaux, grho, kedtaue2, sx, sc, &
+        CALL xc_metagcx( nrxx, nspin0, np, rhoaux, grho, taue2, sx, sc, &
                          v1x, v2x, v3x, v1c, v2cm, v3c, gpu_args_=.TRUE. )
         !$acc parallel loop
         DO k = 1, nrxx
@@ -268,7 +268,7 @@ SUBROUTINE stres_gradcorr( rho, rho_core, rhog_core, nspin, domag, &
   DEALLOCATE( v1x, v2x )
   DEALLOCATE( grho, grho2  )
   DEALLOCATE( rhoaux )
-  IF (xclib_dft_is('meta')) DEALLOCATE( kedtaue2, v2cm, v3x, v3c )
+  IF (xclib_dft_is('meta')) DEALLOCATE( taue2, v2cm, v3x, v3c )
   !
   DO l = 1, 3
      DO m = 1, l - 1
