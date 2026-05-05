@@ -2100,12 +2100,14 @@ SUBROUTINE dftd3_iosys ( )
   USE dftd3_api,        ONLY : dftd3_init, dftd3_set_functional
   USE dftd3_qe,         ONLY : dftd3_xc, dftd3, dftd3_in
   USE funct,            ONLY : get_dft_short
+  USE mp_images,        ONLY : intra_image_comm
+  !
   IMPLICIT NONE
   CHARACTER(LEN=256):: dft
   !
   if (dftd3_version==2) dftd3_threebody=.false.
   dftd3_in%threebody = dftd3_threebody
-  CALL dftd3_init(dftd3, dftd3_in)
+  CALL dftd3_init(dftd3, dftd3_in, intra_image_comm)
   dft = get_dft_short( )
   dft = dftd3_xc ( dft )
   CALL dftd3_set_functional(dftd3, func=dft, version=dftd3_version,tz=.false.)
