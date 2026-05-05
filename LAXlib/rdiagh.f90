@@ -269,12 +269,16 @@ SUBROUTINE laxlib_prdiagh( n, h, ldh, e, v, idesc )
      !
   END IF
   !
-  ! ... broadcast eigenvalues to all processors
+  ! ... broadcast e and v: ranks outside the ortho pool
+  ! ... (desc%active_node == 0) skip the collect in laxlib_dsqmcll_x.
   !
 #if defined __MPI
   CALL MPI_BCAST( e, SIZE(e), MPI_DOUBLE_PRECISION, root, ortho_parent_comm, info )
   IF ( info /= 0 ) &
         CALL lax_error__( 'prdiagh', 'error broadcasting array e', ABS( info ) )
+  CALL MPI_BCAST( v, SIZE(v), MPI_DOUBLE_PRECISION, root, ortho_parent_comm, info )
+  IF ( info /= 0 ) &
+        CALL lax_error__( 'prdiagh', 'error broadcasting array v', ABS( info ) )
 #endif
   !
   CALL stop_clock( 'rdiagh' )

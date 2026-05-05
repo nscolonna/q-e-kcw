@@ -69,4 +69,8 @@ target_link_libraries(test_qe_lax_diagh_4
         qe_mpi_fortran
         qe_lapack)
 add_unit_test(test_qe_lax_diagh_4-r1-t1 1 1 $<TARGET_FILE:test_qe_lax_diagh_4>)
+# np=2 exercises the partial-ortho-pool path: GRID2D_DIMS('S', 2, ...) gives
+# a 1x1 pool, leaving rank 1 outside. This is the configuration that
+# regressed when laxlib_pcdiagh/laxlib_prdiagh failed to broadcast v.
+add_unit_test(test_qe_lax_diagh_4-r2-t1 2 1 $<TARGET_FILE:test_qe_lax_diagh_4>)
 add_unit_test(test_qe_lax_diagh_4-r4-t1 4 1 $<TARGET_FILE:test_qe_lax_diagh_4>)
