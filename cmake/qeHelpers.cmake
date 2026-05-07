@@ -58,7 +58,6 @@ function(qe_fix_fortran_modules TGT)
         # Interface libraries compile no sources, so module-related
         # properties do not apply to them.
         if(NOT ${tgt_type} STREQUAL "INTERFACE_LIBRARY")
-            get_target_property(tgt_module_dir ${tgt} Fortran_MODULE_DIRECTORY)
             # set module path to tgt_binary_dir/mod
             get_target_property(tgt_binary_dir ${tgt} BINARY_DIR)
             set_target_properties(${tgt}
@@ -67,9 +66,9 @@ function(qe_fix_fortran_modules TGT)
             # make module directory available for clients of TGT 
             target_include_directories(${tgt}
                 PUBLIC
-                    $<BUILD_INTERFACE:${tgt_binary_dir}/mod/${TGT}>
+                    $<BUILD_INTERFACE:$<$<COMPILE_LANGUAGE:Fortran>:${tgt_binary_dir}/mod/${TGT}>>
                 INTERFACE
-                    $<INSTALL_INTERFACE:${QE_INSTALL_Fortran_MODULES}/qe/${TGT}>)
+                    $<INSTALL_INTERFACE:$<$<COMPILE_LANGUAGE:Fortran>:${QE_INSTALL_Fortran_MODULES}/qe/${TGT}>>)
         endif()
     endforeach()
 endfunction(qe_fix_fortran_modules)
