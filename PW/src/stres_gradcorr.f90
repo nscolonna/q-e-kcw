@@ -45,6 +45,7 @@ SUBROUTINE stres_gradcorr( rho, rho_core, rhog_core, nspin, domag, &
   !
   REAL(DP), PARAMETER :: epsr = 1.0d-6, epsg = 1.0d-10, e2 = 2.d0
   REAL(DP) :: v2xc, v2xc_uu, v2xc_dd
+  REAL(DP) :: g1, g2, g3, h1, h2, h3
   REAL(DP) :: sigma_gc11, sigma_gc31, sigma_gc21, &
               sigma_gc32, sigma_gc22, sigma_gc33
   REAL(DP) :: sigma_gradcorr(3,3)
@@ -180,75 +181,95 @@ SUBROUTINE stres_gradcorr( rho, rho_core, rhog_core, nspin, domag, &
      ENDDO
      !
   ELSE IF (nspin0 == 2) THEN
-    !
-    !    Spin-polarized case
-    !
-    !$acc parallel loop
-    DO k = 1, nrxx
+     !
+     !    Spin-polarized case
+     !
+     !$acc parallel loop
+     DO k = 1, nrxx
        grho2(k,1) = grho(1,k,1)**2 + grho(2,k,1)**2 + grho(3,k,1)**2
        grho2(k,2) = grho(1,k,2)**2 + grho(2,k,2)**2 + grho(3,k,2)**2
-    END DO
-    !
-    IF ( xclib_dft_is('meta') ) THEN
-      !
-      !$acc data present_or_copyin(rho%kin_r) create( taue2, v2cm, v3x, v3c )
-      !$acc parallel loop
-      DO k = 1, nrxx
-         DO ispin = 1, nspin0
-            taue2(k,ispin) = rho%kin_r(k,ispin) / e2 + 0.5_DP * tau_core(k)
-         END DO
-      ENDDO
-      CALL xc_metagcx( nrxx, nspin0, np, rhoaux, grho, taue2, sx, sc, &
+     END DO
+     !
+     IF ( xclib_dft_is('meta') ) THEN
+        !
+        !$acc data present_or_copyin(rho%kin_r) create( taue2, v2cm, v3x, v3c )
+        !$acc parallel loop
+        DO k = 1, nrxx
+           DO ispin = 1, nspin0
+              taue2(k,ispin) = rho%kin_r(k,ispin) / e2 + 0.5_DP * tau_core(k)
+           END DO
+        ENDDO
+        CALL xc_metagcx( nrxx, nspin0, np, rhoaux, grho, taue2, sx, sc, &
                          v1x, v2x, v3x, v1c, v2cm, v3c, gpu_args_=.TRUE. )
-      !$acc parallel loop
-      DO k = 1, nrxx
-         v2c(k,:) = v2cm(1,k,:)
-      END DO
-      !$acc end data
-      !
-    ELSE
-      !
-      CALL xc_gcx( nrxx, nspin0, rhoaux, grho, sx, sc, v1x, v2x, v1c, v2c, v2c_ud, gpu_args_=.TRUE. )
-    END IF 
-    ALLOCATE( v2c_ud(nrxx) )
-    !$acc data create( v2c_ud )
-    !
-    !$acc parallel loop reduction(+:sigma_gc11,sigma_gc21,sigma_gc22, &
-    !$acc&                          sigma_gc31,sigma_gc32,sigma_gc33)
-    DO k = 1, nrxx
-       !
-       v2xc_uu = e2 * (v2x(k,1)+v2c(k,1))
-       v2xc_dd = e2 * (v2x(k,2)+v2c(k,2))
-       !
-       sigma_gc11 = sigma_gc11 + grho(1,k,1)*grho(1,k,1) * v2xc_uu + &
-                                 grho(1,k,2)*grho(1,k,2) * v2xc_dd + &
-                                (grho(1,k,1)*grho(1,k,2) + &
-                                 grho(1,k,2)*grho(1,k,1)) * v2c_ud(k) * e2
-       sigma_gc21 = sigma_gc21 + grho(2,k,1)*grho(1,k,1) * v2xc_uu + &
-                                 grho(2,k,2)*grho(1,k,2) * v2xc_dd + &
-                                 (grho(2,k,1)*grho(1,k,2) + &
-                                  grho(1,k,2)*grho(2,k,1)) * v2c_ud(k) * e2
-       sigma_gc22 = sigma_gc22 + grho(2,k,1)*grho(2,k,1) * v2xc_uu + &
-                                 grho(2,k,2)*grho(2,k,2) * v2xc_dd + &
-                                (grho(2,k,1)*grho(2,k,2) + &
-                                 grho(2,k,2)*grho(2,k,1)) * v2c_ud(k) * e2
-       sigma_gc31 = sigma_gc31 + grho(3,k,1)*grho(1,k,1) * v2xc_uu + &
-                                 grho(3,k,2)*grho(1,k,2) * v2xc_dd + &
-                                (grho(3,k,1)*grho(1,k,2) + &
-                                 grho(1,k,2)*grho(3,k,1)) * v2c_ud(k) * e2
-       sigma_gc32 = sigma_gc32 + grho(3,k,1)*grho(2,k,1) * v2xc_uu + &
-                                 grho(3,k,2)*grho(2,k,2) * v2xc_dd + &
-                                (grho(3,k,1)*grho(2,k,2) + &
-                                 grho(2,k,2)*grho(3,k,1)) * v2c_ud(k) * e2
-       sigma_gc33 = sigma_gc33 + grho(3,k,1)*grho(3,k,1) * v2xc_uu + &
-                                 grho(3,k,2)*grho(3,k,2) * v2xc_dd + &
-                                (grho(3,k,1)*grho(3,k,2) + &
-                                 grho(3,k,2)*grho(3,k,1)) * v2c_ud(k) * e2
-    END DO
-    !
-    !$acc end data
-    DEALLOCATE( v2c_ud )
-    !
+        !
+        ! ... sigma_gc_{alpha,beta} = sum_sigma (v2x*grad_rho(alpha,sigma)
+        ! ...   + v2cm(alpha,sigma)) * grad_rho(beta,sigma), with v2cm(alpha,sigma)
+        ! ...   = d Ec/d(grad_rho(sigma))_alpha already including the chain rule
+        ! ...   over all sigma invariants (uu, ud, dd) from xc_metagcx.
+        !
+        DO ispin = 1, nspin0
+           !$acc parallel loop reduction(+:sigma_gc11,sigma_gc21,sigma_gc22, &
+           !$acc&                          sigma_gc31,sigma_gc32,sigma_gc33) &
+           !$acc& private(g1,g2,g3,h1,h2,h3)
+           DO k = 1, nrxx
+              g1 = grho(1,k,ispin)
+              g2 = grho(2,k,ispin)
+              g3 = grho(3,k,ispin)
+              h1 = (v2x(k,ispin)*g1 + v2cm(1,k,ispin)) * e2
+              h2 = (v2x(k,ispin)*g2 + v2cm(2,k,ispin)) * e2
+              h3 = (v2x(k,ispin)*g3 + v2cm(3,k,ispin)) * e2
+              sigma_gc11 = sigma_gc11 + h1 * g1
+              sigma_gc21 = sigma_gc21 + h2 * g1
+              sigma_gc22 = sigma_gc22 + h2 * g2
+              sigma_gc31 = sigma_gc31 + h3 * g1
+              sigma_gc32 = sigma_gc32 + h3 * g2
+              sigma_gc33 = sigma_gc33 + h3 * g3
+           END DO
+        END DO
+        !$acc end data
+        !
+     ELSE
+        !
+        ALLOCATE( v2c_ud(nrxx) )
+        !$acc data create( v2c_ud )
+        CALL xc_gcx( nrxx, nspin0, rhoaux, grho, sx, sc, v1x, v2x, v1c, v2c, v2c_ud, gpu_args_=.TRUE. )
+        !$acc parallel loop reduction(+:sigma_gc11,sigma_gc21,sigma_gc22, &
+        !$acc&                          sigma_gc31,sigma_gc32,sigma_gc33)
+        DO k = 1, nrxx
+          !
+          v2xc_uu = e2 * (v2x(k,1)+v2c(k,1))
+          v2xc_dd = e2 * (v2x(k,2)+v2c(k,2))
+          !
+          sigma_gc11 = sigma_gc11 + grho(1,k,1)*grho(1,k,1) * v2xc_uu + &
+                                    grho(1,k,2)*grho(1,k,2) * v2xc_dd + &
+                                   (grho(1,k,1)*grho(1,k,2) + &
+                                    grho(1,k,2)*grho(1,k,1)) * v2c_ud(k) * e2
+          sigma_gc21 = sigma_gc21 + grho(2,k,1)*grho(1,k,1) * v2xc_uu + &
+                                    grho(2,k,2)*grho(1,k,2) * v2xc_dd + &
+                                   (grho(2,k,1)*grho(1,k,2) + &
+                                    grho(1,k,2)*grho(2,k,1)) * v2c_ud(k) * e2
+          sigma_gc22 = sigma_gc22 + grho(2,k,1)*grho(2,k,1) * v2xc_uu + &
+                                    grho(2,k,2)*grho(2,k,2) * v2xc_dd + &
+                                   (grho(2,k,1)*grho(2,k,2) + &
+                                    grho(2,k,2)*grho(2,k,1)) * v2c_ud(k) * e2
+          sigma_gc31 = sigma_gc31 + grho(3,k,1)*grho(1,k,1) * v2xc_uu + &
+                                    grho(3,k,2)*grho(1,k,2) * v2xc_dd + &
+                                   (grho(3,k,1)*grho(1,k,2) + &
+                                    grho(1,k,2)*grho(3,k,1)) * v2c_ud(k) * e2
+          sigma_gc32 = sigma_gc32 + grho(3,k,1)*grho(2,k,1) * v2xc_uu + &
+                                    grho(3,k,2)*grho(2,k,2) * v2xc_dd + &
+                                   (grho(3,k,1)*grho(2,k,2) + &
+                                    grho(2,k,2)*grho(3,k,1)) * v2c_ud(k) * e2
+          sigma_gc33 = sigma_gc33 + grho(3,k,1)*grho(3,k,1) * v2xc_uu + &
+                                    grho(3,k,2)*grho(3,k,2) * v2xc_dd + &
+                                   (grho(3,k,1)*grho(3,k,2) + &
+                                    grho(3,k,2)*grho(3,k,1)) * v2c_ud(k) * e2
+        END DO
+        !$acc end data
+        DEALLOCATE( v2c_ud )
+        !
+     END IF
+     !
   END IF
   !
   sigma_gradcorr(1,1) = sigma_gc11
