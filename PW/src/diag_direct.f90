@@ -15,8 +15,7 @@ MODULE diag_direct
   !!
   !! H(G,G') = δ_GG' × (k+G)² + V_loc(G-G') + Σ_ij |β_i(G)⟩ D_ij ⟨β_j(G')|
   !!
-  !! RESTRICTIONS: NCPP only, no special features, serial only
-  !!              (see diag_direct_check_compat)
+  !! RESTRICTIONS: NCPP only, no special features (see diag_direct_check_compat)
   !!
   !! This module is inspired by the ParaBands code, part of the BerkeleyGW package,
   !! distributed under a 3-Clause BSD license:
@@ -112,7 +111,6 @@ CONTAINS
     mill_min(2) = MINVAL(mill(2, 1:ngm))
     mill_min(3) = MINVAL(mill(3, 1:ngm))
     !
-    ! Get global maximum/minimum across all processors
     CALL mp_max(mill_max, intra_bgrp_comm)
     CALL mp_min(mill_min, intra_bgrp_comm)
     !
@@ -304,11 +302,8 @@ CONTAINS
   !-----------------------------------------------------------------------
   SUBROUTINE diag_direct_hamiltonian_vnl(hmat, npw)
     !-----------------------------------------------------------------------
-    !! Build nonlocal pseudopotential contribution (NOT IMPLEMENTED for distributed PWs)
+    !! Build nonlocal pseudopotential contribution
     !! H(G,G') += Σ_ij |β_i(G)⟩ D_ij ⟨β_j(G')|
-    !!
-    !! TODO: Implement full-column construction by collecting vkb globally
-    !! For now, vnl is skipped in plane-wave parallel mode
     !
     USE kinds,      ONLY : DP
     USE mp,         ONLY : mp_sum
@@ -399,12 +394,15 @@ CONTAINS
     !! Construct and diagonalize explicit Hamiltonian matrix for k-point ik
     !!
     !! This is the main coordinator that:
-    !! 1. Allocates H and S matrices
-    !! 2. Builds identity S matrix (for NCPP)
-    !! 3. Calls hamiltonian_kinetic, hamiltonian_vloc, hamiltonian_vnl
-    !! 4. Checks hermiticity
-    !! 5. Calls diagonalize_hamiltonian
-    !! 6. Verifies against h_psi
+    !! 1. Sets up the local-to-global k+G mapping
+    !! 2. Builds H column-block by column-block via hamiltonian_kinetic,
+    !!    hamiltonian_vloc, hamiltonian_vnl
+    !! 3. Gathers the column blocks into a global H matrix
+    !! 4. Diagonalizes via direct_diag_k
+    !! 5. Scatters the global eigenvectors back to the local PW layout
+    !!
+    !! Optional: diag_direct_test_hamiltonian verifies H*v against h_psi(v)
+    !! (call is commented out by default; uncomment for debugging).
     !
     USE kinds,         ONLY : DP
     USE wvfct,         ONLY : npwx
@@ -438,7 +436,7 @@ CONTAINS
     REAL(DP) :: mem_gb
     !! memory estimate
     COMPLEX(DP), ALLOCATABLE :: hmat(:,:)
-    !! Hamiltonian matrix (npw, npw) - local
+    !! Hamiltonian matrix (ngk_g, npw) - full rows, local columns
     COMPLEX(DP), ALLOCATABLE :: hmat_global(:,:)
     !! Global Hamiltonian matrix (ngk_g, ngk_g)
     COMPLEX(DP), ALLOCATABLE :: evc_global(:,:)
@@ -651,7 +649,7 @@ CONTAINS
     !! Each processor has hmat(ngk_g, npw) - full rows, local columns
     !! Gather to hmat_global(ngk_g, ngk_g) - full matrix on all processors
     !!
-    !! For S matrix: build identity directly (more efficient for NCPP)
+    !! NCPP-only: no S matrix is needed (S=I is handled inside direct_diag_k).
     !
     USE kinds,     ONLY : DP
     USE mp_bands,  ONLY : intra_bgrp_comm
