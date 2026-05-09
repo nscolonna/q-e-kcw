@@ -164,9 +164,15 @@ CONTAINS
     if ( xf%unit == -1 ) then
        print *, 'xml file not opened'
     else
-       ! Explicit format due to cray and gfortran free-format weirdness
+#if defined(__CRAY)
+       ! Explicit format due to weird behavior of CRAY compiler
        write(cvalue,'(*(i12))' ) value
+#else
+       ! Free format due to weird behavior of other compilers
+       write(cvalue,* ) value
+#endif
        call add_attr(name, TRIM(ADJUSTL(cvalue)))
+
     end if
     !
   end subroutine xml_addattribute_iv
