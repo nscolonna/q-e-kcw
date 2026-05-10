@@ -342,7 +342,7 @@ CONTAINS
     !
     ! ... local variables
     !
-    INTEGER :: i, j, linelen
+    INTEGER :: i, j
     LOGICAL            :: process_this_line = .FALSE.
     LOGICAL            :: endrules = .FALSE.
     LOGICAL            :: tend = .FALSE.
@@ -404,11 +404,7 @@ CONTAINS
           CALL read_line( input_line, end_of_file = tend)
        END IF
        
-       linelen = LEN_TRIM( input_line )
-
-       DO i = 1, linelen
-          input_line( i : i ) = capital( input_line( i : i ) )
-       END DO
+       input_line = capital( TRIM(input_line) )
 
        ! If ENDRULES isnt found, add_rule will fail
        ! and we run out of line anyway
@@ -711,7 +707,7 @@ CONTAINS
     !
     ! ... local variables
     !
-    INTEGER   :: i, varlen
+    INTEGER   :: i
     INTEGER   :: int_value
     LOGICAL   :: logical_value
     REAL      :: real_value
@@ -719,12 +715,7 @@ CONTAINS
     LOGICAL   :: assigned
 
 
-    var = TRIM(var)
-    varlen = LEN_TRIM(var)
-
-    DO i = 1, varlen
-       var( i : i ) = capital( var( i : i ) )
-    END DO
+    var = capital( TRIM(var) )
 
 
     IF( ionode ) write(*,'("   Reading rule: ",A20,A20)' ) var, value
@@ -841,9 +832,7 @@ CONTAINS
     CALL read_line( input_line, end_of_file=tend )
     IF (tend) GO TO 50
 
-    DO i = 1, LEN_TRIM( input_line )
-       input_line( i : i ) = capital( input_line( i : i ) )
-    END DO
+    input_line = capital( TRIM(input_line) )
 
     ! This conditional implements the PAUSE feature calling init_auto_pilot, 
     ! will reset this modules global PAUSE_P variable to FALSE

@@ -214,18 +214,9 @@ FUNCTION close_input_file ( ) RESULT ( ierr )
       READ ( myunit,'(A)', ERR=10, END=10) dummy
    END DO
 
-   ! remove blanks from line, convert to capital, clean trailing characters
+   ! convert to capital, clean trailing characters
 
-   j=1
-   DO i=1, LEN_TRIM(dummy) 
-      IF ( dummy(i:i) /= ' ' ) THEN
-         dummy(j:j) = capital(dummy(i:i))
-         j=j+1
-      END IF
-   END DO
-   DO i=j, LEN_TRIM(dummy) 
-      dummy(i:i) = ' '
-   END DO
+   dummy = capital(TRIM(dummy))
 
    ! check for string "<?xml" or "<xml" in the beginning, ">" at the end
 

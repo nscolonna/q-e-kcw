@@ -106,13 +106,10 @@ MODULE oscdft_input
       SUBROUTINE capitalize(string)
          USE upf_utils,  ONLY : capital
          IMPLICIT NONE
-
          CHARACTER(LEN=*), INTENT(INOUT) :: string
-         INTEGER                         :: idx
 
-         DO idx=1,LEN(string)
-            string(idx:idx) = capital(string(idx:idx))
-         ENDDO
+         string = capital(string)
+
       END SUBROUTINE capitalize
 
       SUBROUTINE read_namelist(inp, iun)

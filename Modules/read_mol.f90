@@ -281,9 +281,7 @@ CONTAINS
       ELSE
         units = 'a.m.u.'
       END IF
-      DO i = 1, LEN_TRIM(units)
-        units(i:i) = capital(units(i:i))
-      END DO
+      units = capital(TRIM(units))
       !
       SELECT CASE (TRIM(units))
       CASE ('A.M.U.')
@@ -316,9 +314,7 @@ CONTAINS
       ELSE
         units = '1/bohr^3'
       END IF
-      DO i = 1, LEN_TRIM(units)
-        units(i:i) = capital(units(i:i))
-      END DO
+      units = capital(TRIM(units))
       !
       SELECT CASE (TRIM(units))
       CASE ('1/BOHR^3')
@@ -404,9 +400,7 @@ CONTAINS
       ELSE
         units = 'bohr'
       END IF
-      DO i = 1, LEN_TRIM(units)
-         units(i:i) = capital(units(i:i))
-      END DO
+      units = capital(TRIM(units))
       !
       SELECT CASE (TRIM(units))
       CASE ('BOHR')
@@ -477,9 +471,7 @@ CONTAINS
       ELSE
         units = 'rydberg'
       END IF
-      DO i = 1, LEN_TRIM(units)
-        units(i:i) = capital(units(i:i))
-      END DO
+      units = capital(TRIM(units))
       !
       SELECT CASE (TRIM(units))
       CASE ('RYDBERG')
@@ -518,9 +510,7 @@ CONTAINS
       ELSE
         units = 'bohr'
       END IF
-      DO i = 1, LEN_TRIM(units)
-        units(i:i) = capital(units(i:i))
-      END DO
+      units = capital(TRIM(units))
       !
       SELECT CASE (TRIM(units))
       CASE ('BOHR')

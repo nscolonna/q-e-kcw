@@ -64,9 +64,7 @@ CONTAINS
             !
             IF( input_line == ' ' .or. input_line(1:1) == '#' ) CYCLE
             !
-            DO i = 1, len_trim( input_line )
-               input_line( i : i ) = capital( input_line( i : i ) )
-            ENDDO
+            input_line = capital( TRIM(input_line) )
             !
             IF( trim(adjustl(input_line)) == 'CLIMBING_IMAGES' ) THEN
                !

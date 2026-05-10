@@ -141,9 +141,7 @@ CONTAINS
       IF( input_line == ' ' .OR. input_line(1:1) == '#' .OR. &
           input_line == '/' .OR. input_line(1:1) == '!' ) GOTO 100
       !
-      DO i = 1, len_trim( input_line )
-         input_line( i : i ) = capital( input_line( i : i ) )
-      ENDDO
+      input_line = capital( TRIM(input_line) )
       !
       READ (input_line, *, iostat=ios) card
       IF(ios/=0) card=''
