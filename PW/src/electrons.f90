@@ -424,7 +424,7 @@ SUBROUTINE electrons_scf ( printout, exxen )
                                    niter_with_fixed_ns, hub_pot_fix, &
                                    v_nsg, at_sc, neighood, &
                                    ldim_u, is_hubbard_back, apply_U, orbital_resolved
-  USE extfield,             ONLY : tefield, etotefield, gate, etotgatefield !TB
+  USE extfield,             ONLY : tefield, dipfield, etotefield, gate, etotgatefield, edir !TB
   USE noncollin_module,     ONLY : noncolin, magtot_nc, i_cons,  bfield, &
                                    lambda, report, domag, nspin_mag, npol
   USE io_rho_xml,           ONLY : write_scf
@@ -445,6 +445,7 @@ SUBROUTINE electrons_scf ( printout, exxen )
   USE paw_symmetry,         ONLY : PAW_symmetrize_ddd
   USE dfunct,               ONLY : newd
   USE esm,                  ONLY : do_comp_esm, esm_printpot, esm_ewald
+  USE printpot_module,      ONLY : printpot
   USE gcscf_module,         ONLY : lgcscf, gcscf_mu, gcscf_ignore_mun, gcscf_set_nelec
   USE clib_wrappers,        ONLY : memstat
   USE fcp_module,           ONLY : lfcp, fcp_mu
@@ -1123,6 +1124,7 @@ SUBROUTINE electrons_scf ( printout, exxen )
         ! ... print out ESM potentials if desired
         !
         IF ( do_comp_esm ) CALL esm_printpot( rho%of_g )
+        IF ( tefield .AND. dipfield ) CALL printpot( rho%of_g(:,1), rho%of_r, edir )
         !
         ! ... print out 3D-RISM potentials if desired
         !

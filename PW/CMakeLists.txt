@@ -166,7 +166,8 @@ set(src_pw
    src/plus_u_full.f90 
    src/potinit.f90 
    src/print_clock_pw.f90 
-   src/print_ks_energies.f90 
+   src/print_ks_energies.f90
+   src/printpot.f90
    src/punch.f90 
    src/pw_restart_new.f90 
    src/add_qexsd_step.f90 
