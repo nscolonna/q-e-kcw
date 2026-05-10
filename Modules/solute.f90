@@ -266,10 +266,7 @@ CONTAINS
     INTEGER,          EXTERNAL :: atomic_number
     !
     ! ... to upper case
-    ffname_ = ADJUSTL(ffname)
-    DO i = 1, LEN_TRIM(ffname_)
-      ffname_(i:i) = capital(ffname_(i:i))
-    END DO
+    ffname_ = capital(TRIM(ADJUSTL(ffname)))
     !
     IF (TRIM(ffname_) == 'CLAYFF') THEN
       ! ... index of oxygen

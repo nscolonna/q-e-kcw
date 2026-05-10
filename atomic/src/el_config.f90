@@ -21,7 +21,7 @@ subroutine el_config &
   !
   use kinds, only: dp
   use ld1_parameters
-  use upf_utils, only : capital
+  use upf_utils, only : spdf_to_l
   implicit none
   ! input: electronic configuration
   character(len=*), intent(in):: config
@@ -129,12 +129,7 @@ do n=nwfc+1,nwf
    if (nn(n) <= 0 .or. nn(n) > 7) &
   &    call errore('el_config','wrong main quantum number',n)
 
-   curr = capital(config(start(n)+1:start(n)+1))
-   ll(n)=-1
-   if (curr == 'S') ll(n)=0
-   if (curr == 'P') ll(n)=1
-   if (curr == 'D') ll(n)=2
-   if (curr == 'F') ll(n)=3
+   ll(n) = spdf_to_l(config(start(n)+1:start(n)+1))
    if (ll(n) == -1) call errore('el_config','l not found:'//curr,n)
    if (ll(n).ge.nn(n)) call errore('el_config', &
        &              'main/angular quantum number mismatch',n)
@@ -227,7 +222,7 @@ subroutine read_config(rel, lsd, nwf, el, nn, ll, oc, isw, jj)
   use kinds, only: dp
   use ld1_parameters, only: nwfx
   use io_global, only : qestdin
-  use upf_utils, only : capital
+  use upf_utils, only : spdf_to_l
   implicit none
   ! input
   integer :: rel, lsd
@@ -288,12 +283,8 @@ subroutine read_config(rel, lsd, nwf, el, nn, ll, oc, isw, jj)
      !
      write(label,'(a2)') el(n)
      read (label,'(i1)') ncheck
-     if (ncheck /= nn(n)  .or. &
-         capital(label(2:2)) == 'S' .and. ll(n) /= 0 .or. &
-         capital(label(2:2)) == 'P' .and. ll(n) /= 1 .or. &
-         capital(label(2:2)) == 'D' .and. ll(n) /= 2 .or. &
-         capital(label(2:2)) == 'F' .and. ll(n) /= 3 .or. &
-         oc(n) > 2.0_dp*(2*ll(n)+1) .or. nn(n) < ll(n)+1  ) &
+     if ( ncheck /= nn(n) .or. ll(n) /= spdf_to_l(label(2:2))  &
+         .or. oc(n) > 2.0_dp*(2*ll(n)+1) .or. nn(n) < ll(n)+1  ) &
          call errore('read_config',label//' wrong?',n)
   enddo
   !
@@ -310,7 +301,7 @@ subroutine read_psconfig (rel, lsd, nwfs, els, nns, lls, ocs, &
   use kinds, only: dp
   use ld1_parameters, only: nwfsx
   use io_global, only : qestdin
-  use upf_utils, only : capital
+  use upf_utils, only : spdf_to_l
   implicit none
   ! input
   integer :: rel, lsd
@@ -360,12 +351,8 @@ subroutine read_psconfig (rel, lsd, nwfs, els, nns, lls, ocs, &
              call errore('read_psconfig','occupations (j) wrong',n)
      endif
      write(label,'(a2)') els(n)
-     if ( capital(label(2:2)) == 'S'.and.lls(n) /= 0.or.   &
-          capital(label(2:2)) == 'P'.and.lls(n) /= 1.or.   &
-          capital(label(2:2)) == 'D'.and.lls(n) /= 2.or.   &
-          capital(label(2:2)) == 'F'.and.lls(n) /= 3.or.   &
-          ocs(n) > 2*(2*lls(n)+1).or.                 &
-          nns(n) < lls(n)+1 )                         &
+     if ( lls(n) /= spdf_to_l(label(2:2)) .or. &
+          ocs(n) > 2*(2*lls(n)+1) .or. nns(n) < lls(n)+1 ) &
           call errore('read_psconfig','ps-label'//' wrong?',n)
      if (rcut(n) > rcutus(n)) &
           call errore('read_psconfig','rcut or rcutus is wrong',1)

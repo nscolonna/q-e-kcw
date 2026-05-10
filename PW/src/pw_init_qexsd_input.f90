@@ -201,10 +201,7 @@
   !                                                   DFT ELEMENT
   !---------------------------------------------------------------------------------------------------------------------------
   IF ( TRIM(input_dft) .NE. "none" ) THEN 
-     dft_name=TRIM(input_dft)
-     DO i=1, LEN(dft_name) 
-        dft_name(i:i) = capital(dft_name(i:i)) 
-     END DO  
+     dft_name=capital(TRIM(input_dft))
   ELSE 
      dft_shortname = get_dft_short()        
      dft_name=TRIM(dft_shortname)

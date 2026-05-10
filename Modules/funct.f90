@@ -351,7 +351,7 @@ CONTAINS
     !
     ! ... local variables
     !
-    INTEGER :: len, l, i
+    INTEGER :: l, i
     CHARACTER(len=150) :: dftout, dftout_loc
     LOGICAL :: dft_defined
     LOGICAL :: check_libxc
@@ -373,12 +373,7 @@ CONTAINS
     !
     ! convert to uppercase
     !
-    len = LEN_TRIM(dft_)
-    dftout = ' '
-    !
-    DO l = 1, len
-       dftout(l:l) = capital( dft_(l:l) )
-    ENDDO
+    dftout = capital( TRIM(dft_) )
     !
     !
     ! ----------------------------------------------

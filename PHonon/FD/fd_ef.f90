@@ -167,9 +167,7 @@ program fd_raman
       !
       READ (input_line, *) card
       !
-      DO i = 1, len_trim( input_line )
-         input_line( i : i ) = capital( input_line( i : i ) )
-      ENDDO
+      input_line = capital( TRIM(input_line) )
 
   IF ( trim(card) == 'RAMAN_TENSOR') THEN
 

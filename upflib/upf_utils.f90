@@ -12,14 +12,14 @@ MODULE upf_utils
 
   PUBLIC :: capital, lowercase, isnumeric, matches, imatches, version_compare
 
-!! FUNCTION capital : converts a lowercase letter to uppercase
-!!                    returns input character if not a lowercase letter
-!! FUNCTION lowercase : as above, in reverse
+!! FUNCTION capital : converts lowercase letters to uppercase in a string
+!!                    other characters are not affected
+!! FUNCTION lowercase : converts single character from upper- to lowercase
 !! FUNCTION isnumeric : returns .true. if input character is a digit
 !! FUNCTION matches   : returns .true. if string1 matches string2
 !! FUNCTION imatches  : as above, case-insensitive
 !!
-!! FUNCTION version_compare: Compare two version strings, the result can be
+!! FUNCTION version_compare: Compares two version strings, the result can be
 !!                           "newer", "equal", "older", " "
 !!
   PUBLIC :: spdf_to_l, l_to_spdf
@@ -33,24 +33,25 @@ MODULE upf_utils
 CONTAINS
   
   !-----------------------------------------------------------------------
-FUNCTION capital( in_char )  
+FUNCTION capital( string )
   !-----------------------------------------------------------------------
   !
-  ! ... converts character to capital if lowercase
-  ! ... copy character to output in all other cases
+  ! ... converts lowercase letters to uppercase in a string
   !
   IMPLICIT NONE  
   !
-  CHARACTER(LEN=1), INTENT(IN) :: in_char
-  CHARACTER(LEN=1)             :: capital
-  INTEGER                      :: i
+  CHARACTER(LEN=*), INTENT(IN) :: string
+  CHARACTER(LEN=len(string))   :: capital
+  INTEGER                      :: i, l
   !
-  i = SCAN( lower, in_char )
-  IF ( i /= 0 ) THEN
-     capital = upper(i:i)
-  ELSE
-     capital = in_char
-  END IF
+  DO l=1,len(string)
+     i = SCAN( lower, string(l:l) )
+     IF ( i /= 0 ) THEN
+        capital(l:l) = upper(i:i)
+     ELSE
+        capital(l:l) = string(l:l)
+     END IF
+  END DO
   !
 END FUNCTION capital
 !
@@ -106,7 +107,7 @@ LOGICAL FUNCTION matches( string1, string2 )
 END FUNCTION matches
 !
 !-----------------------------------------------------------------------
-FUNCTION imatches( string1, string2 )
+LOGICAL FUNCTION imatches( string1, string2 )
   !-----------------------------------------------------------------------
   !! TRUE if string1 is contained in string2, FALSE otherwise.  
   !! NB: case insensitive.
@@ -114,19 +115,8 @@ FUNCTION imatches( string1, string2 )
   IMPLICIT NONE
   !
   CHARACTER (LEN=*), INTENT(IN) :: string1, string2
-  CHARACTER(LEN=len(string1))   :: aux1
-  CHARACTER(LEN=len(string2))   :: aux2
-  LOGICAL                       :: imatches
-  INTEGER                       :: i
   !
-  do i=1,len(string1)
-     aux1(i:i)=lowercase(string1(i:i))
-  enddo
-  do i=1,len(string2)
-     aux2(i:i)=lowercase(string2(i:i))
-  enddo
-  !
-  imatches = ( INDEX (aux2, aux1) /= 0 )
+  imatches = ( INDEX (capital(string2), capital(string1)) /= 0 )
   !
   RETURN
   !
