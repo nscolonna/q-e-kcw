@@ -169,7 +169,8 @@ MODULE pw_restart_new
       !
       ! Loop counters and other internal auxiliary variables 
       !
-      INTEGER    :: is, viz, na1, na2, nt1, m1, m2 
+      INTEGER    :: is, viz, na1, na2, nt1, m1, m2
+      INTEGER, ALLOCATABLE :: nbeta_upf(:), l_upf(:,:)
       !
       ! Auxiliary variables used to format arguments for xml file
       !
@@ -336,17 +337,27 @@ MODULE pw_restart_new
          ! while amass's are always present, starting_mag should not be passed
          ! for nspin==1 or contrained magnetization calculations
          !
+         ALLOCATE( nbeta_upf(nsp) )
+         ALLOCATE( l_upf(MAXVAL(upf(1:nsp)%nbeta), nsp) )
+         l_upf = 0
+         DO is = 1, nsp
+            nbeta_upf(is) = upf(is)%nbeta
+            IF ( nbeta_upf(is) > 0 ) l_upf(1:nbeta_upf(is), is) = upf(is)%lll(1:nbeta_upf(is))
+         END DO
+         !
          IF (noncolin) THEN
             CALL qexsd_init_atomic_species(output_obj%atomic_species, nsp, atm, psfile, &
                  amass, STARTING_MAGNETIZATION = starting_magnetization, &
-                 ANGLE1=angle1, ANGLE2=angle2, Zval=zv)
-         ELSE IF (nspin==2) THEN 
+                 ANGLE1=angle1, ANGLE2=angle2, Zval=zv, NBETA=nbeta_upf, L=l_upf)
+         ELSE IF (nspin==2) THEN
             CALL qexsd_init_atomic_species(output_obj%atomic_species, nsp, atm, psfile, &
-                 amass, STARTING_MAGNETIZATION=starting_magnetization, Zval=zv)
-         ELSE 
-            CALL qexsd_init_atomic_species(output_obj%atomic_species, nsp, atm,psfile, &
-                 amass, Zval=zv)
+                 amass, STARTING_MAGNETIZATION=starting_magnetization, Zval=zv, &
+                 NBETA=nbeta_upf, L=l_upf)
+         ELSE
+            CALL qexsd_init_atomic_species(output_obj%atomic_species, nsp, atm, psfile, &
+                 amass, Zval=zv, NBETA=nbeta_upf, L=l_upf)
          END IF
+         DEALLOCATE( nbeta_upf, l_upf )
          output_obj%atomic_species%pseudo_dir = TRIM(pseudo_dir)
          output_obj%atomic_species%pseudo_dir_ispresent = .TRUE.
          !
