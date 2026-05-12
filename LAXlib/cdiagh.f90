@@ -10,7 +10,7 @@
 #define ONE  ( 1.D0, 0.D0 )
 !
 !----------------------------------------------------------------------------
-SUBROUTINE laxlib_cdiagh( n, m, h, ldh, e, v, me_bgrp, root_bgrp, intra_bgrp_comm )
+SUBROUTINE laxlib_cdiagh( n, m, h, e, v, me_bgrp, root_bgrp, intra_bgrp_comm )
   !----------------------------------------------------------------------------
   !
   !! Called by diagh interface.
@@ -29,14 +29,12 @@ SUBROUTINE laxlib_cdiagh( n, m, h, ldh, e, v, me_bgrp, root_bgrp, intra_bgrp_com
   INTEGER, INTENT(IN) :: n
   !! dimension of the matrix to be diagonalized
   INTEGER, INTENT(IN) :: m
-  !! number of eigenstates to be calculated
-  INTEGER, INTENT(IN) :: ldh
-  !! leading dimension of h, as declared in the calling pgm unit
-  COMPLEX(DP), INTENT(INOUT) :: h(ldh,n)
+  !! number of eigenstates to be calculated (m <= n)
+  COMPLEX(DP), INTENT(INOUT) :: h(n,n)
   !! matrix to be diagonalized
   REAL(DP), INTENT(OUT) :: e(n)
-  !! eigenvalues
-  COMPLEX(DP), INTENT(OUT) :: v(ldh,m)
+  !! eigenvalues (only the first m entries are written when m < n)
+  COMPLEX(DP), INTENT(OUT) :: v(n,m)
   !! eigenvectors (column-wise)
   INTEGER,  INTENT(IN)  :: me_bgrp
   !! index of the processor within a band group
@@ -67,7 +65,7 @@ SUBROUTINE laxlib_cdiagh( n, m, h, ldh, e, v, me_bgrp, root_bgrp, intra_bgrp_com
      !
      ! ... allocate workspace for all eigenvectors
      !
-     ALLOCATE( v_temp(ldh,n) )
+     ALLOCATE( v_temp(n,n) )
      !
      IF ( all_eigenvalues ) THEN
         !
@@ -99,7 +97,7 @@ SUBROUTINE laxlib_cdiagh( n, m, h, ldh, e, v, me_bgrp, root_bgrp, intra_bgrp_com
         END DO
 !$omp end parallel do
         !
-        CALL ZHEEVD( 'V', 'U', n, v_temp, ldh, e, work, lwork, &
+        CALL ZHEEVD( 'V', 'U', n, v_temp, n, e, work, lwork, &
                      rwork, SIZE(rwork), iwork, SIZE(iwork), info )
         !
         DEALLOCATE( iwork )
@@ -133,8 +131,8 @@ SUBROUTINE laxlib_cdiagh( n, m, h, ldh, e, v, me_bgrp, root_bgrp, intra_bgrp_com
         END DO
 !$omp end parallel do
         !
-        CALL ZHEEVX( 'V', 'I', 'U', n, v_temp, ldh, &
-                     0.D0, 0.D0, 1, m, abstol, mm, e, v_temp, ldh, &
+        CALL ZHEEVX( 'V', 'I', 'U', n, v_temp, n, &
+                     0.D0, 0.D0, 1, m, abstol, mm, e, v_temp, n, &
                      work, lwork, rwork, iwork, ifail, info )
         !
         DEALLOCATE( ifail )
@@ -182,7 +180,7 @@ SUBROUTINE laxlib_cdiagh( n, m, h, ldh, e, v, me_bgrp, root_bgrp, intra_bgrp_com
 END SUBROUTINE laxlib_cdiagh
 !
 !----------------------------------------------------------------------------
-SUBROUTINE laxlib_pcdiagh( n, h, ldh, e, v, idesc )
+SUBROUTINE laxlib_pcdiagh( n, h, e, v, idesc )
   !----------------------------------------------------------------------------
   !
   !! Called by pdiagh interface.
@@ -215,18 +213,14 @@ SUBROUTINE laxlib_pcdiagh( n, h, ldh, e, v, idesc )
   !
   INTEGER, INTENT(IN) :: n
   !! dimension of the matrix to be diagonalized and number of eigenstates to be calculated
-  INTEGER, INTENT(IN) :: ldh
-  !! leading dimension of h, as declared in the calling pgm unit
-  COMPLEX(DP), INTENT(INOUT) :: h(ldh,ldh)
+  COMPLEX(DP), INTENT(INOUT) :: h(n,n)
   !! matrix to be diagonalized; replicated input on the processes of ortho_comm
   !! (only read on ranks with desc%active_node > 0). On output H is unchanged.
   REAL(DP), INTENT(OUT) :: e(n)
   !! eigenvalues; replicated output on the processes of ortho_parent_comm
-  COMPLEX(DP), INTENT(OUT) :: v(ldh,ldh)
+  COMPLEX(DP), INTENT(OUT) :: v(n,n)
   !! eigenvectors (column-wise); replicated output on the processes of
-  !! ortho_parent_comm. Only the n x n leading block v(1:n,1:n) is meaningful;
-  !! the padding entries (rows n+1:ldh of the first n columns, and all of
-  !! columns n+1:ldh) are left undefined.
+  !! ortho_parent_comm.
   INTEGER, INTENT(IN) :: idesc(LAX_DESC_SIZE)
   !! laxlib descriptor
   !
@@ -251,9 +245,8 @@ SUBROUTINE laxlib_pcdiagh( n, h, ldh, e, v, idesc )
      !
      nx   = desc%nrcx
      !
-     ! Note: Unlike pdiaghg, we do not check ldh != nx because this routine
-     ! accepts replicated input (ldh can be any valid leading dimension) and
-     ! performs the distribution to block-cyclic format internally.
+     ! Note: Unlike pdiaghg, h here is the full n x n replicated matrix; the
+     ! routine distributes it to block-cyclic format internally.
      !
      ! ... allocate distributed matrix
      !
@@ -262,7 +255,7 @@ SUBROUTINE laxlib_pcdiagh( n, h, ldh, e, v, idesc )
      ! ... distribute replicated H matrix to block-cyclic format
      !
      CALL start_clock( 'cdiagh-1' )
-     CALL laxlib_zsqmdst_x( n, h, ldh, h_dist, nx, desc )
+     CALL laxlib_zsqmdst_x( n, h, n, h_dist, nx, desc )
      CALL stop_clock( 'cdiagh-1' )
      !
      CALL start_clock( 'cdiagh-2' )
@@ -286,7 +279,7 @@ SUBROUTINE laxlib_pcdiagh( n, h, ldh, e, v, idesc )
      ! ... collect distributed eigenvectors back to replicated format
      !
      CALL start_clock( 'cdiagh-3' )
-     CALL laxlib_zsqmcll_x( n, h_dist, nx, v, ldh, desc, desc%comm )
+     CALL laxlib_zsqmcll_x( n, h_dist, nx, v, n, desc, desc%comm )
      CALL stop_clock( 'cdiagh-3' )
      !
      DEALLOCATE( h_dist )

@@ -107,14 +107,14 @@ SUBROUTINE direct_diag_k( ngk_g, nbnd, hmat, evc_g, e, &
      !
      IF ( do_distr_diag_inside_bgrp ) THEN
         IF ( my_bgrp_id == root_bgrp_id ) THEN
-           CALL pdiagh( ngk_g, hmat, ngk_g, et_tmp, vmat, idesc )
+           CALL pdiagh( ngk_g, hmat, et_tmp, vmat, idesc )
         END IF
         IF ( nbgrp > 1 ) THEN
            CALL mp_bcast( vmat,   root_bgrp_id, inter_bgrp_comm )
            CALL mp_bcast( et_tmp, root_bgrp_id, inter_bgrp_comm )
         END IF
      ELSE
-        CALL pdiagh( ngk_g, hmat, ngk_g, et_tmp, vmat, idesc )
+        CALL pdiagh( ngk_g, hmat, et_tmp, vmat, idesc )
      END IF
      !
      IF ( ALLOCATED(rank_ip)  )  DEALLOCATE( rank_ip )
@@ -124,7 +124,7 @@ SUBROUTINE direct_diag_k( ngk_g, nbnd, hmat, evc_g, e, &
      !
      ! ... Serial Hermitian eigensolver (S = I assumed for the standard problem).
      !
-     CALL diagh( ngk_g, nbnd, hmat, ngk_g, et_tmp, vmat, &
+     CALL diagh( ngk_g, nbnd, hmat, et_tmp, vmat, &
                  me_bgrp, root_bgrp, intra_bgrp_comm )
      !
   END IF

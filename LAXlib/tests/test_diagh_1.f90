@@ -52,7 +52,7 @@ program test_diagh
     !
     v = 0.d0
     e = 0.d0
-    CALL diagh(  2, 2, h, 2, e, v, me_bgrp, root_bgrp, intra_bgrp_comm )
+    CALL diagh(  2, 2, h, e, v, me_bgrp, root_bgrp, intra_bgrp_comm )
     !
     CALL test%assert_close( e, [1.d0, 1.d0] )
     CALL test%assert_close( RESHAPE(v, [4]), [1.d0, 0.d0, 0.d0, 1.d0] )
@@ -66,7 +66,7 @@ program test_diagh
     !
     v = 0.d0
     e = 0.d0
-    CALL diagh(  2, 2, h, 2, e, v, me_bgrp, root_bgrp, intra_bgrp_comm )
+    CALL diagh(  2, 2, h, e, v, me_bgrp, root_bgrp, intra_bgrp_comm )
     !
     CALL test%assert_close( e, [2.d0, 5.d0] )
     CALL test%assert_close( RESHAPE(v, [4]), [1.d0, 0.d0, 0.d0, 1.d0] )
@@ -82,7 +82,7 @@ program test_diagh
     !
     v = 0.d0
     e = 0.d0
-    CALL diagh(  2, 2, h, 2, e, v, me_bgrp, root_bgrp, intra_bgrp_comm )
+    CALL diagh(  2, 2, h, e, v, me_bgrp, root_bgrp, intra_bgrp_comm )
     !
     ! Eigenvalues: 1-2 = -1, 1+2 = 3
     CALL test%assert_close( e, [-1.d0, 3.d0] )
@@ -109,7 +109,7 @@ program test_diagh
     !
     v = (0.d0, 0.d0)
     e = 0.d0
-    CALL diagh(  2, 2, h, 2, e, v, me_bgrp, root_bgrp, intra_bgrp_comm )
+    CALL diagh(  2, 2, h, e, v, me_bgrp, root_bgrp, intra_bgrp_comm )
     !
     CALL test%assert_close( e, [1.d0, 1.d0] )
     CALL test%assert_close( RESHAPE(h, [4]), RESHAPE(h_save, [4]))
@@ -124,7 +124,7 @@ program test_diagh
     !
     v = (0.d0, 0.d0)
     e = 0.d0
-    CALL diagh(  2, 2, h, 2, e, v, me_bgrp, root_bgrp, intra_bgrp_comm )
+    CALL diagh(  2, 2, h, e, v, me_bgrp, root_bgrp, intra_bgrp_comm )
     ! Eigenvalues: (1+5 +/- sqrt((1-5)^2 + 4*4))/2 = (6 +/- sqrt(16+16))/2 = (6 +/- sqrt(32))/2
     ! = (6 +/- 5.65685)/2 = 0.1715728752538099, 5.82842712474619
     CALL test%assert_close( e, [0.1715728752538099d0,  5.82842712474619d0] )
@@ -139,7 +139,7 @@ program test_diagh
     v = (0.d0, 0.d0)
     e = 0.d0
     ! Request only 1 eigenvalue
-    CALL diagh(  2, 1, h, 2, e, v(:,1:1), me_bgrp, root_bgrp, intra_bgrp_comm )
+    CALL diagh(  2, 1, h, e, v(:,1:1), me_bgrp, root_bgrp, intra_bgrp_comm )
     !
     CALL test%assert_close( e(1), 1.d0 )
     CALL test%assert_close( RESHAPE(h, [4]), RESHAPE(h_save, [4]))
