@@ -191,7 +191,11 @@ SUBROUTINE laxlib_pcdiagh( n, h, ldh, e, v, idesc )
   !! complex matrices version.
   !! On output H matrix is unchanged.
   !!
-  !! Parallel version with full data distribution
+  !! Parallel version with full data distribution.
+  !!
+  !! Communicators: ortho_comm is the subset of ortho_parent_comm whose ranks
+  !! form the ScaLAPACK/BLACS grid used for the parallel linear algebra.
+  !! Output is replicated on all processors of ortho_parent_comm.
   !!
   !
   USE laxlib_parallel_include
@@ -214,11 +218,15 @@ SUBROUTINE laxlib_pcdiagh( n, h, ldh, e, v, idesc )
   INTEGER, INTENT(IN) :: ldh
   !! leading dimension of h, as declared in the calling pgm unit
   COMPLEX(DP), INTENT(INOUT) :: h(ldh,ldh)
-  !! matrix to be diagonalized (replicated input)
+  !! matrix to be diagonalized; replicated input on the processes of ortho_comm
+  !! (only read on ranks with desc%active_node > 0). On output H is unchanged.
   REAL(DP), INTENT(OUT) :: e(n)
-  !! eigenvalues (replicated output)
+  !! eigenvalues; replicated output on the processes of ortho_parent_comm
   COMPLEX(DP), INTENT(OUT) :: v(ldh,ldh)
-  !! eigenvectors (column-wise, replicated output)
+  !! eigenvectors (column-wise); replicated output on the processes of
+  !! ortho_parent_comm. Only the n x n leading block v(1:n,1:n) is meaningful;
+  !! the padding entries (rows n+1:ldh of the first n columns, and all of
+  !! columns n+1:ldh) are left undefined.
   INTEGER, INTENT(IN) :: idesc(LAX_DESC_SIZE)
   !! laxlib descriptor
   !
