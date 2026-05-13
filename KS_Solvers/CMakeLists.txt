@@ -58,6 +58,7 @@ set(src_rmmdiis
 
 set(src_direct
     Direct/direct_diag_k.f90)
+qe_enable_cuda_fortran("${src_direct}")
 
 qe_add_library(qe_kssolver_davidson ${src_davidson})
 target_link_libraries(qe_kssolver_davidson
