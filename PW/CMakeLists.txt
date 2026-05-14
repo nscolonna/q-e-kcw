@@ -291,6 +291,7 @@ target_link_libraries(qe_pw
         qe_kssolver_paro
         qe_kssolver_rmmdiis
         qe_kssolver_dense
+        qe_kssolver_direct
         qe_upflib # TODO turn to vendorized library from MaX gitrepo ? 
         qe_modules
         qe_fftx

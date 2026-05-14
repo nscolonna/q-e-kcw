@@ -7,7 +7,7 @@
 !
 !
 !----------------------------------------------------------------------------
-SUBROUTINE laxlib_rdiagh( n, m, h, ldh, e, v, me_bgrp, root_bgrp, intra_bgrp_comm )
+SUBROUTINE laxlib_rdiagh( n, m, h, e, v, me_bgrp, root_bgrp, intra_bgrp_comm )
   !!----------------------------------------------------------------------------
   !!
   !! Called by diagh interface.
@@ -26,14 +26,12 @@ SUBROUTINE laxlib_rdiagh( n, m, h, ldh, e, v, me_bgrp, root_bgrp, intra_bgrp_com
   INTEGER, INTENT(IN) :: n
   !! dimension of the matrix to be diagonalized
   INTEGER, INTENT(IN) :: m
-  !! number of eigenstates to be calculated
-  INTEGER, INTENT(IN) :: ldh
-  !! leading dimension of h, as declared in the calling pgm unit
-  REAL(DP), INTENT(INOUT) :: h(ldh,n)
+  !! number of eigenstates to be calculated (m <= n)
+  REAL(DP), INTENT(INOUT) :: h(n,n)
   !! matrix to be diagonalized
   REAL(DP), INTENT(OUT) :: e(n)
-  !! eigenvalues
-  REAL(DP), INTENT(OUT) :: v(ldh,m)
+  !! eigenvalues (only the first m entries are written when m < n)
+  REAL(DP), INTENT(OUT) :: v(n,m)
   !! eigenvectors (column-wise)
   INTEGER,  INTENT(IN)  :: me_bgrp
   !! index of the processor within a band group
@@ -61,7 +59,7 @@ SUBROUTINE laxlib_rdiagh( n, m, h, ldh, e, v, me_bgrp, root_bgrp, intra_bgrp_com
      !
      ! ... allocate workspace for all eigenvectors
      !
-     ALLOCATE( v_temp(ldh,n) )
+     ALLOCATE( v_temp(n,n) )
      !
      IF ( all_eigenvalues ) THEN
         !
@@ -92,7 +90,7 @@ SUBROUTINE laxlib_rdiagh( n, m, h, ldh, e, v, me_bgrp, root_bgrp, intra_bgrp_com
         END DO
         !$omp end parallel do
         !
-        CALL DSYEVD( 'V', 'U', n, v_temp, ldh, e, work, lwork, &
+        CALL DSYEVD( 'V', 'U', n, v_temp, n, e, work, lwork, &
                      iwork, SIZE(iwork), info )
         !
         DEALLOCATE( iwork )
@@ -125,8 +123,8 @@ SUBROUTINE laxlib_rdiagh( n, m, h, ldh, e, v, me_bgrp, root_bgrp, intra_bgrp_com
         END DO
         !$omp end parallel do
         !
-        CALL DSYEVX( 'V', 'I', 'U', n, v_temp, ldh, &
-                     0.D0, 0.D0, 1, m, abstol, mm, e, v_temp, ldh, &
+        CALL DSYEVX( 'V', 'I', 'U', n, v_temp, n, &
+                     0.D0, 0.D0, 1, m, abstol, mm, e, v_temp, n, &
                      work, lwork, iwork, ifail, info )
         !
         DEALLOCATE( ifail )
@@ -138,7 +136,7 @@ SUBROUTINE laxlib_rdiagh( n, m, h, ldh, e, v, me_bgrp, root_bgrp, intra_bgrp_com
      !
      !$omp parallel do
      DO i = 1, m
-        v(1:ldh,i) = v_temp(1:ldh,i)
+        v(1:n,i) = v_temp(1:n,i)
      END DO
      !$omp end parallel do
      !
@@ -173,7 +171,7 @@ SUBROUTINE laxlib_rdiagh( n, m, h, ldh, e, v, me_bgrp, root_bgrp, intra_bgrp_com
 END SUBROUTINE laxlib_rdiagh
 
 !----------------------------------------------------------------------------
-SUBROUTINE laxlib_prdiagh( n, h, ldh, e, v, idesc )
+SUBROUTINE laxlib_prdiagh( n, h, e, v, idesc )
   !----------------------------------------------------------------------------
   !
   !! Called by pdiagh interface.
@@ -182,7 +180,11 @@ SUBROUTINE laxlib_prdiagh( n, h, ldh, e, v, idesc )
   !! real matrices version.
   !! On output H matrix is unchanged.
   !!
-  !! Parallel version with full data distribution
+  !! Parallel version with full data distribution.
+  !!
+  !! Communicators: ortho_comm is the subset of ortho_parent_comm whose ranks
+  !! form the ScaLAPACK/BLACS grid used for the parallel linear algebra.
+  !! Output is replicated on all processors of ortho_parent_comm.
   !!
   !
   USE laxlib_parallel_include
@@ -202,14 +204,14 @@ SUBROUTINE laxlib_prdiagh( n, h, ldh, e, v, idesc )
   !
   INTEGER, INTENT(IN) :: n
   !! dimension of the matrix to be diagonalized and number of eigenstates to be calculated
-  INTEGER, INTENT(IN) :: ldh
-  !! leading dimension of h, as declared in the calling pgm unit
-  REAL(DP), INTENT(INOUT) :: h(ldh,ldh)
-  !! matrix to be diagonalized (replicated input)
+  REAL(DP), INTENT(INOUT) :: h(n,n)
+  !! matrix to be diagonalized; replicated input on the processes of ortho_comm
+  !! (only read on ranks with desc%active_node > 0). On output H is unchanged.
   REAL(DP), INTENT(OUT) :: e(n)
-  !! eigenvalues (replicated output)
-  REAL(DP), INTENT(OUT) :: v(ldh,ldh)
-  !! eigenvectors (column-wise, replicated output)
+  !! eigenvalues; replicated output on the processes of ortho_parent_comm
+  REAL(DP), INTENT(OUT) :: v(n,n)
+  !! eigenvectors (column-wise); replicated output on the processes of
+  !! ortho_parent_comm.
   INTEGER, INTENT(IN) :: idesc(LAX_DESC_SIZE)
   !! laxlib descriptor
   !
@@ -234,9 +236,8 @@ SUBROUTINE laxlib_prdiagh( n, h, ldh, e, v, idesc )
      !
      nx   = desc%nrcx
      !
-     ! Note: Unlike pdiaghg, we do not check ldh != nx because this routine
-     ! accepts replicated input (ldh can be any valid leading dimension) and
-     ! performs the distribution to block-cyclic format internally.
+     ! Note: Unlike pdiaghg, h here is the full n x n replicated matrix; the
+     ! routine distributes it to block-cyclic format internally.
      !
      ! ... allocate distributed matrix
      !
@@ -244,7 +245,7 @@ SUBROUTINE laxlib_prdiagh( n, h, ldh, e, v, idesc )
      !
      ! ... distribute replicated H matrix to block-cyclic format
      !
-     CALL laxlib_dsqmdst_x( n, h, ldh, h_dist, nx, desc )
+     CALL laxlib_dsqmdst_x( n, h, n, h_dist, nx, desc )
      !
      ! ... diagonalize using ScaLAPACK/ELPA
      !
@@ -263,18 +264,22 @@ SUBROUTINE laxlib_prdiagh( n, h, ldh, e, v, idesc )
      !
      ! ... collect distributed eigenvectors back to replicated format
      !
-     CALL laxlib_dsqmcll_x( n, h_dist, nx, v, ldh, desc, desc%comm )
+     CALL laxlib_dsqmcll_x( n, h_dist, nx, v, n, desc, desc%comm )
      !
      DEALLOCATE( h_dist )
      !
   END IF
   !
-  ! ... broadcast eigenvalues to all processors
+  ! ... broadcast e and v: ranks outside the ortho pool
+  ! ... (desc%active_node == 0) skip the collect in laxlib_dsqmcll_x.
   !
 #if defined __MPI
   CALL MPI_BCAST( e, SIZE(e), MPI_DOUBLE_PRECISION, root, ortho_parent_comm, info )
   IF ( info /= 0 ) &
         CALL lax_error__( 'prdiagh', 'error broadcasting array e', ABS( info ) )
+  CALL MPI_BCAST( v, SIZE(v), MPI_DOUBLE_PRECISION, root, ortho_parent_comm, info )
+  IF ( info /= 0 ) &
+        CALL lax_error__( 'prdiagh', 'error broadcasting array v', ABS( info ) )
 #endif
   !
   CALL stop_clock( 'rdiagh' )

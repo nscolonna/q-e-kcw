@@ -56,7 +56,7 @@ program test_diagh_2
     v = (0.d0, 0.d0)
     e = 0.d0
     !
-    CALL diagh(  m_size, m_size, h, m_size, e, v, me_bgrp, root_bgrp, intra_bgrp_comm )
+    CALL diagh(  m_size, m_size, h, e, v, me_bgrp, root_bgrp, intra_bgrp_comm )
     !
     DO j = 1, m_size
        CALL test%assert_close( h(1:m_size, j), h_save(1:m_size, j))
@@ -68,7 +68,7 @@ program test_diagh_2
     ! Test that calling again gives the same results
     v = (0.d0, 0.d0)
     e = 0.d0
-    CALL diagh(  m_size, m_size, h, m_size, e, v, me_bgrp, root_bgrp, intra_bgrp_comm )
+    CALL diagh(  m_size, m_size, h, e, v, me_bgrp, root_bgrp, intra_bgrp_comm )
     !
     DO j = 1, m_size
        CALL test%assert_close( h(1:m_size, j), h_save(1:m_size, j))
@@ -81,7 +81,7 @@ program test_diagh_2
     ! Test subset of eigenvalues
     v = (0.d0, 0.d0)
     e = 0.d0
-    CALL diagh(  m_size, m_size/2, h, m_size, e, v(:,1:m_size/2), me_bgrp, root_bgrp, intra_bgrp_comm )
+    CALL diagh(  m_size, m_size/2, h, e, v(:,1:m_size/2), me_bgrp, root_bgrp, intra_bgrp_comm )
     !
     test%tolerance32=1.e-5
     ! Use a looser tolerance for subset eigenvalues since ZHEEVD and ZHEEVX
@@ -113,7 +113,7 @@ program test_diagh_2
     v = 0.d0
     e = 0.d0
     !
-    CALL diagh(  m_size, m_size, h, m_size, e, v, me_bgrp, root_bgrp, intra_bgrp_comm )
+    CALL diagh(  m_size, m_size, h, e, v, me_bgrp, root_bgrp, intra_bgrp_comm )
     !
     DO j = 1, m_size
        CALL test%assert_close( h(1:m_size, j), h_save(1:m_size, j))
@@ -125,7 +125,7 @@ program test_diagh_2
     ! Test that calling again gives the same results
     v = 0.d0
     e = 0.d0
-    CALL diagh(  m_size, m_size, h, m_size, e, v, me_bgrp, root_bgrp, intra_bgrp_comm )
+    CALL diagh(  m_size, m_size, h, e, v, me_bgrp, root_bgrp, intra_bgrp_comm )
     !
     DO j = 1, m_size
        CALL test%assert_close( h(1:m_size, j), h_save(1:m_size, j))

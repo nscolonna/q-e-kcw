@@ -506,7 +506,7 @@ MODULE LAXlib
 #endif
   !
   !----------------------------------------------------------------------------
-  SUBROUTINE cdiagh_cpu_( n, m, h, ldh, e, v, me_bgrp, root_bgrp, intra_bgrp_comm )
+  SUBROUTINE cdiagh_cpu_( n, m, h, e, v, me_bgrp, root_bgrp, intra_bgrp_comm )
     !----------------------------------------------------------------------------
     !
     !! Called by diagh interface.
@@ -523,14 +523,12 @@ MODULE LAXlib
     INTEGER, INTENT(IN) :: n
     !! dimension of the matrix to be diagonalized
     INTEGER, INTENT(IN) :: m
-    !! number of eigenstates to be calculated
-    INTEGER, INTENT(IN) :: ldh
-    !! leading dimension of h, as declared in the calling pgm unit
-    COMPLEX(DP), INTENT(INOUT) :: h(ldh,n)
+    !! number of eigenstates to be calculated (m <= n)
+    COMPLEX(DP), INTENT(INOUT) :: h(n,n)
     !! matrix to be diagonalized
     REAL(DP), INTENT(OUT) :: e(n)
-    !! eigenvalues
-    COMPLEX(DP), INTENT(OUT) :: v(ldh,m)
+    !! eigenvalues (only the first m entries are written when m < n)
+    COMPLEX(DP), INTENT(OUT) :: v(n,m)
     !! eigenvectors (column-wise)
     INTEGER,  INTENT(IN)  :: me_bgrp
     !! index of the processor within a band group
@@ -539,14 +537,14 @@ MODULE LAXlib
     INTEGER,  INTENT(IN)  :: intra_bgrp_comm
     !! intra band group communicator
     !
-    CALL laxlib_cdiagh( n, m, h, ldh, e, v, me_bgrp, root_bgrp, intra_bgrp_comm )
+    CALL laxlib_cdiagh( n, m, h, e, v, me_bgrp, root_bgrp, intra_bgrp_comm )
     !
     RETURN
     !
   END SUBROUTINE cdiagh_cpu_
   !
   !----------------------------------------------------------------------------
-  SUBROUTINE rdiagh_cpu_( n, m, h, ldh, e, v, me_bgrp, root_bgrp, intra_bgrp_comm )
+  SUBROUTINE rdiagh_cpu_( n, m, h, e, v, me_bgrp, root_bgrp, intra_bgrp_comm )
     !----------------------------------------------------------------------------
     !
     !! Called by diagh interface.
@@ -563,14 +561,12 @@ MODULE LAXlib
     INTEGER, INTENT(IN) :: n
     !! dimension of the matrix to be diagonalized
     INTEGER, INTENT(IN) :: m
-    !! number of eigenstates to be calculated
-    INTEGER, INTENT(IN) :: ldh
-    !! leading dimension of h, as declared in the calling pgm unit
-    REAL(DP), INTENT(INOUT) :: h(ldh,n)
+    !! number of eigenstates to be calculated (m <= n)
+    REAL(DP), INTENT(INOUT) :: h(n,n)
     !! matrix to be diagonalized
     REAL(DP), INTENT(OUT) :: e(n)
-    !! eigenvalues
-    REAL(DP), INTENT(OUT) :: v(ldh,m)
+    !! eigenvalues (only the first m entries are written when m < n)
+    REAL(DP), INTENT(OUT) :: v(n,m)
     !! eigenvectors (column-wise)
     INTEGER,  INTENT(IN)  :: me_bgrp
     !! index of the processor within a band group
@@ -579,14 +575,14 @@ MODULE LAXlib
     INTEGER,  INTENT(IN)  :: intra_bgrp_comm
     !! intra band group communicator
     !
-    CALL laxlib_rdiagh( n, m, h, ldh, e, v, me_bgrp, root_bgrp, intra_bgrp_comm )
+    CALL laxlib_rdiagh( n, m, h, e, v, me_bgrp, root_bgrp, intra_bgrp_comm )
     !
     RETURN
     !
   END SUBROUTINE rdiagh_cpu_
   !
   !----------------------------------------------------------------------------
-  SUBROUTINE pcdiagh_( n, h, ldh, e, v, idesc )
+  SUBROUTINE pcdiagh_( n, h, e, v, idesc )
     !----------------------------------------------------------------------------
     !
     !! Called by pdiagh interface.
@@ -604,23 +600,21 @@ MODULE LAXlib
     !
     INTEGER, INTENT(IN) :: n
     !! dimension of the matrix to be diagonalized and number of eigenstates to be calculated
-    INTEGER, INTENT(IN) :: ldh
-    !! leading dimension of h, as declared in the calling pgm unit
-    COMPLEX(DP), INTENT(INOUT) :: h(ldh,ldh)
+    COMPLEX(DP), INTENT(INOUT) :: h(n,n)
     !! matrix to be diagonalized
     REAL(DP), INTENT(OUT) :: e(n)
     !! eigenvalues
-    COMPLEX(DP), INTENT(OUT) :: v(ldh,ldh)
+    COMPLEX(DP), INTENT(OUT) :: v(n,n)
     !! eigenvectors (column-wise)
     INTEGER, INTENT(IN) :: idesc(LAX_DESC_SIZE)
     !! laxlib descriptor
     !
-    CALL laxlib_pcdiagh( n, h, ldh, e, v, idesc )
+    CALL laxlib_pcdiagh( n, h, e, v, idesc )
     !
   END SUBROUTINE pcdiagh_
   !
   !----------------------------------------------------------------------------
-  SUBROUTINE prdiagh_( n, h, ldh, e, v, idesc )
+  SUBROUTINE prdiagh_( n, h, e, v, idesc )
     !----------------------------------------------------------------------------
     !
     !! Called by pdiagh interface.
@@ -638,18 +632,16 @@ MODULE LAXlib
     !
     INTEGER, INTENT(IN) :: n
     !! dimension of the matrix to be diagonalized and number of eigenstates to be calculated
-    INTEGER, INTENT(IN) :: ldh
-    !! leading dimension of h, as declared in the calling pgm unit
-    REAL(DP), INTENT(INOUT) :: h(ldh,ldh)
+    REAL(DP), INTENT(INOUT) :: h(n,n)
     !! matrix to be diagonalized
     REAL(DP), INTENT(OUT) :: e(n)
     !! eigenvalues
-    REAL(DP), INTENT(OUT) :: v(ldh,ldh)
+    REAL(DP), INTENT(OUT) :: v(n,n)
     !! eigenvectors (column-wise)
     INTEGER, INTENT(IN) :: idesc(LAX_DESC_SIZE)
     !! laxlib descriptor
     !
-    CALL laxlib_prdiagh( n, h, ldh, e, v, idesc )
+    CALL laxlib_prdiagh( n, h, e, v, idesc )
     !
   END SUBROUTINE prdiagh_
   !
