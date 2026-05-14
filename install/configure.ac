@@ -1,4 +1,4 @@
-# Copyright (C) 2001-2025 Quantum ESPRESSO group
+# Copyright (C) 2001-2026 Quantum ESPRESSO group
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -47,6 +47,9 @@ X_AC_QE_AR()
 # Checking OpenMP...
 X_AC_QE_OPENMP()
 
+# Checking for GPU ...
+X_AC_QE_GPU()
+
 AC_LANG_PUSH(Fortran) 
 AC_FC_SRCEXT(f90) 
 
@@ -66,7 +69,11 @@ X_AC_QE_CPP()
 X_AC_QE_LD()
 
 # Checking CUDA...
-X_AC_QE_CUDA()
+if test "$with_gpu" = "1"; then
+   X_AC_QE_CUDA()
+elif test "$with_gpu" = "2"; then
+   X_AC_QE_OMP5()
+fi
 
 # Checking F90 rule...
 X_AC_QE_F90RULE()
