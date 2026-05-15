@@ -960,6 +960,16 @@ SUBROUTINE phq_readin()
   !   IF (meta_ionode) ios = close_input_file ()
   !
   IF (twochem.AND.elph) CALL errore ('phq_readin', 'electron-phonon with twochem approach not yet implemented',1)
+  !
+  ! The twochem method with USPP is not implemented nor tested. One thing
+  ! needed to implement it is the conduction-band Pulay augmentation charge.
+  ! It would need modification of compute_alphasum and compute_becsum_ph and
+  ! using them in addusddens_pulay. Since this code is not used, this code
+  ! was deleted. See commit d144d538d for the last state with this code
+  ! present, which can serve as a starting point for twochem+USPP implementation.
+  IF (twochem .AND. okvan) CALL errore ('phq_readin', &
+       'twochem with ultrasoft/PAW pseudopotentials is not implemented', 1)
+  !
   IF (epsil.AND.(lgauss .OR. ltetra)) &
         CALL errore ('phq_readin', 'no elec. field with metals', 1)
   IF (modenum > 0) THEN
