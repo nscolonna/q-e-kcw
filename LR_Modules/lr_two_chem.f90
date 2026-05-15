@@ -1115,7 +1115,7 @@ subroutine addusdbec_cond_nc (ik, wgt, dpsi, dbecsum_nc, becp1)
   !
   !  This routine adds to the dbecsum the term which correspond to this
   !  k point. After the accumulation the additional part of the charge
-  !  is computed in addusddens.
+  !  is computed in lr_addusddens.
   !
   USE kinds,            ONLY : DP
   USE lsda_mod,         ONLY : nspin

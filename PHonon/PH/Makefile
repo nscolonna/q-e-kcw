@@ -18,7 +18,7 @@ add_zstar_ue_us.o \
 addcore.o \
 dynmat_nlcc.o \
 addnlcc_zstar_eu_us.o \
-addusddens.o \
+addusddens_pulay.o \
 addusdynmat.o \
 allocate_part.o \
 allocate_pert.o \

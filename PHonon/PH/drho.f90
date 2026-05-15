@@ -247,7 +247,7 @@ subroutine drho
      
      ! Process augmentation density for entire batch
      mode_batch_start = mode - npe_total
-     call addusddens (drhoust, dbecsum(1,1,1,mode_batch_start+1), mode_batch_start, npe_total)
+     call addusddens_pulay (drhoust, dbecsum(1,1,1,mode_batch_start+1), mode_batch_start, npe_total)
      
      ! Save buffers for all perturbations in batch
      do iper = 1, npe_total

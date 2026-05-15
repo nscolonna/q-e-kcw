@@ -7,7 +7,7 @@ set(src_ph
     PH/addcore.f90
     PH/dynmat_nlcc.f90
     PH/addnlcc_zstar_eu_us.f90
-    PH/addusddens.f90
+    PH/addusddens_pulay.f90
     PH/addusdynmat.f90
     PH/allocate_part.f90
     PH/allocate_pert.f90
