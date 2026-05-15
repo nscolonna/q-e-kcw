@@ -14,13 +14,12 @@ AC_ARG_WITH(gpu,
    [with_gpu=0])
  
 AC_ARG_WITH(cuda,
-   #[AS_HELP_STRING([--with-cuda],
-   #    [obsolete, use --with-gpu=cuda instead])],
-   [],
+   [AS_HELP_STRING([--with-cuda],
+       [obsolete, use --with-gpu=cuda instead])],
    [if test "$withval" != "no" ; then
-       AC_MSG_ERROR([--with-cuda is obsolete, use --with-gpu=cuda instead])
+       AC_MSG_WARN([--with-cuda is obsolete, use --with-gpu=cuda instead])
+       with_gpu=1
    fi],
-   [])
-
+   [with_gpu=0])
    
 ])
