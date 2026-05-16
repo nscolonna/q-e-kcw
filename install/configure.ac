@@ -72,7 +72,7 @@ X_AC_QE_LD()
 if test "$with_gpu" = "1"; then
    X_AC_QE_CUDA()
 elif test "$with_gpu" = "2"; then
-   X_AC_QE_OMP5()
+   X_AC_QE_OPENMP_OFFLOAD()
 fi
 
 # Checking F90 rule...

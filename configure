@@ -4283,7 +4283,7 @@ fi
 
 elif test "$with_gpu" = "2"; then
 
-  as_fn_error $? "Volentieri! No configure yet for AMD/Intel GPUs with OpenMP5" "$LINENO" 5
+  as_fn_error $? "Volentieri! No configure yet for AMD/Intel GPUs with OpenMP offloa" "$LINENO" 5
 
 fi
 
