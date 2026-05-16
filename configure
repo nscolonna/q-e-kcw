@@ -737,6 +737,7 @@ infodir
 docdir
 oldincludedir
 includedir
+runstatedir
 localstatedir
 sharedstatedir
 sysconfdir
@@ -837,6 +838,7 @@ datadir='${datarootdir}'
 sysconfdir='${prefix}/etc'
 sharedstatedir='${prefix}/com'
 localstatedir='${prefix}/var'
+runstatedir='${localstatedir}/run'
 includedir='${prefix}/include'
 oldincludedir='/usr/include'
 docdir='${datarootdir}/doc/${PACKAGE_TARNAME}'
@@ -1089,6 +1091,15 @@ do
   | -silent | --silent | --silen | --sile | --sil)
     silent=yes ;;
 
+  -runstatedir | --runstatedir | --runstatedi | --runstated \
+  | --runstate | --runstat | --runsta | --runst | --runs \
+  | --run | --ru | --r)
+    ac_prev=runstatedir ;;
+  -runstatedir=* | --runstatedir=* | --runstatedi=* | --runstated=* \
+  | --runstate=* | --runstat=* | --runsta=* | --runst=* | --runs=* \
+  | --run=* | --ru=* | --r=*)
+    runstatedir=$ac_optarg ;;
+
   -sbindir | --sbindir | --sbindi | --sbind | --sbin | --sbi | --sb)
     ac_prev=sbindir ;;
   -sbindir=* | --sbindir=* | --sbindi=* | --sbind=* | --sbin=* \
@@ -1226,7 +1237,7 @@ fi
 for ac_var in	exec_prefix prefix bindir sbindir libexecdir datarootdir \
 		datadir sysconfdir sharedstatedir localstatedir includedir \
 		oldincludedir docdir infodir htmldir dvidir pdfdir psdir \
-		libdir localedir mandir
+		libdir localedir mandir runstatedir
 do
   eval ac_val=\$$ac_var
   # Remove trailing slashes.
@@ -1379,6 +1390,7 @@ Fine tuning of the installation directories:
   --sysconfdir=DIR        read-only single-machine data [PREFIX/etc]
   --sharedstatedir=DIR    modifiable architecture-independent data [PREFIX/com]
   --localstatedir=DIR     modifiable single-machine data [PREFIX/var]
+  --runstatedir=DIR       modifiable per-process data [LOCALSTATEDIR/run]
   --libdir=DIR            object code libraries [EPREFIX/lib]
   --includedir=DIR        C header files [PREFIX/include]
   --oldincludedir=DIR     C header files for non-gcc [/usr/include]
@@ -1428,8 +1440,8 @@ Optional Features:
 Optional Packages:
   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
   --without-PACKAGE       do not use PACKAGE (same as --with-PACKAGE=no)
-  --with-gpu              (cuda|omp5) Use "cuda" for NVidia, "omp5" for AMD
-                          (default:cuda)
+  --with-gpu              (cuda|openmp) Use "cuda" for NVIDIA, "omp5" for AMD
+                          or INTEL GPUs (default:cuda)
   --with-cuda             obsolete, use --with-gpu=cuda instead
   --with-cuda-cc=VAL      GPU compute capabilities [default=70]
   --with-cuda-runtime=VAL CUDA runtime [default=10.2]
@@ -2286,7 +2298,7 @@ try_dflags=""
 # Add needed include directories
 try_iflags="-I. -I\$(TOPDIR)/include"
 
-# Checking archiver...
+# Checking archiver (obsolete? "ar ruv" seems to always work) ...
 
 
   # default from the environment (shouldn't be needed)
@@ -2318,7 +2330,7 @@ $as_echo "${arflags}" >&6; }
 
 
 
-# Checking OpenMP...
+# Checking OpenMP for CPUs...
 
 
 # Check whether --enable-openmp was given.
@@ -2341,7 +2353,7 @@ fi
 
 # Check whether --with-gpu was given.
 if test "${with_gpu+set}" = set; then :
-  withval=$with_gpu; if test "$withval" = "omp5" ; then
+  withval=$with_gpu; if test "$withval" = "openmp" ; then
       with_gpu=2
    else
       with_gpu=1
@@ -5891,7 +5903,7 @@ fi
 
 
 
-# Checking for IBM MASS library...
+# Checking for IBM MASS library (obsolete?) ...
 
 
   { $as_echo "$as_me:${as_lineno-$LINENO}: checking MASS" >&5
@@ -7319,7 +7331,7 @@ fi
 
 
 
-# Checking for ranlib...
+# Checking for ranlib (obsolete/useless?)...
 
 
 
@@ -7520,11 +7532,11 @@ fi
 
 
 
-# Show dflags before adding $(MANUAL_DFLAGS) and adapt to XLF (if needed)
+# Show dflags before adding $(MANUAL_DFLAGS) and adapt to XLF (obsolete?)
 if test "$dflags" = "" ; then dflags="$try_dflags" ; fi
 echo setting DFLAGS... $try_dflags
 
-# xlf compilers (AIX and powerpc) want comma-separated -D directives
+# xlf compilers (AIX and powerpc: obsolete?) want comma-separated -D directives
 
 
 # xlf compilers (AIX and powerpc) want comma-separated -D directives

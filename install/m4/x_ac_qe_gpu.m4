@@ -5,8 +5,8 @@ AC_DEFUN([X_AC_QE_GPU], [
 
 AC_ARG_WITH(gpu,
    [AS_HELP_STRING([--with-gpu],
-       [(cuda|omp5) Use "cuda" for NVidia, "omp5" for AMD (default:cuda)])],
-   [if test "$withval" = "omp5" ; then
+       [(cuda|openmp) Use "cuda" for NVIDIA, "omp5" for AMD or INTEL GPUs (default:cuda)])],
+   [if test "$withval" = "openmp" ; then
       with_gpu=2
    else
       with_gpu=1
