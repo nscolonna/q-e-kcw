@@ -10,7 +10,7 @@
 # Simplified compilation for NVidia GPUs using nvhpc compiler
 # Assumes a standard installation of a recente nvhpc sdk
 # The following variables are substituted in the makefile:
-#    gpu_arch
+#    cuda_arch
 #    cuda_runtime
 #    cuda_cflags
 #    cuda_fflags
@@ -24,17 +24,11 @@
 AC_DEFUN([X_AC_QE_CUDA], [
 
 # Variables
-gpu_arch=
+cuda_arch=
 cuda_runtime=
 cuda_cflags=
 cuda_fflags=
 cuda_libs=
-
-# Provide your CUDA path with this
-AC_ARG_WITH([cuda],
-   [AS_HELP_STRING([--with-cuda=PATH],[prefix where CUDA is installed @<:@default=no@:>@])],
-   [],
-   [with_cuda=no])
    
 AC_ARG_WITH([cuda-cc],
    [AS_HELP_STRING([--with-cuda-cc=VAL],[GPU compute capabilities @<:@default=70@:>@])],
@@ -57,9 +51,7 @@ AC_ARG_ENABLE([nvtx],
    []
    [enable_nvtx=no])
 
-
-if test "x$with_cuda" != "xno"
-then
+if test "x$with_cuda" != "xno"; then
    # NVHPC v.< 21.7 too old (FIXME: still allowing 21.2 for CI)
    if (test "$f90_major_version" -lt 21 ) || (test "$f90_major_version" -eq 21 && test "$f90_minor_version" -lt 2 ) ; then
       AC_MSG_WARN([Compiler version too old, use at least 21.7])
@@ -112,16 +104,15 @@ then
    # -----------------------------------------   
    cuda_cflags=" -gpu=cc$with_cuda_cc,cuda$with_cuda_runtime"
    ldflags="$ldflags -cuda -gpu=cc$with_cuda_cc,cuda$with_cuda_runtime"
-   gpu_arch="$with_cuda_cc"
+   cuda_arch="$with_cuda_cc"
    cuda_runtime="$with_cuda_runtime"
    ldflags="$ldflags -acc"
    cuda_fflags="$cuda_fflags -acc"
    cuda_cflags="$cuda_cflags -acc"
-
 fi
 
 # Announcing the new variables
-AC_SUBST(gpu_arch)
+AC_SUBST(cuda_arch)
 AC_SUBST(cuda_runtime)
 AC_SUBST(cuda_cflags)
 AC_SUBST(cuda_fflags)
