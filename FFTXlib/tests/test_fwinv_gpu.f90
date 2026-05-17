@@ -769,9 +769,6 @@ program test_fwinv_gpu
 end program test_fwinv_gpu
 !
 ! Dummy
-SUBROUTINE stop_clock(label)
-CHARACTER(*) :: label
-END SUBROUTINE stop_clock
 !
 SUBROUTINE start_clock(label)
 CHARACTER(*) :: label
@@ -781,6 +778,3 @@ SUBROUTINE stop_clock(label)
 CHARACTER(*) :: label
 END SUBROUTINE stop_clock
 !
-SUBROUTINE start_clock(label)
-CHARACTER(*) :: label
-END SUBROUTINE start_clock
