@@ -88,7 +88,7 @@ SUBROUTINE lr_calc_dens( evc1, response_calc )
      WRITE(stdout,'("<lr_calc_dens>")')
   ENDIF
   !
-  CALL start_clock_gpu('lr_calc_dens')
+  CALL start_clock('lr_calc_dens')
   !
   IF ( dffts%has_task_groups ) THEN
      !
@@ -377,7 +377,7 @@ SUBROUTINE lr_calc_dens( evc1, response_calc )
      !
   ENDIF
   !
-  CALL stop_clock_gpu('lr_calc_dens')
+  CALL stop_clock('lr_calc_dens')
   !
   RETURN
   !

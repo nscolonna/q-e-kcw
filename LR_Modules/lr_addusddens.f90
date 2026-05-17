@@ -78,7 +78,7 @@ SUBROUTINE lr_addusddens (npert, dbecsum, drhop)
   !
   IF (.NOT.okvan) RETURN
   !
-  CALL start_clock_gpu ('lr_addusddens')
+  CALL start_clock ('lr_addusddens')
   !
   ALLOCATE (aux(ngm, nspin_mag, npert))
   ALLOCATE (aux_r(dfftp%nnr))
@@ -205,7 +205,7 @@ SUBROUTINE lr_addusddens (npert, dbecsum, drhop)
   DEALLOCATE (aux)
   DEALLOCATE (aux_r)
   !
-  CALL stop_clock_gpu ('lr_addusddens')
+  CALL stop_clock ('lr_addusddens')
   !
   RETURN
   !

@@ -602,7 +602,7 @@ subroutine incdrhoscf_cond (drhos, weight, ik, dbecsum, dpsi)
   !$acc enter data copyin(nl_d, evc)
 
 
-  CALL start_clock_gpu ('incdrhoscf_cond')
+  CALL start_clock ('incdrhoscf_cond')
   !
   ALLOCATE(dpsic(dffts%nnr))
   ALLOCATE(psi(dffts%nnr))
@@ -735,7 +735,7 @@ subroutine incdrhoscf_cond (drhos, weight, ik, dbecsum, dpsi)
   ENDIF
   !
   !$acc exit data detach(evc) delete(nl_d)
-  CALL stop_clock_gpu ('incdrhoscf_cond')
+  CALL stop_clock ('incdrhoscf_cond')
   !
   RETURN
   !
@@ -807,7 +807,7 @@ subroutine incdrhoscf_cond_nc (drhos, weight, ik, dbecsum, dpsi, rsign)
   !$acc enter data copyin(nl_d, evc)
   !
   !
-  CALL start_clock_gpu ('incdrhoscf_cond')
+  CALL start_clock ('incdrhoscf_cond')
   !
   ALLOCATE (dpsic(dffts%nnr, npol))
   ALLOCATE (psi  (dffts%nnr, npol))
@@ -978,7 +978,7 @@ subroutine incdrhoscf_cond_nc (drhos, weight, ik, dbecsum, dpsi, rsign)
   END IF
   !
   !$acc exit data detach(evc) delete(nl_d)
-  CALL stop_clock_gpu ('incdrhoscf_cond')
+  CALL stop_clock ('incdrhoscf_cond')
   !
   RETURN
   !

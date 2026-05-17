@@ -64,7 +64,7 @@ subroutine dv_of_drho (dvscf, drhoc)
   ! rgtot: total response density  
   INTEGER :: tpnnr
 
-  CALL start_clock_gpu ('dv_of_drho')
+  CALL start_clock ('dv_of_drho')
   !
   tpnnr = dfftp%nnr
   !
@@ -263,7 +263,7 @@ subroutine dv_of_drho (dvscf, drhoc)
   !
   deallocate (dvaux)
   !
-  CALL stop_clock_gpu ('dv_of_drho')
+  CALL stop_clock ('dv_of_drho')
   !
   RETURN
   !

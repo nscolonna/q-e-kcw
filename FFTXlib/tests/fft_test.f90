@@ -1296,13 +1296,13 @@ subroutine print_clock(mype, npes, ncount)
 
 end subroutine
 
-subroutine start_clock_gpu(label)
+subroutine start_clock(label)
   implicit none
   character(len=*) :: label
   call start_clock(label)
 end subroutine
 
-subroutine stop_clock_gpu(label)
+subroutine stop_clock(label)
   implicit none
   character(len=*) :: label
   call stop_clock(label)

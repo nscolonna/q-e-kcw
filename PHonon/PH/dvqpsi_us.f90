@@ -81,7 +81,7 @@ subroutine dvqpsi_us (ik, uact, addnlcc, becp1, alphap)
   nl_d  = dffts%nl
 #endif
   !
-  call start_clock_gpu ('dvqpsi_us')
+  call start_clock ('dvqpsi_us')
   allocate (dvlocin(dffts%nnr))
   allocate (aux2(dffts%nnr))
   !
@@ -189,7 +189,7 @@ subroutine dvqpsi_us (ik, uact, addnlcc, becp1, alphap)
   !
   IF (lda_plus_u) CALL dvqhub_barepsi_us(ik, uact)
   !
-  call stop_clock_gpu ('dvqpsi_us')
+  call stop_clock ('dvqpsi_us')
   !
 #if !defined(__CUDA)
   DEALLOCATE(nl_d)
