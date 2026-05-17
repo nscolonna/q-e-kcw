@@ -9,11 +9,19 @@
 SUBROUTINE lr_addusddens (npert, dbecsum, drhop)
   !---------------------------------------------------------------------------
   !
-  ! Calculate the additional charge in reciprocal space due to US PP's
-  ! See Eq.(36) in B. Walker and R. Gebauer, J. Chem. Phys. 127, 164106 (2007)
-  ! Then sum up the normal and ultrasoft charges.
+  ! Self-consistent ultrasoft-augmentation contribution to drho.
+  ! Given dbecsum (built from the Sternheimer dpsi), adds to drhop the
+  ! corresponding augmentation density: Eq. (36) of B. Walker and
+  ! R. Gebauer, J. Chem. Phys. 127, 164106 (2007).
+  !
+  ! This is the SCF augmentation piece that applies to every DFPT
+  ! perturbation type (phonon, electric field, EELS, Hubbard, ...). For
+  ! phonons there is an additional non-self-consistent Pulay-like
+  ! contribution coming from the displacement of the projector centers;
+  ! that piece is computed by PHonon/PH/addusddens_pulay.f90 and stored in
+  ! dfpt_data%drhop_pulay. It is added in response_kernels.f90, not here.
+  !
   ! It assumes that the array dbecsum has already been computed.
-  ! Inspired by PH/addusddens.f90
   !
   ! Created by Iurii Timrov (2013)
   !

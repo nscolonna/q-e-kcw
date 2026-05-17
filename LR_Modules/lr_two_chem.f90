@@ -19,15 +19,6 @@ MODULE  lr_two_chem
   TYPE(dfpt_ldos_type), SAVE, PUBLIC :: ldos_cond_data
   !! Local density of states of the conduction band states at the conduction band Fermi level
   !! Contains: dos_ef, ldos, ldoss, becsum_dos
-  REAL(DP), ALLOCATABLE, SAVE, PUBLIC   :: becsum_cond(:,:,:) ! \sum_i f(i) <psi(i)|beta_l><beta_m|psi(i)>, i in the conduction manifold
-  COMPLEX (DP), ALLOCATABLE :: becsum_cond_nc(:,:,:,:)     !conduction manifold
-  COMPLEX (DP), ALLOCATABLE :: becsumort_cond(:,:,:,:)
-  !! it contains \(\text{alphasum}+\sum_i \langle\psi_i | \beta_n\rangle\langle\beta_m| \delta \psi_i \rangle\) (conduction
-  !manifold)
-  COMPLEX (DP), ALLOCATABLE :: alphasum_cond_nc(:,:,:,:,:)   ! nhm*(nhm+1)/2,3,nat,npol,npol)
-  REAL (DP), ALLOCATABLE :: alphasum_cond(:,:,:,:) ! (nhm*(nhm+1)/2,3,nat,nspin)
-  !! used to compute modes. It contains \(\sum_i \langle \psi_i| d/du
-  !! (|\beta_n><beta_m|) | \psi_i\rangle + (m-n)\) for the conduction manifold
   CONTAINS
 !
 !-----------------------------------------------------------------------
@@ -1124,7 +1115,7 @@ subroutine addusdbec_cond_nc (ik, wgt, dpsi, dbecsum_nc, becp1)
   !
   !  This routine adds to the dbecsum the term which correspond to this
   !  k point. After the accumulation the additional part of the charge
-  !  is computed in addusddens.
+  !  is computed in lr_addusddens.
   !
   USE kinds,            ONLY : DP
   USE lsda_mod,         ONLY : nspin
