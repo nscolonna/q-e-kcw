@@ -16,7 +16,7 @@ if test "$blas_libs" != ""
 then
     echo setting BLAS from \$BLAS_LIBS with no check ...  $blas_libs
     have_blas=1
-elif test "$NVPLROOT" != "" && test "$arch" = "aarch64"; then
+elif test "$NVPLROOT" != ""; then
     # NVPLROOT explicitly set on aarch64: assume NVPL without testing
     # (link-time probes fail due to unresolved OpenMP/runtime deps)
     if test "$use_openmp" -eq 0; then
