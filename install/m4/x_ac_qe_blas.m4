@@ -16,6 +16,17 @@ if test "$blas_libs" != ""
 then
     echo setting BLAS from \$BLAS_LIBS with no check ...  $blas_libs
     have_blas=1
+elif test "$NVPLROOT" != "" && test "$arch" = "aarch64"; then
+    # NVPLROOT explicitly set on aarch64: assume NVPL without testing
+    # (link-time probes fail due to unresolved OpenMP/runtime deps)
+    if test "$use_openmp" -eq 0; then
+        blas_libs="-L$NVPLROOT/lib -lnvpl_blas_lp64_seq -lnvpl_lapack_lp64_seq"
+    else
+        blas_libs="-L$NVPLROOT/lib -lnvpl_blas_lp64_gomp -lnvpl_lapack_lp64_gomp"
+    fi
+    have_blas=1
+    have_nvpl=1
+    echo setting BLAS/LAPACK from NVPLROOT ... $blas_libs
 else
     # check directories in LD_LIBRARY_PATH too
     # (maybe they are already searched by default: useless?)
@@ -240,46 +251,6 @@ else
                     then break ; fi
           done
           ;;
-
-    aarch64:* )
-            #
-            # search for NVPL (NVIDIA Performance Libraries) on NVIDIA Grace CPU
-            #
-            if test "$NVPLROOT" = ""; then
-               NVPLROOT=/opt/nvidia/nvpl
-            fi
-            try_libdirs="$libdirs $NVPLROOT/lib $ld_library_path"
-            for dir in none $try_libdirs
-            do
-                    unset ac_cv_search_dgemm # clear cached value
-                    if test "$dir" = "none"
-                    then
-                            try_loption=" "
-                    else
-                            echo $ECHO_N "in $dir: " $ECHO_C
-                            try_loption="-L$dir"
-                    fi
-                    FFLAGS="$test_fflags"
-                    LDFLAGS="$test_ldflags $try_loption"
-                    if test "$use_openmp" -eq 0; then
-                        AC_SEARCH_LIBS(dgemm, nvpl_blas_lp64_seq,
-                            have_blas=1 have_nvpl=1
-                            blas_libs="$try_loption $LIBS -lnvpl_lapack_lp64_seq"
-                            ldflags="$ldflags",
-                            echo "NVPL not found",
-                            -lnvpl_lapack_lp64_seq)
-                    else
-                        AC_SEARCH_LIBS(dgemm, nvpl_blas_lp64_omp,
-                            have_blas=1 have_nvpl=1
-                            blas_libs="$try_loption $LIBS -lnvpl_lapack_lp64_omp"
-                            ldflags="$ldflags",
-                            echo "NVPL not found",
-                            -lnvpl_lapack_lp64_omp)
-                    fi
-                    if test "$ac_cv_search_dgemm" != "no"
-                    then break ; fi
-            done
-            ;;
 
     # obsolescent or obsolete architectures
     
