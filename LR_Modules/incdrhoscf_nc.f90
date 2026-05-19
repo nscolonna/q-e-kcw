@@ -76,7 +76,7 @@ subroutine incdrhoscf_nc (drhoscf, weight, ik, dbecsum, dpsi, rsign)
 #endif
   !
   !
-  CALL start_clock_gpu ('incdrhoscf')
+  CALL start_clock ('incdrhoscf')
   !
   ALLOCATE (dpsic(dffts%nnr, npol))
   ALLOCATE (psi  (dffts%nnr, npol))
@@ -244,7 +244,7 @@ subroutine incdrhoscf_nc (drhoscf, weight, ik, dbecsum, dpsi, rsign)
      DEALLOCATE(tg_drho)
   END IF
   !
-  CALL stop_clock_gpu ('incdrhoscf')
+  CALL stop_clock ('incdrhoscf')
   !
   RETURN
   !

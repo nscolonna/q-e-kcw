@@ -75,7 +75,7 @@ subroutine compute_dvloc (uact, addnlcc, dvlocin)
   nlp_d  = dfftp%nl
 #endif
   !
-  call start_clock_gpu ('com_dvloc')
+  call start_clock ('com_dvloc')
   !
   !    We start by computing the contribution of the local potential.
   !    The computation of the derivative of the local potential is done in
@@ -187,6 +187,6 @@ subroutine compute_dvloc (uact, addnlcc, dvlocin)
   DEALLOCATE(nlp_d)
 #endif
   !
-  call stop_clock_gpu ('com_dvloc')
+  call stop_clock ('com_dvloc')
   !
 end subroutine compute_dvloc

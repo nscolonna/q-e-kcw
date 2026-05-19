@@ -92,10 +92,10 @@ SUBROUTINE lr_apply_liouvillian( evc1, evc1_new, interaction )
      WRITE(stdout,'("<lr_apply_liouvillian>")')
   ENDIF
   !
-  CALL start_clock_gpu('lr_apply')
+  CALL start_clock('lr_apply')
   !
-  IF (interaction)      CALL start_clock_gpu('lr_apply_int')
-  IF (.not.interaction) CALL start_clock_gpu('lr_apply_no')
+  IF (interaction)      CALL start_clock('lr_apply_int')
+  IF (.not.interaction) CALL start_clock('lr_apply_no')
   !
   ALLOCATE( d_deeq(nhm, nhm, nat, nspin) )
   ALLOCATE( spsi1(npwx, nbnd) )
@@ -355,10 +355,10 @@ SUBROUTINE lr_apply_liouvillian( evc1, evc1_new, interaction )
   DEALLOCATE(spsi1)
   DEALLOCATE(sevc1_new)
   !
-  IF (interaction)      CALL stop_clock_gpu('lr_apply_int')
-  IF (.not.interaction) CALL stop_clock_gpu('lr_apply_no')
+  IF (interaction)      CALL stop_clock('lr_apply_int')
+  IF (.not.interaction) CALL stop_clock('lr_apply_no')
   !
-  CALL stop_clock_gpu('lr_apply')
+  CALL stop_clock('lr_apply')
   !
   RETURN
   !
@@ -403,7 +403,7 @@ CONTAINS
     IF ( interaction ) THEN
        !
        ! 
-       CALL start_clock_gpu('interaction')
+       CALL start_clock('interaction')
        !
        IF (nkb > 0 .and. okvan) THEN
           ! calculation of becp2
@@ -582,7 +582,7 @@ CONTAINS
           !
        ENDIF
        !
-       CALL stop_clock_gpu('interaction')
+       CALL stop_clock('interaction')
        !
     ENDIF
     !
