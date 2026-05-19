@@ -55,6 +55,7 @@ qe_ensure_build_type("Release")
 # Modules
 ###########################################################
 include(CheckFunctionExists)
+include (CheckFortranFunctionExists)
 # Must use GNUInstallDirs to install libraries into correct
 # locations on all platforms.
 include(GNUInstallDirs)
@@ -116,7 +117,7 @@ option(QE_ENABLE_DOC
 option(QE_CLOCK_SECONDS
     "print program time in seconds" OFF)
 set(QE_FFTW_VENDOR "AUTO" CACHE
-    STRING "select a specific FFTW library [Intel_DFTI, Intel_FFTW3, ArmPL, IBMESSL, FFTW3, Internal]")
+    STRING "select a specific FFTW library [Intel_DFTI, Intel_FFTW3, ArmPL, IBMESSL, FFTW3, NVPL, Internal]")
 set(QE_ENABLE_SANITIZER "none" CACHE STRING "none,asan,ubsan,tsan,msan")
 set(QE_ENABLE_PLUGINS "" CACHE STRING "Semicolon-separated list of plugins")
 set (QE_EXTRA_DEFINITIONS "" CACHE STRING "Semicolon-separated list of extra global definitions")
@@ -535,6 +536,9 @@ if(NOT QE_LAPACK_INTERNAL)
             find_package(LAPACK)
             unset(CMAKE_REQUIRED_LINK_OPTIONS)
         endif()
+    elseif(BLA_VENDOR STREQUAL "NVPL")
+        find_package(nvpl REQUIRED COMPONENTS blas lapack)
+        target_link_libraries(qe_lapack INTERFACE nvpl::lapack_lp64_omp)
     else()
         if(QE_ENABLE_OPENMP)
             set(CMAKE_REQUIRED_LINK_OPTIONS ${OpenMP_Fortran_FLAGS})
@@ -555,7 +559,7 @@ if(NOT QE_LAPACK_INTERNAL)
           unset(ZHPEV_FOUND CACHE)
           message(FATAL_ERROR "Incomplete LAPACK! function zhpev not found!")
         endif()
-    else()
+    elseif(NOT BLA_VENDOR STREQUAL "NVPL")
         message(FATAL_ERROR "Failed to find a complete set of external BLAS/LAPACK library by FindLAPACK. "
                             "Variables controlling FindLAPACK can be found at CMake online documentation. "
                             "Alternatively, '-DQE_LAPACK_INTERNAL=ON' may be used to enable reference LAPACK "
