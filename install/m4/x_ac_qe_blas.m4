@@ -9,7 +9,8 @@ have_aocl=0
 have_atlas=0
 have_essl=0
 have_mkl=0
-have_armpl=0 
+have_armpl=0
+have_nvpl=0
 
 if test "$blas_libs" != ""
 then
@@ -237,8 +238,48 @@ else
                     fi
                     if test "$ac_cv_search_dgemm" != "no"
                     then break ; fi
-          done       
+          done
           ;;
+
+    aarch64:* )
+            #
+            # search for NVPL (NVIDIA Performance Libraries) on NVIDIA Grace CPU
+            #
+            if test "$NVPLROOT" = ""; then
+               NVPLROOT=/opt/nvidia/nvpl
+            fi
+            try_libdirs="$libdirs $NVPLROOT/lib $ld_library_path"
+            for dir in none $try_libdirs
+            do
+                    unset ac_cv_search_dgemm # clear cached value
+                    if test "$dir" = "none"
+                    then
+                            try_loption=" "
+                    else
+                            echo $ECHO_N "in $dir: " $ECHO_C
+                            try_loption="-L$dir"
+                    fi
+                    FFLAGS="$test_fflags"
+                    LDFLAGS="$test_ldflags $try_loption"
+                    if test "$use_openmp" -eq 0; then
+                        AC_SEARCH_LIBS(dgemm, nvpl_blas_lp64_seq,
+                            have_blas=1 have_nvpl=1
+                            blas_libs="$try_loption $LIBS -lnvpl_lapack_lp64_seq"
+                            ldflags="$ldflags",
+                            echo "NVPL not found",
+                            -lnvpl_lapack_lp64_seq)
+                    else
+                        AC_SEARCH_LIBS(dgemm, nvpl_blas_lp64_omp,
+                            have_blas=1 have_nvpl=1
+                            blas_libs="$try_loption $LIBS -lnvpl_lapack_lp64_omp"
+                            ldflags="$ldflags",
+                            echo "NVPL not found",
+                            -lnvpl_lapack_lp64_omp)
+                    fi
+                    if test "$ac_cv_search_dgemm" != "no"
+                    then break ; fi
+            done
+            ;;
 
     # obsolescent or obsolete architectures
     
