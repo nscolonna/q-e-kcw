@@ -81,23 +81,30 @@ if test "x$with_cuda" != "xno"; then
       try_dflags="$try_dflags -D__GPU_MPI"
    fi
    cuda_libs="-cudalib=cufft,cublas,cusolver,curand"
-   
+
    cuda_fflags="-cuda -gpu=cc$with_cuda_cc,cuda$with_cuda_runtime"
-   #
-   if test "$enable_nvtx" == "yes"; then
-      try_dflags="$try_dflags -D__PROFILE_NVTX"
-      cuda_fflags="$cuda_fflags -InvToolsExt.h -lnvToolsExt"
-   fi
    # -----------------------------------------
    # Fortran flags
-   # -----------------------------------------   
+   # -----------------------------------------
    runtime_major_version=`echo $with_cuda_runtime | cut -d. -f1`
    runtime_minor_version=`echo $with_cuda_runtime | cut -d. -f2`
-   if test "$runtime_major_version" -lt 10 || 
+   if test "$runtime_major_version" -lt 10 ||
      (test "$runtime_major_version" -eq 10 && test "$runtime_minor_version" -lt 1 )
    then
        # CUDA toolkit v < 10.1: cusolver not available
        AC_MSG_ERROR([Unsupported CUDA Toolkit, too old])
+   fi
+   #
+   if test "$enable_nvtx" == "yes"; then
+      try_dflags="$try_dflags -D__PROFILE_NVTX"
+      if test "$runtime_major_version" -gt 12 || \
+        (test "$runtime_major_version" -eq 12 && test "$runtime_minor_version" -ge 9); then
+         # CUDA >= 12.9: libnvToolsExt.so removed; nvtx3 is header-only
+         cuda_libs="${cuda_libs},nvtx"
+      else
+         # CUDA < 12.9: use legacy shared library
+         cuda_fflags="$cuda_fflags -InvToolsExt.h -lnvToolsExt"
+      fi
    fi
    # -----------------------------------------
    # C flags 
