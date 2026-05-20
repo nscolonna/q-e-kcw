@@ -162,6 +162,8 @@ SUBROUTINE setup()
                                'Non-collinear Meta-GGA not implemented', 1 )
      IF ( ANY (upf(1:ntyp)%nlcc) ) CALL infomsg( 'setup ', 'BEWARE:' // &
                & ' nonlinear core correction is not consistent with meta-GGA')
+     IF ( ANY (upf(1:ntyp)%with_metagga_info) ) CALL infomsg( 'setup ', 'BEWARE:' // &
+               & ' meta-GGA information is present')
   END IF
   !
   ! ... Compute the ionic charge for each atom type and the total ionic charge

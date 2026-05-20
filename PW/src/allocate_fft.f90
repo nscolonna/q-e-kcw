@@ -20,7 +20,7 @@ SUBROUTINE allocate_fft
   USE fft_base,         ONLY : dfftp, dffts
   USE ions_base,        ONLY : nat
   USE lsda_mod,         ONLY : nspin
-  USE scf,              ONLY : rho, v, vnew, vltot, vrs, rho_core, rhog_core, &
+  USE scf,              ONLY : rho, v, vnew, vltot, vrs, rho_core, rhog_core, tau_core, taug_core, &
                                kedtau, create_scf_type
   USE control_flags,    ONLY : gamma_only
   USE noncollin_module, ONLY : pointlist, factlist, report, noncolin, npol
@@ -63,6 +63,8 @@ SUBROUTINE allocate_fft
   ELSE
      ALLOCATE( kedtau(1,nspin) )
   ENDIF
+  ALLOCATE( tau_core(dfftp%nnr) )
+  ALLOCATE( taug_core(ngm) )
   ALLOCATE( rhog_core(ngm)  )
   ALLOCATE( psic(dfftp%nnr) )
   ALLOCATE( vrs(dfftp%nnr,nspin) )

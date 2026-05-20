@@ -19,6 +19,10 @@ build/
 *_tmp.f90
 *.TMP
 *.out
+config.status
+configure.msg
+.gitignore
+compile.sh
 
 bin/*
 FoX
