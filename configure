@@ -4168,8 +4168,9 @@ fi
 
 # Check whether --enable-nvtx was given.
 if test "${enable_nvtx+set}" = set; then :
-  enableval=$enable_nvtx;
-   enable_nvtx=no
+  enableval=$enable_nvtx; enable_nvtx=$enableval
+else
+  enable_nvtx=no
 fi
 
 

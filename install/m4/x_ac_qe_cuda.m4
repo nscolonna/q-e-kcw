@@ -48,7 +48,7 @@ AC_ARG_WITH([cuda-mpi],
 
 AC_ARG_ENABLE([nvtx],
    [AS_HELP_STRING([--enable-nvtx],[Enable compilation for NVTX @<:@default=no@:>@])],
-   []
+   [enable_nvtx=$enableval],
    [enable_nvtx=no])
 
 if test "x$with_cuda" != "xno"; then
