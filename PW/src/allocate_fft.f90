@@ -63,8 +63,13 @@ SUBROUTINE allocate_fft
   ELSE
      ALLOCATE( kedtau(1,nspin) )
   ENDIF
-  ALLOCATE( tau_core(dfftp%nnr) )
-  ALLOCATE( taug_core(ngm) )
+  IF ( xclib_dft_is('meta') ) THEN
+     ALLOCATE( tau_core(dfftp%nnr) )
+     ALLOCATE( taug_core(ngm) )
+  ELSE
+     ALLOCATE( tau_core(1) )
+     ALLOCATE( taug_core(1) )
+  ENDIF
   ALLOCATE( rhog_core(ngm)  )
   ALLOCATE( psic(dfftp%nnr) )
   ALLOCATE( vrs(dfftp%nnr,nspin) )

@@ -64,10 +64,12 @@ SUBROUTINE v_of_rho( rho, rho_core, rhog_core, tau_core, &
   ! ... calculate exchange-correlation potential
   !
   !$acc data copyin(rho,v)
-  !$acc data copyin(rho%of_r,rho%of_g,rho_core,rhog_core,tau_core) copyout(v%of_r,v%kin_r)
+  !$acc data copyin(rho%of_r,rho%of_g,rho_core,rhog_core) copyout(v%of_r,v%kin_r)
   !
   IF (xclib_dft_is('meta')) THEN
+     !$acc data copyin(tau_core)
      CALL v_xc_meta( rho, rho_core, rhog_core, tau_core, etxc, vtxc, v%of_r, v%kin_r )
+     !$acc end data
   ELSE
      CALL v_xc( rho, rho_core, rhog_core, etxc, vtxc, v%of_r )
   ENDIF
