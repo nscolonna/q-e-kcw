@@ -1,5 +1,5 @@
 !
-! Copyright (C) 2001-2016 Quantum ESPRESSO group
+! Copyright (C) 2001-2026 Quantum ESPRESSO group
 ! This file is distributed under the terms of the
 ! GNU General Public License. See the file `License'
 ! in the root directory of the present distribution,
@@ -105,7 +105,8 @@ subroutine dvqpsi_us (ik, uact, addnlcc, becp1, alphap)
   ! Compute dV_loc/dtau in real space
   !
   IF (.NOT. lmultipole) THEN
-    CALL compute_dvloc (uact, addnlcc, dvlocin)
+     CALL compute_dvloc (uact, .false., dvlocin)
+     if (addnlcc) CALL compute_dvloc_cc(uact, dvlocin)
   ELSE
     ! Bring potential in reciprocal space
     !$acc host_data use_device(dvlocin)
