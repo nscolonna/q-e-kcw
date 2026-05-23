@@ -2359,10 +2359,9 @@ if test "${with_cuda+set}" = set; then :
 $as_echo "$as_me: WARNING: --with-cuda is obsolete, use --with-gpu=cuda instead" >&2;}
        with_gpu=1
    fi
-else
-  with_gpu=0
 fi
 
+# do not set the default with_gpu=0 here, it breaks the result of --with-gpu
 
 
 

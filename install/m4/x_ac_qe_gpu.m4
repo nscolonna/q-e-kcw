@@ -20,6 +20,7 @@ AC_ARG_WITH(cuda,
        AC_MSG_WARN([--with-cuda is obsolete, use --with-gpu=cuda instead])
        with_gpu=1
    fi],
-   [with_gpu=0])
+   [])
+# do not set the default with_gpu=0 here, it breaks the result of --with-gpu 
    
 ])
