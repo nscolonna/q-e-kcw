@@ -55,6 +55,7 @@ qe_ensure_build_type("Release")
 # Modules
 ###########################################################
 include(CheckFunctionExists)
+include(CheckFortranFunctionExists)
 # Must use GNUInstallDirs to install libraries into correct
 # locations on all platforms.
 include(GNUInstallDirs)
@@ -116,7 +117,7 @@ option(QE_ENABLE_DOC
 option(QE_CLOCK_SECONDS
     "print program time in seconds" OFF)
 set(QE_FFTW_VENDOR "AUTO" CACHE
-    STRING "select a specific FFTW library [Intel_DFTI, Intel_FFTW3, ArmPL, IBMESSL, FFTW3, Internal]")
+    STRING "select a specific FFTW library [Intel_DFTI, Intel_FFTW3, ArmPL, IBMESSL, FFTW3, NVPL, Internal]")
 set(QE_ENABLE_SANITIZER "none" CACHE STRING "none,asan,ubsan,tsan,msan")
 set(QE_ENABLE_PLUGINS "" CACHE STRING "Semicolon-separated list of plugins")
 set (QE_EXTRA_DEFINITIONS "" CACHE STRING "Semicolon-separated list of extra global definitions")
@@ -535,6 +536,19 @@ if(NOT QE_LAPACK_INTERNAL)
             find_package(LAPACK)
             unset(CMAKE_REQUIRED_LINK_OPTIONS)
         endif()
+    elseif(BLA_VENDOR STREQUAL "NVPL")
+        find_package(nvpl REQUIRED COMPONENTS blas lapack)
+        if(QE_ENABLE_OPENMP)
+            set(QE_NVPL_LAPACK_TARGET nvpl::lapack_lp64_omp)
+        else()
+            set(QE_NVPL_LAPACK_TARGET nvpl::lapack_lp64_seq)
+        endif()
+        get_target_property(_nvpl_real ${QE_NVPL_LAPACK_TARGET} ALIASED_TARGET)
+        set_target_properties(${_nvpl_real} PROPERTIES IMPORTED_GLOBAL TRUE)
+        add_library(LAPACK::LAPACK INTERFACE IMPORTED GLOBAL)
+        set_target_properties(LAPACK::LAPACK PROPERTIES
+            INTERFACE_LINK_LIBRARIES ${_nvpl_real})
+        set(LAPACK_FOUND TRUE)
     else()
         if(QE_ENABLE_OPENMP)
             set(CMAKE_REQUIRED_LINK_OPTIONS ${OpenMP_Fortran_FLAGS})
@@ -590,7 +604,6 @@ if(QE_ENABLE_SCALAPACK)
             ${SCALAPACK_LIBRARIES}
             ${SCALAPACK_LINKER_FLAGS})
     if(QE_ENABLE_SCALAPACK_QRCP)
-        include(CheckFortranFunctionExists)
         set(CMAKE_REQUIRED_LIBRARIES "${SCALAPACK_LIBRARIES}")
         check_fortran_function_exists("pzgeqpf" SCALAPACK_PZGEQPF_WORKS)
         unset(CMAKE_REQUIRED_LIBRARIES)
@@ -733,10 +746,9 @@ endif(QE_ENABLE_TEST)
 add_library(qe_ext_prof_tool INTERFACE)
 qe_install_targets(qe_ext_prof_tool)
 ###########################################################
-# this should work with nvfortran
 if(QE_ENABLE_PROFILE_NVTX)
-   target_link_libraries(qe_ext_prof_tool
-	INTERFACE
+    target_link_libraries(qe_ext_prof_tool
+        INTERFACE
         CUDA::nvToolsExt)
 endif(QE_ENABLE_PROFILE_NVTX)
 

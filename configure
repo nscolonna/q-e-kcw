@@ -737,7 +737,6 @@ infodir
 docdir
 oldincludedir
 includedir
-runstatedir
 localstatedir
 sharedstatedir
 sysconfdir
@@ -838,7 +837,6 @@ datadir='${datarootdir}'
 sysconfdir='${prefix}/etc'
 sharedstatedir='${prefix}/com'
 localstatedir='${prefix}/var'
-runstatedir='${localstatedir}/run'
 includedir='${prefix}/include'
 oldincludedir='/usr/include'
 docdir='${datarootdir}/doc/${PACKAGE_TARNAME}'
@@ -1091,15 +1089,6 @@ do
   | -silent | --silent | --silen | --sile | --sil)
     silent=yes ;;
 
-  -runstatedir | --runstatedir | --runstatedi | --runstated \
-  | --runstate | --runstat | --runsta | --runst | --runs \
-  | --run | --ru | --r)
-    ac_prev=runstatedir ;;
-  -runstatedir=* | --runstatedir=* | --runstatedi=* | --runstated=* \
-  | --runstate=* | --runstat=* | --runsta=* | --runst=* | --runs=* \
-  | --run=* | --ru=* | --r=*)
-    runstatedir=$ac_optarg ;;
-
   -sbindir | --sbindir | --sbindi | --sbind | --sbin | --sbi | --sb)
     ac_prev=sbindir ;;
   -sbindir=* | --sbindir=* | --sbindi=* | --sbind=* | --sbin=* \
@@ -1237,7 +1226,7 @@ fi
 for ac_var in	exec_prefix prefix bindir sbindir libexecdir datarootdir \
 		datadir sysconfdir sharedstatedir localstatedir includedir \
 		oldincludedir docdir infodir htmldir dvidir pdfdir psdir \
-		libdir localedir mandir runstatedir
+		libdir localedir mandir
 do
   eval ac_val=\$$ac_var
   # Remove trailing slashes.
@@ -1390,7 +1379,6 @@ Fine tuning of the installation directories:
   --sysconfdir=DIR        read-only single-machine data [PREFIX/etc]
   --sharedstatedir=DIR    modifiable architecture-independent data [PREFIX/com]
   --localstatedir=DIR     modifiable single-machine data [PREFIX/var]
-  --runstatedir=DIR       modifiable per-process data [LOCALSTATEDIR/run]
   --libdir=DIR            object code libraries [EPREFIX/lib]
   --includedir=DIR        C header files [PREFIX/include]
   --oldincludedir=DIR     C header files for non-gcc [/usr/include]
@@ -4180,8 +4168,9 @@ fi
 
 # Check whether --enable-nvtx was given.
 if test "${enable_nvtx+set}" = set; then :
-  enableval=$enable_nvtx;
-   enable_nvtx=no
+  enableval=$enable_nvtx; enable_nvtx=$enableval
+else
+  enable_nvtx=no
 fi
 
 
@@ -4246,11 +4235,6 @@ fi
    cuda_libs="-cudalib=cufft,cublas,cusolver,curand"
 
    cuda_fflags="-cuda -gpu=cc$with_cuda_cc,cuda$with_cuda_runtime"
-   #
-   if test "$enable_nvtx" == "yes"; then
-      try_dflags="$try_dflags -D__PROFILE_NVTX"
-      cuda_fflags="$cuda_fflags -InvToolsExt.h -lnvToolsExt"
-   fi
    # -----------------------------------------
    # Fortran flags
    # -----------------------------------------
@@ -4261,6 +4245,18 @@ fi
    then
        # CUDA toolkit v < 10.1: cusolver not available
        as_fn_error $? "Unsupported CUDA Toolkit, too old" "$LINENO" 5
+   fi
+   #
+   if test "$enable_nvtx" == "yes"; then
+      try_dflags="$try_dflags -D__PROFILE_NVTX"
+      if test "$runtime_major_version" -gt 12 || \
+        (test "$runtime_major_version" -eq 12 && test "$runtime_minor_version" -ge 9); then
+         # CUDA >= 12.9: libnvToolsExt.so removed; nvtx3 is header-only
+         cuda_libs="${cuda_libs},nvtx"
+      else
+         # CUDA < 12.9: use legacy shared library
+         cuda_fflags="$cuda_fflags -InvToolsExt.h -lnvToolsExt"
+      fi
    fi
    # -----------------------------------------
    # C flags
@@ -4350,11 +4346,23 @@ have_atlas=0
 have_essl=0
 have_mkl=0
 have_armpl=0
+have_nvpl=0
 
 if test "$blas_libs" != ""
 then
     echo setting BLAS from \$BLAS_LIBS with no check ...  $blas_libs
     have_blas=1
+elif test "$NVPLROOT" != ""; then
+    # NVPLROOT explicitly set on aarch64: assume NVPL without testing
+    # (link-time probes fail due to unresolved OpenMP/runtime deps)
+    if test "$use_openmp" -eq 0; then
+        blas_libs="-L$NVPLROOT/lib -lnvpl_blas_lp64_seq -lnvpl_lapack_lp64_seq"
+    else
+        blas_libs="-L$NVPLROOT/lib -lnvpl_blas_lp64_gomp -lnvpl_lapack_lp64_gomp"
+    fi
+    have_blas=1
+    have_nvpl=1
+    echo setting BLAS/LAPACK from NVPLROOT ... $blas_libs
 else
     # check directories in LD_LIBRARY_PATH too
     # (maybe they are already searched by default: useless?)
@@ -5119,7 +5127,7 @@ blas_line="BLAS_LIBS=$blas_libs"
 # Checking LAPACK...
 
 
-if test "$have_mkl" -ne 0 || test "$have_armpl" -ne 0 || test "$have_aocl" -ne 0 || test "$have_essl" -ne 0
+if test "$have_mkl" -ne 0 || test "$have_armpl" -ne 0 || test "$have_aocl" -ne 0 || test "$have_essl" -ne 0 || test "$have_nvpl" -ne 0
 then
    # MKL or ARM libraries or AOCL or ESSL (obsolete?) found:
    # no need to check for lapack
@@ -5322,6 +5330,13 @@ if test "$fft_libs" = ""; then
    elif test "$have_armpl" -eq 1; then
       # no check needed if ARM libraries have been detected
       try_dflags="$try_dflags -D__FFTW3"
+      have_fft=1
+
+   elif test "$have_nvpl" -eq 1; then
+      # no check needed if NVPL libraries have been detected
+      # NVPL provides an FFTW3-compatible FFT interface
+      try_dflags="$try_dflags -D__FFTW3"
+      fft_libs="-L$NVPLROOT/lib -lnvpl_fftw"
       have_fft=1
 
    elif test "$have_essl" -eq 1; then
