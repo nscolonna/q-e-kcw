@@ -55,7 +55,7 @@ qe_ensure_build_type("Release")
 # Modules
 ###########################################################
 include(CheckFunctionExists)
-include (CheckFortranFunctionExists)
+include(CheckFortranFunctionExists)
 # Must use GNUInstallDirs to install libraries into correct
 # locations on all platforms.
 include(GNUInstallDirs)
@@ -604,7 +604,6 @@ if(QE_ENABLE_SCALAPACK)
             ${SCALAPACK_LIBRARIES}
             ${SCALAPACK_LINKER_FLAGS})
     if(QE_ENABLE_SCALAPACK_QRCP)
-        include(CheckFortranFunctionExists)
         set(CMAKE_REQUIRED_LIBRARIES "${SCALAPACK_LIBRARIES}")
         check_fortran_function_exists("pzgeqpf" SCALAPACK_PZGEQPF_WORKS)
         unset(CMAKE_REQUIRED_LIBRARIES)
@@ -748,9 +747,9 @@ add_library(qe_ext_prof_tool INTERFACE)
 qe_install_targets(qe_ext_prof_tool)
 ###########################################################
 if(QE_ENABLE_PROFILE_NVTX)
-   target_link_libraries(qe_ext_prof_tool 
-	   INTERFACE 
-	   CUDA::nvToolsExt)
+    target_link_libraries(qe_ext_prof_tool
+        INTERFACE
+        CUDA::nvToolsExt)
 endif(QE_ENABLE_PROFILE_NVTX)
 
 ###########################################################
