@@ -58,6 +58,7 @@ SUBROUTINE allocate_fft
   !
   ALLOCATE( vltot(dfftp%nnr) )
   ALLOCATE( rho_core(dfftp%nnr) )
+  !$acc enter data create(rho_core)
   IF ( xclib_dft_is('meta') ) THEN
      ALLOCATE( kedtau(dffts%nnr,nspin) )
   ELSE
@@ -70,6 +71,7 @@ SUBROUTINE allocate_fft
      ALLOCATE( tau_core(1) )
      ALLOCATE( taug_core(1) )
   ENDIF
+  !$acc enter data create(tau_core)
   ALLOCATE( rhog_core(ngm)  )
   ALLOCATE( psic(dfftp%nnr) )
   ALLOCATE( vrs(dfftp%nnr,nspin) )

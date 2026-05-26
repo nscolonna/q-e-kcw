@@ -61,7 +61,7 @@ SUBROUTINE set_rhoc
       ENDIF
      !
      ALLOCATE (rhocg( ngl))
-     !$acc data create(rhocg) copyin(gl, strf, rhog_core, rho_core, taug_core, tau_core) present(igtongl)
+     !$acc data create(rhocg) copyin(gl, strf, rhog_core, taug_core) present(igtongl, rho_core, tau_core)
      !
      !    the sum is on atom types
      !
@@ -96,9 +96,11 @@ SUBROUTINE set_rhoc
      !
      IF (ANY( upf(1:ntyp)%nlcc)) THEN
          CALL rho_g2r( dfftp, rhog_core, rho_core )
+         !$acc update host(rho_core)
      ENDIF
      IF (ANY( upf(1:ntyp)%with_metagga_info)) THEN
          CALL rho_g2r( dfftp, taug_core, tau_core )
+         !$acc update host(tau_core)
      ENDIF
      !
      !    test on the charge and computation of the core energy
@@ -142,7 +144,7 @@ SUBROUTINE set_rhoc
      ! 9000 format (5x,'core-only xc energy         = ',f15.8,' Ry')
      !   WRITE( stdout,  * ) 'BEWARE it will be subtracted from total energy !'
      !
-   !$acc exit data copyout(rho_core, rhog_core, tau_core, taug_core)
+   !$acc exit data copyout(rhog_core, taug_core)
      !$acc end data
      DEALLOCATE (rhocg)
   END IF

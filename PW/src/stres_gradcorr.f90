@@ -53,7 +53,7 @@ SUBROUTINE stres_gradcorr( rho, rho_core, rhog_core, nspin, domag, &
   IF ( .NOT. xclib_dft_is('gradient') .AND. .NOT. xclib_dft_is('meta') ) RETURN
   !
   !
-  !$acc data present_or_copyin( rho, rho%of_r, rho%of_g, rho_core, rhog_core, g )
+  !$acc data present_or_copyin( rho, rho%of_r, rho%of_g, rho_core, rhog_core, g, tau_core )
   !
   np = 1
   IF ( nspin==2 .AND. xclib_dft_is('meta') ) np = 3
