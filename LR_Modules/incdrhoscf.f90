@@ -54,20 +54,7 @@ subroutine incdrhoscf (drhoscf, weight, ik, dbecsum, dpsi)
   INTEGER :: ibnd, ir, ir3, ig, incr, v_siz, idx, ioff, ioff_tg, nxyp, sum_siz
   INTEGER :: right_inc, ntgrp
   ! counters
-
-  ! For device buffer 
-#if defined(__CUDA)
-  INTEGER, POINTER, DEVICE :: nl_d(:)
   !
-  nl_d  => dffts%nl_d
-#else
-  INTEGER, ALLOCATABLE :: nl_d(:)
-  !
-  ALLOCATE( nl_d(dffts%ngm) )
-  nl_d  = dffts%nl
-#endif
-  
-
   CALL start_clock ('incdrhoscf')
   !
   ALLOCATE(dpsic(dffts%nnr))
@@ -98,7 +85,8 @@ subroutine incdrhoscf (drhoscf, weight, ik, dbecsum, dpsi)
   ! dpsi contains the   perturbed wavefunctions of this k point
   ! evc  contains the unperturbed wavefunctions of this k point
   !
-  !$acc data present_or_copyin(dpsi(1:npwx,1:nbnd)) present_or_copy(drhoscf(1:v_siz)) create(psi(1:v_siz),dpsic(1:v_siz)) present(igk_k) deviceptr(nl_d)
+  !$acc data present_or_copyin(dpsi) present_or_copy(drhoscf) &
+  !$acc      create(psi,dpsic) present(igk_k) 
   do ibnd = 1, nbnd_occ(ikk), incr
      !
      IF ( dffts%has_task_groups ) THEN
@@ -153,14 +141,14 @@ subroutine incdrhoscf (drhoscf, weight, ik, dbecsum, dpsi)
         dpsic(:) = (0.d0, 0.d0)
         !$acc end kernels
         !
-        !$acc parallel loop 
+        !$acc parallel loop present(dffts,dffts%nl)
         do ig = 1, npw
-           itmp = nl_d (igk_k(ig,ikk) )
+           itmp = dffts%nl (igk_k(ig,ikk) )
            psi (itmp ) = evc (ig, ibnd)
         enddo
-        !$acc parallel loop
+        !$acc parallel loop present(dffts,dffts%nl)
         do ig = 1, npwq
-           itmp = nl_d (igk_k(ig,ikq) )
+           itmp = dffts%nl (igk_k(ig,ikq) )
            dpsic ( itmp ) = dpsi (ig, ibnd)
         enddo
         !
