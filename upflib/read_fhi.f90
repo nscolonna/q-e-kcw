@@ -222,6 +222,7 @@ SUBROUTINE convert_fhi (upf)
   upf%tcoulombp=.false.
   upf%is_gth=.false.
   upf%is_multiproj=.false.
+  upf%with_metagga_info=.false.
   !
   IF (pspxc == 7) THEN
      upf%dft = 'SLA-PW'

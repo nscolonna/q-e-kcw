@@ -151,6 +151,7 @@ CONTAINS
     upf%q_with_l = .false.
     upf%has_wfc = .false.
     upf%has_gipaw = .false.
+    upf%with_metagga_info = .false.
 ! NC-PP in this format are assumed not to be multi-projector
     upf%is_multiproj = .false.
     !
@@ -708,6 +709,7 @@ CONTAINS
     upf%q_with_l = .false.
     upf%has_wfc = .false.
     upf%has_gipaw = .false.
+    upf%with_metagga_info = .false.
     !
     if ( upf%tvanp ) then
        upf%generated = &

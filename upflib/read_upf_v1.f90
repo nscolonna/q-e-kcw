@@ -54,6 +54,7 @@ SUBROUTINE read_upf_v1 ( file_pseudo, upf, ierr )
   upf%q_with_l=.false.
   upf%has_so=.false.
   upf%has_gipaw = .false.
+  upf%with_metagga_info = .false.
   addinfo_loop: do while (ios == 0)  
      read (iunps, *, iostat = ios, err = 200) dummy  
      if (matches ("<PP_ADDINFO>", dummy) ) then

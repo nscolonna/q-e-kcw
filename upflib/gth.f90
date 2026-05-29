@@ -500,6 +500,7 @@ subroutine readgth (psfile, np, upf, ierr)
   upf%has_so=.false.
   upf%has_gipaw=.false.
   upf%has_wfc=.false.
+  upf%with_metagga_info=.false.
   upf%rel = 'scalar'
   upf%typ = 'NC'
   upf%lmax_rho = 0
