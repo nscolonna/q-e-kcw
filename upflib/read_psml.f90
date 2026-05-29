@@ -148,6 +148,7 @@ CONTAINS
     upf%has_so = .false.
     upf%has_gipaw = .false.
     upf%paw_as_gipaw = .false.
+    upf%with_metagga_info = .false.
     upf%tcoulombp = .false.
     upf%is_gth = .false.
     upf%is_multiproj = .false.

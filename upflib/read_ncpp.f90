@@ -278,6 +278,7 @@ subroutine read_ncpp (iunps, upf, ierr)
   upf%tcoulombp=.false.
   upf%is_gth=.false.
   upf%is_multiproj=.false.
+  upf%with_metagga_info=.false.
   !
   ! Set additional, not present, variables to dummy values
   allocate(upf%els(upf%nwfc), upf%nchi(upf%nwfc), upf%epseu(upf%nwfc))
