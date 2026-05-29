@@ -42,9 +42,15 @@ SUBROUTINE set_rhoc
   ! counter on g vectors
 
   rhog_core(:) = 0.0_DP
-  rho_core(:)  = 0.0_DP
   taug_core(:) = 0.0_DP
-  tau_core(:) = 0.0_DP
+  !$acc parallel loop present(rho_core)
+  DO ir = 1, dfftp%nnr
+     rho_core(ir) = 0.0_DP
+  END DO
+  !$acc parallel loop present(tau_core)
+  DO ir = 1, SIZE(tau_core)
+     tau_core(ir) = 0.0_DP
+  END DO
 
   IF ( ANY( upf(1:ntyp)%nlcc ) .OR. ANY( upf(1:ntyp)%with_metagga_info ) ) THEN
      !
@@ -94,14 +100,10 @@ SUBROUTINE set_rhoc
         ENDIF
      ENDDO
      !
-     IF (ANY( upf(1:ntyp)%nlcc)) THEN
+     IF (ANY( upf(1:ntyp)%nlcc)) &
          CALL rho_g2r( dfftp, rhog_core, rho_core )
-         !$acc update host(rho_core)
-     ENDIF
-     IF (ANY( upf(1:ntyp)%with_metagga_info)) THEN
+     IF (ANY( upf(1:ntyp)%with_metagga_info)) &
          CALL rho_g2r( dfftp, taug_core, tau_core )
-         !$acc update host(tau_core)
-     ENDIF
      !
      !    test on the charge and computation of the core energy
      !
@@ -148,6 +150,7 @@ SUBROUTINE set_rhoc
      !$acc end data
      DEALLOCATE (rhocg)
   END IF
+  !$acc update host(rho_core, tau_core)
   !
   RETURN
 
