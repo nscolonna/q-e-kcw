@@ -1,5 +1,5 @@
 !
-! Copyright (C) 2001-2016 Quantum ESPRESSO group
+! Copyright (C) 2001-2026 Quantum ESPRESSO group
 ! This file is distributed under the terms of the
 ! GNU General Public License. See the file `License'
 ! in the root directory of the present distribution,
@@ -9,19 +9,17 @@
 subroutine incdrhoscf_nc (drhoscf, weight, ik, dbecsum, dpsi, rsign)
   !-----------------------------------------------------------------------
   !
-  !     This routine computes the change of the charge density due to the
-  !     perturbation. It is called at the end of the computation of the
-  !     change of the wavefunction for a given k point.
+  !     Non-colinear version of incdrhoscf_nc
   !
   USE kinds,                ONLY : DP
-  USE ions_base,            ONLY : nat
   USE cell_base,            ONLY : omega
+  USE ions_base,            ONLY : nat
   USE fft_base,             ONLY : dffts
   USE fft_interfaces,       ONLY : invfft
+  USE wvfct,                ONLY : npwx, nbnd
+  USE uspp_param,           ONLY : nhm
   USE lsda_mod,             ONLY : nspin
   USE noncollin_module,     ONLY : npol, domag, nspin_mag
-  USE uspp_param,           ONLY : nhm
-  USE wvfct,                ONLY : npwx, nbnd
   USE wavefunctions, ONLY : evc
   USE klist,                ONLY : ngk,igk_k
   USE qpoint,               ONLY : ikks, ikqs
@@ -46,7 +44,7 @@ subroutine incdrhoscf_nc (drhoscf, weight, ik, dbecsum, dpsi, rsign)
   COMPLEX(DP), INTENT(INOUT) :: drhoscf (dffts%nnr,nspin_mag), dbecsum (nhm,nhm,nat,nspin)
   ! input/output: the accumulated change of the charge density and dbecsum
   !
-  !   here the local variable
+  !   here the local variables
   !
   REAL(DP) :: wgt
   ! the effective weight of the k point
@@ -62,24 +60,8 @@ subroutine incdrhoscf_nc (drhoscf, weight, ik, dbecsum, dpsi, rsign)
   INTEGER :: ntgrp, right_inc
   ! counters
   !
-  ! For device buffer
-#if defined(__CUDA)
-  INTEGER, POINTER, DEVICE :: nl_d(:)
-  !
-  nl_d  => dffts%nl_d
-  !$acc update device(evc) 
-#else
-  INTEGER, ALLOCATABLE :: nl_d(:)
-  !
-  ALLOCATE( nl_d(dffts%ngm) )
-  nl_d  = dffts%nl
-#endif
-  !
   !
   CALL start_clock ('incdrhoscf')
-  !
-  ALLOCATE (dpsic(dffts%nnr, npol))
-  ALLOCATE (psi  (dffts%nnr, npol))
   !
   wgt = 2.d0 * weight / omega
   ikk = ikks(ik)
@@ -88,7 +70,12 @@ subroutine incdrhoscf_nc (drhoscf, weight, ik, dbecsum, dpsi, rsign)
   npwq= ngk(ikq)
   incr = 1
   !
+  ! dpsi contains the   perturbed wavefunctions of this k point
+  ! evc  contains the unperturbed wavefunctions of this k point
+  !
   IF (dffts%has_task_groups) THEN
+     !
+     ! calculation with task groups (no GPU acceleration)
      !
      v_siz = dffts%nnr_tg
      !
@@ -98,20 +85,7 @@ subroutine incdrhoscf_nc (drhoscf, weight, ik, dbecsum, dpsi, rsign)
      !
      incr  = fftx_ntgrp(dffts)
      !
-  ELSE
-     v_siz = dffts%nnr
-  ENDIF
-  !
-  ! dpsi contains the   perturbed wavefunctions of this k point
-  ! evc  contains the unperturbed wavefunctions of this k point
-  !
-  !$acc data copyin(dpsi(1:npwx*npol,1:nbnd)) copy(drhoscf(1:v_siz,1:nspin_mag)) create(psi(1:v_siz,1:npol),dpsic(1:v_siz,1:npol)) present(igk_k) deviceptr(nl_d)
-  do ibnd = 1, nbnd_occ(ikk), incr
-
-     IF (dffts%has_task_groups) THEN
-#if defined(__CUDA)
-        CALL errore( ' incdrhoscf_nc ', ' taskgroup par not implement with GPU offload', 1 )
-#endif
+     do ibnd = 1, nbnd_occ(ikk), incr
         !
         tg_drho=(0.0_DP, 0.0_DP)
         tg_psi=(0.0_DP, 0.0_DP)
@@ -167,9 +141,23 @@ subroutine incdrhoscf_nc (drhoscf, weight, ik, dbecsum, dpsi, rsign)
         !
         CALL tg_reduce_rho( drhoscf, tg_drho, dffts )
         !
-     ELSE
-        !
-        ! Normal case: no task groups
+     end do
+     !
+     DEALLOCATE(tg_psi)
+     DEALLOCATE(tg_dpsi)
+     DEALLOCATE(tg_drho)
+     !
+  ELSE
+     !
+     ! Default calculation, OpenACC-enabled for GPU execution
+     !
+     ALLOCATE (dpsic(dffts%nnr, npol))
+     ALLOCATE (psi  (dffts%nnr, npol))
+     !
+     !$acc data present_or_copyin(dpsi) present_or_copy(drhoscf) &
+     !$acc      create(psi,dpsic) present(igk_k)
+     !
+     do ibnd = 1, nbnd_occ(ikk), incr
         !
         ! Initialize psi and dpsic
         !
@@ -178,15 +166,15 @@ subroutine incdrhoscf_nc (drhoscf, weight, ik, dbecsum, dpsi, rsign)
         dpsic (:,:) = (0.d0, 0.d0)
         !$acc end kernels
         !
-        !$acc parallel loop
+        !$acc parallel loop present(dffts,dffts%nl)
         do ig = 1, npw
-           itmp = nl_d ( igk_k(ig,ikk) )
+           itmp = dffts%nl ( igk_k(ig,ikk) )
            psi (itmp, 1) = evc (ig, ibnd)
            psi (itmp, 2) = evc (ig+npwx, ibnd)
         enddo
-        !$acc parallel loop
+        !$acc parallel loop present(dffts,dffts%nl)
         do ig = 1, npwq
-           itmp = nl_d (igk_k(ig,ikq))
+           itmp = dffts%nl (igk_k(ig,ikq))
            dpsic (itmp, 1 ) = dpsi (ig, ibnd)
            dpsic (itmp, 2 ) = dpsi (ig+npwx, ibnd)
         enddo
@@ -205,13 +193,13 @@ subroutine incdrhoscf_nc (drhoscf, weight, ik, dbecsum, dpsi, rsign)
         ! Calculation of the response charge density
         !
         !$acc parallel loop
-        do ir = 1, v_siz
+        do ir = 1, dffts%nnr
            drhoscf(ir,1)=drhoscf(ir,1)+wgt*(CONJG(psi(ir,1))*dpsic(ir,1)  +  &
                                             CONJG(psi(ir,2))*dpsic(ir,2) )
         enddo
         IF (domag) THEN
            !$acc parallel loop
-           do ir = 1, v_siz
+           do ir = 1, dffts%nnr
               drhoscf(ir,2)=drhoscf (ir,2) + (rsign) *wgt * (CONJG(psi(ir,1))*dpsic(ir,2) &
                                                   + CONJG(psi(ir,2))*dpsic(ir,1) )
               drhoscf(ir,3)=drhoscf (ir,3) + (rsign) *wgt * (CONJG(psi(ir,1))*dpsic(ir,2) &
@@ -221,10 +209,12 @@ subroutine incdrhoscf_nc (drhoscf, weight, ik, dbecsum, dpsi, rsign)
            enddo
         END IF
         !
-     END IF
+     enddo
+     !$acc end data
+     DEALLOCATE(psi)
+     DEALLOCATE(dpsic)
      !
-  enddo
-  !$acc end data
+  END IF
   !
   ! Ultrasoft contribution
   ! Calculate dbecsum_nc = <evc|vkb><vkb|dpsi>
@@ -234,15 +224,6 @@ subroutine incdrhoscf_nc (drhoscf, weight, ik, dbecsum, dpsi, rsign)
   ELSE
      CALL addusdbec_nc (ik, weight, dpsi, dbecsum, becpt)
   ENDIF
-  !
-  DEALLOCATE(psi)
-  DEALLOCATE(dpsic)
-  !
-  IF (dffts%has_task_groups) THEN
-     DEALLOCATE(tg_psi)
-     DEALLOCATE(tg_dpsi)
-     DEALLOCATE(tg_drho)
-  END IF
   !
   CALL stop_clock ('incdrhoscf')
   !
