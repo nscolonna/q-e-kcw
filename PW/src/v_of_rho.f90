@@ -231,7 +231,7 @@ SUBROUTINE v_xc_meta( rho, rho_core, rhog_core, tau_core, etxc, vtxc, v, kedtaur
     !
     ALLOCATE( rhotot(dfftp%nnr, 1) )
     !$acc data create( rhotot )
-    !$acc parallel loop present( rho_core )
+    !$acc parallel loop present( rho_core, rho, rho%of_r )
     DO k = 1, dfftp_nnr
       rhotot(k,1) = rho%of_r(k,1) + rho_core(k)
     ENDDO
