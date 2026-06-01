@@ -4,7 +4,6 @@ amass(1) = 55.8457
 dvscf_dir = 'save'
 
 etf_mem = 0
-epw_memdist = .true.
 lopt_w2b = .true.
 
 elph = .true.

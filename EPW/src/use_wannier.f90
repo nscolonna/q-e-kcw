@@ -35,7 +35,7 @@
                                nsmear, ii_partion, nqc1, nqc2, nqc3, assume_metal, &
                                eliashberg, meshnum, time_rev_U_plrn, lwfpt, ii_g,  &
                                start_mesh, ii_lscreen, isk_dummy, lopt_w2b, lsda,  &
-                               explrn, gb_scattering, lfast_kmesh, epw_memdist,    &
+                               explrn, gb_scattering, lfast_kmesh,                 &
                                plot_explrn_e, plot_explrn_h, dos_tetra, a2f_iso,   &
                                prtvkk, prteigdiff, prtuf
   USE control_flags,    ONLY : iverbosity

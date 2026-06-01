@@ -2907,7 +2907,7 @@
     !! adopted for the electronic case (nmodes -> nmodes etc)
     !!
     USE kinds,            ONLY : DP
-    USE input,            ONLY : etf_mem, use_ws, lopt_w2b, epw_memdist
+    USE input,            ONLY : etf_mem, use_ws, lopt_w2b
     USE global_var,       ONLY : epmatwp, irn_start, irn_stop, irg_start, &
                                  irg_stop, nirg_loc
     USE ep_constants,     ONLY : twopi, ci, czero, cone

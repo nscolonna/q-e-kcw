@@ -90,7 +90,7 @@
                             plot_explrn_h, only_c_explrn, only_v_explrn,      &
                             step_k1_explrn, step_k2_explrn, step_k3_explrn,   &
                             only_pos_modes_explrn, dtau_max_plrn,             &
-                            lfast_kmesh, epw_memdist, a2f_iso,                &
+                            lfast_kmesh, a2f_iso,                             &
                             acoustic_plrn, cal_acous_plrn, dos_tetra, fd,     &
                             ltrans_crta, sr_crta, prtvkk, prteigdiff,         &
                             plot_psir_plrn, lsign_psir_plrn,                  & 
@@ -217,7 +217,6 @@
   CALL mp_bcast(calc_nelec_wann , meta_ionode_id, world_comm)
   CALL mp_bcast(lopt_w2b        , meta_ionode_id, world_comm)
   CALL mp_bcast(lfast_kmesh     , meta_ionode_id, world_comm)
-  CALL mp_bcast(epw_memdist     , meta_ionode_id, world_comm)
   CALL mp_bcast(dos_tetra       , meta_ionode_id, world_comm)
   CALL mp_bcast(fd              , meta_ionode_id, world_comm)
   CALL mp_bcast(a2f_iso        , meta_ionode_id, world_comm)

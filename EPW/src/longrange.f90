@@ -19,7 +19,7 @@
   IMPLICIT NONE
   SAVE
 
-  INTEGER :: igmin(3), igmin_qG(3)
+  INTEGER :: igmin(3)
   !!
   REAL(KIND = DP) :: qqcut
   !!
@@ -30,7 +30,7 @@
   CONTAINS
     !
     !-----------------------------------------------------------------------
-    SUBROUTINE find_min_qG(q)
+    SUBROUTINE find_min_qG(q, igmin_qG)
     !-----------------------------------------------------------------------
     !!
     !! Find igmin_qG = min_{G}|q+G|
@@ -44,6 +44,9 @@
     !
     REAL(KIND = DP), INTENT(in) :: q(3)
     !! q-vector from the full coarse or fine grid, in crystal coords.
+    INTEGER, INTENT(out) :: igmin_qG(3)
+    !! Index of the G minimizing |q+G|. Returned as an argument (not a shared
+    !! module variable) so concurrent OpenMP-threaded callers do not race on it.
     !
     ! Local variables
     INTEGER         :: m1
@@ -313,6 +316,9 @@
     !! Dipole-dipole term
     COMPLEX(KIND = DP) :: facg
     !! Atomic position exponential
+    INTEGER :: igmin_qG(3)
+    !! Index of the G minimizing |q+G|. Local (set before the OpenMP region and
+    !! only read inside it), replacing the former shared module variable.
     COMPLEX(KIND = DP) :: dyn_tmp(3 * nat, 3 * nat)
     !! Temporary dyn. matrice
     !
@@ -382,7 +388,7 @@
     !JLB: Find igmin_qG = min_{G}|q+G|
     qtmp=q
     CALL cryst_to_cart(1, qtmp, at, -1)
-    CALL find_min_qG(qtmp)
+    CALL find_min_qG(qtmp, igmin_qG)
     !
     dyn_tmp(:, :) = czero
     !
@@ -391,7 +397,8 @@
     !$omp private(criteria,epsilon_para,epsilon_perp) &
     !$omp private(grg,facgd,zag_para,zag_perp,na,i,ipol,jpol,fnat_para,fnat_perp) &
     !$omp private(nb,arg,zcg_para,zcg_perp,j,zag,qag) &
-    !$omp private(fnat,qnat,zcg,qcg,kpol,Qdd,Qdq,Qqq)
+    !$omp private(fnat,qnat,zcg,qcg,kpol,Qdd,Qdq,Qqq) &
+    !$omp private(facg,zbg_para,zbg_perp)
     DO mm = mm_start, mm_stop
       !
       m1 = -nr1x + FLOOR(1.0d0 * (mm - 1) / ((2 * nr3x + 1) * (2 * nr2x + 1)))
@@ -814,6 +821,9 @@
     !! Counter on band index
     INTEGER :: mmin(3), mmax(3)
     !! Shifted G-loop to be centered around min_{G}|q+G|
+    INTEGER :: igmin_qG(3)
+    !! Index of the G minimizing |q+G|. Thread-private local: this routine is
+    !! called from inside an OpenMP region, so it must not use shared module state.
     REAL(KIND = DP):: metric
     !! (2*pi/a)^2
     REAL(KIND = DP) :: qeq
@@ -937,7 +947,7 @@
     !JLB: Find igmin_qG = min_{G}|q+G|
     qtmp = q
     CALL cryst_to_cart(1, qtmp, at, -1)
-    CALL find_min_qG(qtmp)
+    CALL find_min_qG(qtmp, igmin_qG)
     ! shift G-sum and center around min_{G}|q+G|, to ensure periodicity
     mmin(1) = -nr1x + igmin_qG(1)
     mmax(1) =  nr1x + igmin_qG(1)

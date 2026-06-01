@@ -34,7 +34,7 @@
     USE input,            ONLY : use_ws, system_2d, nkc1, nkc2, nkc3, lpolar,        &
                                  etf_mem, epwread, epwwrite, epbread, lifc,          &
                                  eig_read, nbndsub, nqc1, nqc2, nqc3, lwfpt,         &
-                                 calc_nelec_wann, epw_memdist, lsda
+                                 calc_nelec_wann, lsda
     USE ep_constants,     ONLY : zero, czero
     USE io_files,         ONLY : diropn
     USE io_global,        ONLY : stdout, ionode, ionode_id

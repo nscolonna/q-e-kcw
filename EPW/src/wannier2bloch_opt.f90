@@ -237,7 +237,6 @@ CONTAINS
   USE ep_constants,     ONLY : twopi, ci, czero
   USE parallelism,      ONLY : para_bounds
   USE io,               ONLY : rwepmatw
-  USE input,            ONLY : epw_memdist
   !
   IMPLICIT NONE
   !
@@ -370,11 +369,7 @@ CONTAINS
     !
     ! Fourier transform epmatwp along the third direction to get epmatwp_23
     !
-    IF (epw_memdist) THEN
-      CALL ZAXPY(nbnd * nbnd * nrr_k, phase, epmatwp(:, :, :, imode, ir - ir_offset), 1, epmatwp_23(:, :, :, imode, ir_23), 1)
-    ELSE
-      CALL ZAXPY(nbnd * nbnd * nrr_k, phase, epmatwp(:, :, :, imode, ir), 1, epmatwp_23(:, :, :, imode, ir_23), 1)
-    ENDIF
+    CALL ZAXPY(nbnd * nbnd * nrr_k, phase, epmatwp(:, :, :, imode, ir - ir_offset), 1, epmatwp_23(:, :, :, imode, ir_23), 1)
     !
   ENDDO ! irn
   !
