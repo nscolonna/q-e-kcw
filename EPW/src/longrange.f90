@@ -379,18 +379,6 @@
     ! Distribute the cpu
     CALL para_bounds(mm_start, mm_stop, mmax)
     !
-    IF (ionode) THEN
-      diff = mm_stop - mm_start
-    ENDIF
-    CALL mp_bcast(diff, ionode_id, inter_pool_comm)
-    !
-    ! If you are the last cpu with less element
-    IF (mm_stop - mm_start /= diff) THEN
-      add = 1
-    ELSE
-      add = 0
-    ENDIF
-    !
     !JLB: Find igmin_qG = min_{G}|q+G|
     qtmp=q
     CALL cryst_to_cart(1, qtmp, at, -1)
@@ -398,9 +386,13 @@
     !
     dyn_tmp(:, :) = czero
     !
-    ! DO mm = 1, mmax
-    DO mm = mm_start, mm_stop + add
-      IF (add == 1 .AND. mm == mm_stop + add) CYCLE
+    !$omp parallel do reduction(+:dyn_tmp) &
+    !$omp private(mm,m1,m2,m3,gg,geg,qnorm,f,alpha_para,alpha_perp) &
+    !$omp private(criteria,epsilon_para,epsilon_perp) &
+    !$omp private(grg,facgd,zag_para,zag_perp,na,i,ipol,jpol,fnat_para,fnat_perp) &
+    !$omp private(nb,arg,zcg_para,zcg_perp,j,zag,qag) &
+    !$omp private(fnat,qnat,zcg,qcg,kpol,Qdd,Qdq,Qqq)
+    DO mm = mm_start, mm_stop
       !
       m1 = -nr1x + FLOOR(1.0d0 * (mm - 1) / ((2 * nr3x + 1) * (2 * nr2x + 1)))
       m2 = -nr2x + MOD(FLOOR(1.0d0 * (mm - 1) / (2 * nr3x + 1)), (2 * nr2x + 1))
@@ -728,6 +720,7 @@
         ENDIF ! system_2d .AND. L > 0.001
       ENDIF ! criteria
     ENDDO ! mm
+    !$omp end parallel do
     !
     CALL mp_sum(dyn_tmp, inter_pool_comm)
     dyn(:, :) = dyn_tmp(:, :) + dyn(:, :)
@@ -886,7 +879,9 @@
     COMPLEX(KIND = DP) :: coeff_r(3, nmodes)
     !! Coefficient of the rrk(3, iw, jw) term
     !
+    !$omp master
     CALL start_clock('rgd_blk_epw')
+    !$omp end master
     !
     ! Impose zero Born effective charge in case of non-polar materials with quadrupoles
     IF (.NOT. lpolar) zeu(:, :, :) = zero
@@ -1154,7 +1149,9 @@
       epmat = SQRT(epmat * CONJG(epmat) - epmatl * CONJG(epmatl))
     ENDIF
     !
+    !$omp master
     CALL stop_clock('rgd_blk_epw')
+    !$omp end master
     !
     !-------------------------------------------------------------------------------
     END SUBROUTINE rgd_blk_epw
@@ -1414,6 +1411,9 @@
       nr3x = INT(SQRT(geg) / SQRT(bg(1, 3)**2 + bg(2, 3)**2 + bg(3, 3)**2)) + 1
     ENDIF
     !
+    !$omp parallel do collapse(3) reduction(+:dyn_der) &
+    !$omp private(m1,m2,m3,gg,geg,facgd,nb,zbg,zbg_der,na,zag,zag_der,arg) &
+    !$omp private(arg_no_g,facg,j,i,dyn_der_part,isum)
     DO m1 = -nr1x, nr1x
       DO m2 = -nr2x, nr2x
         DO m3 = -nr3x, nr3x
@@ -1466,6 +1466,7 @@
         ENDDO ! m3
       ENDDO ! m2
     ENDDO ! m1
+    !$omp end parallel do
     !
     !-------------------------------------------------------------------------------
     END SUBROUTINE rgd_blk_der
@@ -1555,12 +1556,12 @@
     IF (ABS(SUM(WI)) > eps6) CALL errore('epsi_thickn_2d', 'Eigenvalues of epsilon_inf are complex', 1)
     !
     DO I = 1, 3
-      sdot(1) = DDOT(3, VR(I,:), 1, UV(1,:), 1)
-      sdot(2) = DDOT(3, VR(I,:), 1, UV(2,:), 1)
-      sdot(3) = DDOT(3, VR(I,:), 1, UV(3,:), 1)
+      sdot(1) = DDOT(3, VR(:, I), 1, UV(1, :), 1)
+      sdot(2) = DDOT(3, VR(:, I), 1, UV(2, :), 1)
+      sdot(3) = DDOT(3, VR(:, I), 1, UV(3, :), 1)
       J = MAXLOC(ABS(sdot))
       epsi_xyz(J(1)) = WR(I)
-      epsi_vec(J(1),:) = VR(I,:)
+      epsi_vec(J(1),:) = VR(:, I)
     ENDDO
     WRITE(stdout, '(5x,a)') ' '
     WRITE(stdout, '(5x,a)') 'eigenvalues and eigenvectors of epsilon_inf'

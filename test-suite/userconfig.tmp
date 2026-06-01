@@ -132,9 +132,12 @@ tolerance = ( (1.0e-6, 5.0e-3, 'e1'),
               (1.0e-2, 5.0e-2, 'max_eigenvalue'),
               (1.0e-4, 5.0e-4, 'mobvb'),
               (9.0e-4, 5.0e-4, 'mobcb'),
-              (3.0e+1, 1.0e-1, 'mobnewx'),
-              (3.0e+1, 1.0e-1, 'mobnewy'),
-              (3.0e+1, 1.0e-1, 'mobnewz'),
+              (3.0e+1, 1.0e-1, 'mobnewxx'),
+              (3.0e+1, 1.0e-1, 'mobnewyy'),
+              (3.0e+1, 1.0e-1, 'mobnewzz'),
+              (None, 1.0e-2, 'condnewxx'), # Conductivity specially in metals can span 4 orders of magnitude
+              (None, 1.0e-2, 'condnewyy'), # between different compounds. Absolute error is not usefull
+              (None, 1.0e-2, 'condnewzz'), # Only relative error has meaning.
               (5.0e-3, 5.0e-3, 'hall'),
               (1.0e+10,1.0e+2, 'density'),
               (1.0   , 1.0e-2, 'mobxZ'),

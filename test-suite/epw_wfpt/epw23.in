@@ -26,7 +26,6 @@
   nbndsub     =  8
 
   lwfpt = .true.
-  ahc_nbnd = 9
   ahc_win_max = 13.0
   ahc_win_min = -100.0
 
