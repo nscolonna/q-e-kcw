@@ -1,5 +1,11 @@
 if(QE_ENABLE_OFFLOAD)
     set(OPENMP_OFFLOAD_COMPILE_OPTIONS "-fopenmp-version=50")
+
+    check_fortran_compiler_flag(-Wno-experimental-option HAVE_WARNING_NO_EXP)
+    if(HAVE_WARNING_NO_EXP)
+        list(APPEND OPENMP_OFFLOAD_COMPILE_OPTIONS "-Wno-experimental-option")
+    endif()
+
     if(OFFLOAD_TARGET)
         list(APPEND OPENMP_OFFLOAD_COMPILE_OPTIONS "-fopenmp-targets=${OFFLOAD_TARGET}")
         if(OFFLOAD_ARCH)
