@@ -332,7 +332,7 @@
         !$omp parallel do private(ikk,ikq,ik_global,imode,ibnd,ekk,eta_tmp) &
         !$omp private(sq_eta_tmp,inv_eta_tmp,jbnd,ekq,wgkq,g2,fact1,fact2) &
         !$omp private(etmp1,etmp2,weight,w0g1,w0g2,sq_etmp1,sq_etmp2,weight0) &
-        !$omp private(iw,etmpw1,etmpw2,fact)
+        !$omp private(iw,etmpw1,etmpw2,fact,eval_plrn)
         DO ik = 1, nkf
           !
           ikk = 2 * ik - 1

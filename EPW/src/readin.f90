@@ -440,7 +440,6 @@
   !
   ! Added by Zhe Liu
   ! calc_nelec_wann : compute number of electrons in wannierized band
-  ! epw_memdist     : distributed storage of epmatwp in MPI processes, only works with etf_mem = 0
   !
   ! Added by S. Mishra
   ! dos_tetra       : if .TRUE. compute density of states using tetrahedron method
@@ -1035,9 +1034,8 @@
         &is deprecated and switched to etf_mem = 1 automatically.'
     etf_mem = 1
   ENDIF
-  IF (etf_mem /= 0 .AND. epw_memdist) CALL errore('readin', 'Error: epw_memdist only work with etf_mem = 0.', 1)
-  IF (etf_mem == 0 .AND. .NOT. epw_memdist) &
-     WRITE(stdout, '(/,5x,a)') 'Suggestion: epw_memdist == .true. can reduce the memory usage when etf_mem == 0.'
+  IF (epw_memdist) WRITE(stdout, '(/,5x,a)') 'epw_memdist is now automatically set and no &
+         &longer needs to be specified. The input variable epw_memdist is ignored.'
   IF (etf_mem == 3) THEN
     etf_mem = 1
     lfast_kmesh = .TRUE.

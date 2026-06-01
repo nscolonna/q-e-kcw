@@ -1086,14 +1086,14 @@
               ELSE
                 ipol = (3 + spin_eig(iw)) / 2
               ENDIF
-              istart = (ipol - 1) * npwx + 1
+              istart = (ipol - 1) * npwx
               !
               amn = czero
               IF (any_uspp) THEN
                 amn = DOT_PRODUCT(evc(1:npw, ibnd), sgf_spinor(1:npw, iw))
                 amn = amn + DOT_PRODUCT(evc(1+npwx:npw+npwx, ibnd), sgf_spinor(1+npwx:npw+npwx, iw))
               ELSE
-                amn = DOT_PRODUCT(evc(istart:istart+npw, ibnd), sgf(1:npw, iw))
+                amn = DOT_PRODUCT(evc(istart+1:istart+npw, ibnd), sgf(1:npw, iw))
               ENDIF
               CALL mp_sum(amn, intra_pool_comm)
               !
@@ -1124,14 +1124,14 @@
               !
               amn = czero
               DO ipol = 1, npol
-                istart = (ipol - 1) * npwx + 1
+                istart = (ipol - 1) * npwx
                 amn_tmp = czero
                 IF (any_uspp) THEN
-                  amn_tmp = DOT_PRODUCT(evc(istart:istart+npw, ibnd), sgf_spinor(istart:istart+npw, iw))
+                  amn_tmp = DOT_PRODUCT(evc(istart+1:istart+npw, ibnd), sgf_spinor(istart+1:istart+npw, iw))
                   CALL mp_sum(amn_tmp, intra_pool_comm)
                   amn = amn + amn_tmp
                 ELSE
-                  amn_tmp = DOT_PRODUCT(evc(istart:istart+npw, ibnd), sgf(istart:istart+npw, iw))
+                  amn_tmp = DOT_PRODUCT(evc(istart+1:istart+npw, ibnd), sgf(1:npw, iw))
                   CALL mp_sum(amn_tmp, intra_pool_comm)
                   amn = amn + fac(ipol) * amn_tmp
                 ENDIF

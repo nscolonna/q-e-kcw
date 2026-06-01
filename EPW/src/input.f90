@@ -305,7 +305,8 @@
   LOGICAL :: lfast_kmesh
   !! If .TRUE. use on-the-fly generation of k point mesh within fsthick.
   LOGICAL :: epw_memdist
-  !! if .TRUE. distributed storage of epmatwp in MPI processes, only works with etf_mem = 0
+  !! Deprecated. Included in the namelist for backwards compatibility but no longer has any
+  !! effect. The distribution of the epmatwp is automatically determined by the value of etf_mem.
   LOGICAL :: dos_tetra
   !! if .true. calculate DOS using tetrahedron method
   LOGICAL :: fd

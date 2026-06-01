@@ -1242,9 +1242,9 @@
           DO iw = 1, dims
             DO iw2 = 1, dims
               DO ir = 1, nrr
-                IF (ndegen_k(ir, iw2, iw) > 0) THEN
+                IF (ndegen_k(ir, iw, iw2) > 0) THEN
                   rdotk = twopi * DOT_PRODUCT(xk_crys(:, ik), DBLE(irvec(:, ir)))
-                  cfac = EXP(ci * rdotk) / ndegen_k(ir, iw2, iw)
+                  cfac = EXP(ci * rdotk) / ndegen_k(ir, iw, iw2)
                   A(:, iw, iw2, ik) = A(:, iw, iw2, ik) + cfac * crrw(:, iw, iw2, ir)
                 ENDIF
               ENDDO ! ir

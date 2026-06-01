@@ -766,8 +766,7 @@
     USE input,        ONLY : isk_dummy
     USE input,        ONLY : iterative_bte, ephwrite, mp_mesh_k, etf_mem, vme, &
                              epmatkqread, lcumulant, eliashberg, assume_metal, &
-                             lindabs, carrier, ii_g, scattering, lfast_kmesh,  &
-                             epw_memdist
+                             lindabs, carrier, ii_g, scattering, lfast_kmesh
     USE global_var,   ONLY : map_rebal, map_rebal_inv, vmef, cvmew, cdmew,     &
                              epmatwp, epmatwp_dist, chw, chw_ks, rdw,          &
                              epsi, zstar, wf, etf, etf_ks, eps_rpa,            &

@@ -359,7 +359,7 @@
     !! Routine to read the real space quantities for fine grid interpolation
     !!
     USE kinds,     ONLY : DP
-    USE input,     ONLY : nbndsub, eig_read, etf_mem, lifc, lwfpt, epw_memdist, lsda
+    USE input,     ONLY : nbndsub, eig_read, etf_mem, lifc, lwfpt, lsda
     USE pwcom,     ONLY : ef
     USE global_var,ONLY : chw, rdw, epmatwp, cdmew, cvmew, chw_ks, zstar, &
                           epsi, crrw, dwmatwe, cpmew, epmatwp_dist,       &
