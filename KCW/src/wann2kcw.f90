@@ -32,22 +32,21 @@ SUBROUTINE wann2kcw
   ! 1) Set up for the KC calculation. 
   CALL kcw_setup( )
   ! 
-  !WRITE(*,*),'--SETUP DONE!!'
   ! 2) Save MLWF on file 
   ! To use write_collected_wfc, we need to redefine some global variables
   ! Here we store ...
-  nbnd_    = nbnd
-  nwordwfc_= nwordwfc
-  iunwfc   = iunwfc_ 
+  nbnd_     = nbnd
+  nwordwfc_ = nwordwfc
+  iunwfc_   = iunwfc
   ! ... overwrite ...
-  nbnd     = num_wann
-  nwordwfc = num_wann * npwx * npol
-  iunwfc   = iuwfc_wann
-  CALL write_collected_wfc (.true., spin_component)
+  nbnd      = num_wann
+  nwordwfc  = num_wann * npwx * npol
+  iunwfc    = iuwfc_wann
+  CALL write_collected_wfc (spin_component)
   ! ... restore original values
-  nbnd     = nbnd_
-  nwordwfc = nwordwfc
-  iunwfc_  = iunwfc
+  nbnd      = nbnd_
+  nwordwfc  = nwordwfc_
+  iunwfc    = iunwfc_
   !
   CALL clean_pw( .TRUE. )
   CALL close_kcw ( ) 

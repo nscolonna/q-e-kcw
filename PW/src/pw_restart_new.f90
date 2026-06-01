@@ -911,7 +911,7 @@ MODULE pw_restart_new
     END SUBROUTINE pw_write_schema
     !
     !------------------------------------------------------------------------
-    SUBROUTINE write_collected_wfc( is_wann_, spin_component )
+    SUBROUTINE write_collected_wfc( wann_spin_component )
       !------------------------------------------------------------------------
       !
       USE mp,                   ONLY : mp_sum, mp_max
@@ -945,16 +945,13 @@ MODULE pw_restart_new
       CHARACTER(LEN=2), DIMENSION(2) :: updw = (/ 'up', 'dw' /)
       CHARACTER(LEN=256)    :: dirname
       CHARACTER(LEN=320)    :: filename, filenameace
-      LOGICAL, OPTIONAL, INTENT (IN)  :: is_wann_
-      INTEGER, OPTIONAL, INTENT (IN)  :: spin_component
+      INTEGER, OPTIONAL, INTENT (IN)  :: wann_spin_component
       !
       LOGICAL               :: is_wann
       !
       is_wann = .false. 
-      IF (present (is_wann_) ) THEN
-         IF (is_wann_ .eqv. .true.) is_wann = .true.
-         IF (is_wann .AND. .NOT. present (spin_component)) &
-                 CALL errore( 'write_collected_wfc', 'Missing Wannier spin component', 1 )
+      IF (present (wann_spin_component) ) THEN
+         is_wann = .true.
       ENDIF
       !
       dirname = restart_dir ()
@@ -994,7 +991,7 @@ MODULE pw_restart_new
       k_points_loop: DO ik = 1, nks
          !
          ! one spin component at the time in KCW
-         IF ( is_wann .AND. lsda .AND. isk(ik) /= spin_component) CYCLE
+         IF ( is_wann .AND. lsda .AND. isk(ik) /= wann_spin_component) CYCLE
          !
          ! ik_g is the index of k-point ik in the global list
          !
