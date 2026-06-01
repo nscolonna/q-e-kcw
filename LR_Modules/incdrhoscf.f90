@@ -1,5 +1,5 @@
 !
-! Copyright (C) 2001-2016 Quantum ESPRESSO group
+! Copyright (C) 2001-2026 Quantum ESPRESSO group
 ! This file is distributed under the terms of the
 ! GNU General Public License. See the file `License'
 ! in the root directory of the present distribution,
@@ -51,27 +51,11 @@ subroutine incdrhoscf (drhoscf, weight, ik, dbecsum, dpsi)
   COMPLEX(DP), ALLOCATABLE :: tg_psi(:), tg_dpsi(:), tg_drho(:)
 
   INTEGER :: npw, npwq, ikk, ikq, itmp
-  INTEGER :: ibnd, ir, ir3, ig, incr, v_siz, idx, ioff, ioff_tg, nxyp, sum_siz
+  INTEGER :: ibnd, ir, ir3, ig, incr, v_siz, idx, ioff, ioff_tg, nxyp
   INTEGER :: right_inc, ntgrp
   ! counters
-
-  ! For device buffer 
-#if defined(__CUDA)
-  INTEGER, POINTER, DEVICE :: nl_d(:)
   !
-  nl_d  => dffts%nl_d
-#else
-  INTEGER, ALLOCATABLE :: nl_d(:)
-  !
-  ALLOCATE( nl_d(dffts%ngm) )
-  nl_d  = dffts%nl
-#endif
-  
-
-  CALL start_clock_gpu ('incdrhoscf')
-  !
-  ALLOCATE(dpsic(dffts%nnr))
-  ALLOCATE(psi(dffts%nnr))
+  CALL start_clock ('incdrhoscf')
   !
   wgt = 2.d0 * weight / omega
   ikk = ikks(ik)
@@ -80,7 +64,12 @@ subroutine incdrhoscf (drhoscf, weight, ik, dbecsum, dpsi)
   npwq= ngk(ikq)
   incr = 1
   !
+  ! dpsi contains the   perturbed wavefunctions of this k point
+  ! evc  contains the unperturbed wavefunctions of this k point
+  !
   IF ( dffts%has_task_groups ) THEN
+     !
+     ! calculation with task groups (no GPU acceleration)
      !
      v_siz = dffts%nnr_tg
      !
@@ -90,18 +79,7 @@ subroutine incdrhoscf (drhoscf, weight, ik, dbecsum, dpsi)
      !
      incr = fftx_ntgrp(dffts)
      !
-  ELSE
-     v_siz = dffts%nnr
-     sum_siz = nhm*(nhm+1)/2
-  ENDIF
-  !
-  ! dpsi contains the   perturbed wavefunctions of this k point
-  ! evc  contains the unperturbed wavefunctions of this k point
-  !
-  !$acc data present_or_copyin(dpsi(1:npwx,1:nbnd)) present_or_copy(drhoscf(1:v_siz)) create(psi(1:v_siz),dpsic(1:v_siz)) present(igk_k) deviceptr(nl_d)
-  do ibnd = 1, nbnd_occ(ikk), incr
-     !
-     IF ( dffts%has_task_groups ) THEN
+     do ibnd = 1, nbnd_occ(ikk), incr
         !
         tg_drho=(0.0_DP, 0.0_DP)
         tg_psi=(0.0_DP, 0.0_DP)
@@ -137,14 +115,28 @@ subroutine incdrhoscf (drhoscf, weight, ik, dbecsum, dpsi)
            tg_drho (ir) = tg_drho (ir) + wgt * CONJG(tg_psi (ir) ) *  tg_dpsi (ir)
         enddo
         !
-        ! reduce the group charge (equivalent to sum over bands of 
+        ! reduce the group charge (equivalent to sum over bands of the
         ! orbital group)
         !
         CALL tg_reduce_rho( drhoscf, tg_drho, dffts )
         !
-     ELSE
-        !
-        ! Normal case: no task groups
+     end do
+     !
+     DEALLOCATE(tg_psi)
+     DEALLOCATE(tg_dpsi)
+     DEALLOCATE(tg_drho)
+     !
+  ELSE
+     !
+     ! Default calculation, OpenACC-enabled for GPU execution
+     !
+     ALLOCATE(dpsic(dffts%nnr))
+     ALLOCATE(psi(dffts%nnr))
+     !
+     !$acc data present_or_copyin(dpsi) present_or_copy(drhoscf) &
+     !$acc      create(psi,dpsic) present(igk_k)
+     !
+     do ibnd = 1, nbnd_occ(ikk), incr
         !
         ! Initialize psi and dpsic
         !
@@ -153,14 +145,14 @@ subroutine incdrhoscf (drhoscf, weight, ik, dbecsum, dpsi)
         dpsic(:) = (0.d0, 0.d0)
         !$acc end kernels
         !
-        !$acc parallel loop 
+        !$acc parallel loop present(dffts,dffts%nl)
         do ig = 1, npw
-           itmp = nl_d (igk_k(ig,ikk) )
+           itmp = dffts%nl (igk_k(ig,ikk) )
            psi (itmp ) = evc (ig, ibnd)
         enddo
-        !$acc parallel loop
+        !$acc parallel loop present(dffts,dffts%nl)
         do ig = 1, npwq
-           itmp = nl_d (igk_k(ig,ikq) )
+           itmp = dffts%nl (igk_k(ig,ikq) )
            dpsic ( itmp ) = dpsi (ig, ibnd)
         enddo
         !
@@ -176,30 +168,25 @@ subroutine incdrhoscf (drhoscf, weight, ik, dbecsum, dpsi)
         ! Calculation of the response charge-density
         !
         !$acc parallel loop 
-        do ir = 1, v_siz
+        do ir = 1, dffts%nnr
            drhoscf (ir) = drhoscf (ir) + wgt * CONJG(psi (ir) ) * dpsic (ir)
         enddo
         !
-     ENDIF
+     enddo ! loop on bands
      !
-  enddo ! loop on bands
+     !$acc end data
+     !
+     DEALLOCATE(psi)
+     DEALLOCATE(dpsic)
+     !
+  ENDIF
   !
   ! Ultrasoft contribution
   ! Calculate dbecsum = <evc|vkb><vkb|dpsi>
   ! 
-  !$acc end data
   CALL addusdbec (ik, weight, dpsi, dbecsum)
   !
-  DEALLOCATE(psi)
-  DEALLOCATE(dpsic)
-  !
-  IF ( dffts%has_task_groups ) THEN
-     DEALLOCATE(tg_psi)
-     DEALLOCATE(tg_dpsi)
-     DEALLOCATE(tg_drho)
-  ENDIF
-  !
-  CALL stop_clock_gpu ('incdrhoscf')
+  CALL stop_clock ('incdrhoscf')
   !
   RETURN
   !

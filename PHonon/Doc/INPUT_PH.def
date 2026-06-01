@@ -533,6 +533,11 @@ input_description -distribution {Quantum ESPRESSO} -package PHonon -program ph.x
                     Slower than 'david' but uses less memory and is 
                     (a little bit) more robust.
                 }
+
+                opt -val 'direct' {
+                    Direct diagonalization of the dense Hamiltonian in the plane-wave
+                    basis. Use ONLY when a large number of unoccupied states are needed.
+                }
             }
         }
 

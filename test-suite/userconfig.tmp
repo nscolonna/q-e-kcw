@@ -62,7 +62,12 @@ tolerance = ( (5.0e-5, 5.0e-3, 'e1'),
               (5.0e-1,   None, 'sum_w_pot'),
               (5.0e-4, 1.0e-2, 'postahc_selfen'),
               (1.0e-2, 1.0e-2, 'quad'),
-              (1.0e-1, 1.0e-2, 'epsil'))
+              (1.0e-1, 1.0e-2, 'epsil'),
+              (5.0e-2,   None, 'raman_au'),
+              (5.0e-2,   None, 'raman_A2'),
+              (5.0e-2, 5.0e-3, 'polariz'),
+              (2.0e+0,   None, 'raman_act'),
+              (5.0e-2,   None, 'depol'))
 
 skip_program = grep
 skip_args = 'not present in this version'
@@ -159,7 +164,12 @@ extract_program = XXXXXX/test-suite/extract-tddfpt.sh
 inputs_args = ('*.in', '')
 run_cmd_template = tc.program tc.args tc.input tc.output tc.error
 tolerance = ( (1.0e-6, 5.0e-3, 'e1'),
+              (1.0e-3, 1.0e-2, 'e3'),
               (3.0e+0, 5.0e-1, 'n1'),
+              (3.0e+0, 5.0e-1, 'n3'),
+              (5.0e+0, 5.0e-1, 'nb1'),
+              (5.0e+0, 5.0e-1, 'nb2'),
+              (1.0e-3, None,   'chi'),
               (1.0e-3, 1.0e-5, 'f1'),
               (1.0e-1, 1.0e-3, 'p1'),
               (1.0e-5, 1.0e-4, 'alpha'),

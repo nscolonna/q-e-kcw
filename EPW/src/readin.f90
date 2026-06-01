@@ -118,13 +118,12 @@
   USE noncollin_module,      ONLY : noncolin
   USE open_close_input_file, ONLY : open_input_file, close_input_file
   USE check_stop,    ONLY : max_seconds
+  USE upf_utils,     ONLY : imatches
   !
   IMPLICIT NONE
   !
   LOGICAL :: exst
   !! Find if a file exists.
-  LOGICAL, EXTERNAL :: imatches
-  !! Does the title match
   CHARACTER(LEN = 256) :: outdir
   !! Output directory
   CHARACTER(LEN = 512) :: line

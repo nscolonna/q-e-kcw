@@ -111,7 +111,7 @@ MODULE io_dyn_mat
        zstareu_=.false.
        IF (present(zstareu)) zstareu_=.true.
        raman_=.false.
-       IF (PRESENT(lraman)) raman_=.true.
+       IF (PRESENT(lraman)) raman_=lraman
        !
        CALL add_attr ( "epsil", epsil_)
        CALL add_attr ( "zstar", zstareu_)

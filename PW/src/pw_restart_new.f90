@@ -54,6 +54,7 @@ MODULE pw_restart_new
   PRIVATE
   PUBLIC :: pw_write_schema, write_collected_wfc
   PUBLIC :: read_xml_file, read_collected_wfc
+  PUBLIC :: gk_l2gmap_kdip
   !
   CONTAINS
     !------------------------------------------------------------------------
@@ -130,7 +131,7 @@ MODULE pw_restart_new
                                        get_screening_parameter, xclib_get_exx_fraction, exx_is_active
       USE exx_base,             ONLY : x_gamma_extrapolation, nq1, nq2, nq3, &
                                        exxdiv_treatment, yukawa, ecutvcut
-      USE exx,                  ONLY : ecutfock, local_thr 
+      USE exx,                  ONLY : ecutfock, local_thr, nbndproj, use_ace 
       USE london_module,        ONLY : scal6, lon_rcut, c6_i
       USE xdm_module,           ONLY : xdm_a1=>a1i, xdm_a2=>a2i
       USE tsvdw_module,         ONLY : vdw_isolated, vdw_econv_thr
@@ -168,7 +169,8 @@ MODULE pw_restart_new
       !
       ! Loop counters and other internal auxiliary variables 
       !
-      INTEGER    :: is, viz, na1, na2, nt1, m1, m2 
+      INTEGER    :: is, viz, na1, na2, nt1, m1, m2
+      INTEGER, ALLOCATABLE :: nbeta_upf(:), l_upf(:,:)
       !
       ! Auxiliary variables used to format arguments for xml file
       !
@@ -335,17 +337,27 @@ MODULE pw_restart_new
          ! while amass's are always present, starting_mag should not be passed
          ! for nspin==1 or contrained magnetization calculations
          !
+         ALLOCATE( nbeta_upf(nsp) )
+         ALLOCATE( l_upf(MAXVAL(upf(1:nsp)%nbeta), nsp) )
+         l_upf = 0
+         DO is = 1, nsp
+            nbeta_upf(is) = upf(is)%nbeta
+            IF ( nbeta_upf(is) > 0 ) l_upf(1:nbeta_upf(is), is) = upf(is)%lll(1:nbeta_upf(is))
+         END DO
+         !
          IF (noncolin) THEN
             CALL qexsd_init_atomic_species(output_obj%atomic_species, nsp, atm, psfile, &
                  amass, STARTING_MAGNETIZATION = starting_magnetization, &
-                 ANGLE1=angle1, ANGLE2=angle2, Zval=zv)
-         ELSE IF (nspin==2) THEN 
+                 ANGLE1=angle1, ANGLE2=angle2, Zval=zv, NBETA=nbeta_upf, L=l_upf)
+         ELSE IF (nspin==2) THEN
             CALL qexsd_init_atomic_species(output_obj%atomic_species, nsp, atm, psfile, &
-                 amass, STARTING_MAGNETIZATION=starting_magnetization, Zval=zv)
-         ELSE 
-            CALL qexsd_init_atomic_species(output_obj%atomic_species, nsp, atm,psfile, &
-                 amass, Zval=zv)
+                 amass, STARTING_MAGNETIZATION=starting_magnetization, Zval=zv, &
+                 NBETA=nbeta_upf, L=l_upf)
+         ELSE
+            CALL qexsd_init_atomic_species(output_obj%atomic_species, nsp, atm, psfile, &
+                 amass, Zval=zv, NBETA=nbeta_upf, L=l_upf)
          END IF
+         DEALLOCATE( nbeta_upf, l_upf )
          output_obj%atomic_species%pseudo_dir = TRIM(pseudo_dir)
          output_obj%atomic_species%pseudo_dir_ispresent = .TRUE.
          !
@@ -431,7 +443,8 @@ MODULE pw_restart_new
                                    ECUTFOCK = ecutfock/e2, &
                                    EXX_FRACTION = xclib_get_exx_fraction(), SCREENING_PARAMETER = scr_par_pt, &
                                    EXXDIV_TREATMENT = exxdiv_treatment, X_GAMMA_EXTRAPOLATION = x_gamma_extrapolation,&
-                                   ECUTVCUT = ecutvcut_pt, LOCAL_THR = loc_thr_pt )
+                                   ECUTVCUT = ecutvcut_pt, LOCAL_THR = loc_thr_pt, &
+                                   USE_ACE = use_ace, NBNDPROJ = nbndproj )
          ELSE 
             hybrid_obj_opt%lwrite=.false. 
          END IF 
@@ -1069,11 +1082,30 @@ MODULE pw_restart_new
     !-----------------------------------------------------------------------
     SUBROUTINE gk_l2gmap_kdip( npw_g, ngk_g, ngk, igk_l2g, igk_l2g_kdip, igwk )
       !-----------------------------------------------------------------------
-      !
-      ! ... This subroutine maps local G+k index to the global G vector index
-      ! ... the mapping is used to collect wavefunctions subsets distributed
-      ! ... across processors.
-      ! ... This map is used to obtained the G+k grids related to each kpt
+      !! This subroutine maps local G+k index to the global G vector index
+      !! the mapping is used to collect wavefunctions subsets distributed
+      !! across processors.
+      !!
+      !! There are 4 lists of G vectors:
+      !!   1) Local G vectors inside k-specific k+G sphere, size ngk(ik) (often called npw)
+      !!   2) Local G vectors shared for all k points, size ngm
+      !!   3) Global G vectors inside k-specific k+G sphere, size ngk_g
+      !!   4) Global G vectors shared for all k points, size ngm_g
+      !!
+      !! ngk_g is the size of the Hamiltonian at the given k point.
+      !!
+      !! The existing mapping are:
+      !!   - (1) -> (2) : igk_k(:, ik) in MODULE klist
+      !!   - (2) -> (4) : ig_l2g in MODULE gvect
+      !!
+      !! This subroutine builds the following mappings:
+      !!   - (1) -> (4) : igk_l2g = ig_l2g(igk_k(:, ik)) (internal only)
+      !!   - (4) -> (3) : igwk (optional output)
+      !!   - (3) -> (4) : igwk_lup (inverse of igwk, internal only)
+      !!   - (1) -> (3) : igk_l2g_kdip = igwk_lup(igk_l2g) (output)
+      !!
+      !! itmp is used to find which G vectors in list 4 are present in list 3.
+      !-----------------------------------------------------------------------
       !
       USE mp_bands,             ONLY : intra_bgrp_comm
       USE mp,                   ONLY : mp_sum
@@ -1203,7 +1235,7 @@ MODULE pw_restart_new
       USE tsvdw_module,    ONLY : vdw_isolated
       USE exx_base,        ONLY : x_gamma_extrapolation, nq1, nq2, nq3, &
            exxdiv_treatment, yukawa, ecutvcut
-      USE exx,             ONLY : ecutfock, local_thr
+      USE exx,             ONLY : ecutfock, local_thr, use_ace, nbndproj
       USE control_flags,   ONLY : noinv, gamma_only, tqr, llondon, ldftd3, &
            lxdm, ts_vdw, mbd_vdw, do_makov_payne 
       USE Coul_cut_2D,     ONLY : do_cutoff_2D
@@ -1227,7 +1259,6 @@ MODULE pw_restart_new
       USE mp_images,       ONLY : intra_image_comm
       USE mp,              ONLY : mp_bcast
       USE dftd3_qe,        ONLY : dftd3_in, dftd3, dftd3_xc 
-      USE dftd3_api,       ONLY : dftd3_init, dftd3_set_functional 
       USE tsvdw_module,    ONLY : vdw_econv_thr
       USE london_module,   ONLY : init_london
       USE xdm_module,      ONLY : init_xdm
@@ -1313,7 +1344,7 @@ MODULE pw_restart_new
       !! DFT section
       CALL qexsd_copy_dft ( output_obj%dft, nsp, atm, &
            dft_name, nq1, nq2, nq3, ecutfock, exx_fraction, screening_parameter, &
-           exxdiv_treatment, x_gamma_extrapolation, ecutvcut, local_thr, &
+           exxdiv_treatment, x_gamma_extrapolation, ecutvcut, local_thr, use_ace, nbndproj, &
            lda_plus_u, apply_u,lda_plus_u_kind, Hubbard_projectors, Hubbard_n, Hubbard_l, Hubbard_lmax, Hubbard_occ,&
            Hubbard_n2, Hubbard_l2, Hubbard_n3, Hubbard_l3, backall, Hubbard_lmax_back, Hubbard_alpha_back, &
            Hubbard_U, Hubbard_Um, Hubbard_U2, Hubbard_J0, Hubbard_alpha, Hubbard_alpha_m, Hubbard_beta, Hubbard_J, Hubbard_V, &

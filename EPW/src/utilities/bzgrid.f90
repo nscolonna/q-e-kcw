@@ -83,6 +83,7 @@
     USE low_lvl,   ONLY : init_random_seed, matinv3
     USE ep_constants,  ONLY : eps4, eps8
     USE noncollin_module, ONLY : noncolin
+    USE upf_utils, ONLY : imatches
 # if defined(__MPI)
     USE parallel_include, ONLY : MPI_INTEGER2
 # endif
@@ -91,7 +92,6 @@
     !
     CHARACTER(LEN = 10) :: coordinate_type
     !! filkf coordinate type (crystal or cartesian)
-    LOGICAL, EXTERNAL :: imatches
     !! Regex matching text.
     INTEGER :: ios
     !! INTEGER variable for I/O control
@@ -557,13 +557,12 @@
     USE io_var,    ONLY : iunkf
     USE low_lvl,   ONLY : init_random_seed
     USE ep_constants,  ONLY : eps4
+    USE upf_utils, ONLY : imatches
     !
     IMPLICIT NONE
     !
     CHARACTER(LEN = 10) :: coordinate_type
     !! filkf coordinate type (crystal or cartesian)
-    LOGICAL, EXTERNAL  :: imatches
-    !! Regex matching text.
     INTEGER :: ios
     !! INTEGER variable for I/O control
     INTEGER :: ik
@@ -1688,13 +1687,12 @@
     USE noncollin_module, ONLY : noncolin
     USE ep_constants,  ONLY : eps4
     USE low_lvl,   ONLY : init_random_seed
+    USE upf_utils, ONLY : imatches
     !
     IMPLICIT NONE
     !
     CHARACTER(LEN = 10) :: coordinate_type
     !! filkf coordinate type (crystal or cartesian)
-    LOGICAL, EXTERNAL  :: imatches
-    !! Regex matching text.
     INTEGER :: iq
     !! Q-point index
     INTEGER :: lower_bnd
@@ -1907,13 +1905,12 @@
     USE io_var,    ONLY : iunqf
     USE low_lvl,   ONLY : init_random_seed, matinv3
     USE ep_constants,  ONLY : eps4, eps8
+    USE upf_utils, ONLY : imatches
     !
     IMPLICIT NONE
     !
     CHARACTER(LEN = 10) :: coordinate_type
     !! filqf coordinate type (crystal or cartesian)
-    LOGICAL, EXTERNAL  :: imatches
-    !! Regex matching text.
     INTEGER :: iq
     !! Q-index
     INTEGER :: i, j, k

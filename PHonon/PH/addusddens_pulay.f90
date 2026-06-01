@@ -7,16 +7,26 @@
 !
 !
 !----------------------------------------------------------------------
-subroutine addusddens (drhop, dbecsum, mode0, npe)
+subroutine addusddens_pulay (drhop, dbecsum, mode0, npe)
   !----------------------------------------------------------------------
-  !! This routine adds to the change of the charge and of the
-  !! magnetization densities the part due to the US augmentation.
-  !! It assumes that the array dbecsum has already accumulated the
-  !! change of the becsum term. It calculates Eq. B31 of Ref [1].
-  !! dbecsum and drhop contain the orthogonalization contribution to the
-  !! change of the wavefunctions and the terms with alphasum and becsum are added.
-  !! The contribution of the change of the Fermi energy is not calculated here
-  !! but added later by ef_shift.
+  !! Non-self-consistent, Pulay-like ultrasoft-augmentation contribution
+  !! to drho for atomic-displacement (phonon) perturbations. Computes
+  !! Eq. B31 of Ref [1]: the term that arises because the projectors
+  !! |beta> move with the ions, built from the ground-state becsum and
+  !! alphasum together with the mode displacement u(:,mode).
+  !!
+  !! Distinct from LR_Modules/lr_addusddens.f90, which adds the
+  !! self-consistent augmentation contribution computed from dbecsum
+  !! (the dbecsum built from the Sternheimer dpsi). For phonons both
+  !! contributions are needed; for electric-field / EELS / Hubbard
+  !! perturbations only lr_addusddens applies, because the projectors
+  !! do not move.
+  !!
+  !! dbecsum and drhop entering here already contain the
+  !! orthogonalisation contribution to the change of the wavefunctions;
+  !! the terms with alphasum and becsum are added on top.
+  !! The contribution of the change of the Fermi energy is not
+  !! calculated here but added later by ef_shift.
   !! [1] PRB 64, 235118 (2001).
   !
   !
@@ -90,7 +100,7 @@ subroutine addusddens (drhop, dbecsum, mode0, npe)
   !
   IF (.not.okvan) return
   !
-  CALL start_clock ('addusddens')
+  CALL start_clock ('addusddens_pulay')
   !
   ! Pre-compute mode-independent quantities
   ! First count the number of (nt,ih,jh) entries
@@ -235,6 +245,6 @@ subroutine addusddens (drhop, dbecsum, mode0, npe)
   deallocate (qgm_all)
   deallocate (ijh_map)
   !
-  call stop_clock ('addusddens')
+  call stop_clock ('addusddens_pulay')
   !
-end subroutine addusddens
+end subroutine addusddens_pulay

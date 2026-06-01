@@ -1301,6 +1301,29 @@ input_description -distribution {Quantum ESPRESSO} -package PWscf -program pw.x 
             }
         }
 
+        var exx_type -type CHARACTER {
+            default {'band_pairs'}
+            options {
+                info {
+                    Specific for EXX. This keyword defines the band distribution scheme 
+                    to use when band groups are enabled. 
+                    When band groups are not used (-nb=1 or not specified), 
+                    the two schemes are equivalent, but their internal implementations differ.
+                }
+
+                opt -val 'bands' {
+                    distribute bands among band groups
+                    (GPU execution not yet implemented)
+                }
+                
+                opt -val 'band_pairs' {
+                    distribute band pairs among band groups
+                    (see Barnes et al., Computer Physics Communications, Volume 214, 2017, Pages 52-58)
+                }
+
+            }
+        }
+
         var x_gamma_extrapolation -type LOGICAL {
             default {.true.}
             info {
@@ -2217,6 +2240,11 @@ input_description -distribution {Quantum ESPRESSO} -package PWscf -program pw.x 
                     ParO  solvers depending on the string used. 
                     Other variables that can be used to tune the behavior of 
                     RMM-DIIS are:  @ref diago_rmm_ndim and @ref diago_rmm_conv
+                }
+
+                opt -val {'direct'} {
+                    Direct diagonalization of the dense Hamiltonian in the plane-wave
+                    basis. Use ONLY when a large number of unoccupied states are needed.
                 }
             }
         }

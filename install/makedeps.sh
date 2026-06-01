@@ -21,7 +21,7 @@ QEDIR=`(cd ..; pwd)`
 dirs=" LAXlib FFTXlib/src UtilXlib \
        dft-d3 \
        KS_Solvers/Davidson KS_Solvers/Davidson_RCI KS_Solvers/CG \
-       KS_Solvers/ParO  KS_Solvers/DENSE  KS_Solvers/RMM \
+       KS_Solvers/ParO  KS_Solvers/DENSE  KS_Solvers/RMM  KS_Solvers/Direct \
        upflib XClib Modules LR_Modules \
        PW/src CPV/src PW/tools PP/src PWCOND/src \
        PHonon/Gamma PHonon/PH PHonon/FD HP/src atomic/src \
@@ -98,14 +98,14 @@ for dir in $dirs; do
              DEPENDS="$DEPEND1 $LEVEL1/Modules $LEVEL1/PW/src" ;;
         FFTXlib/src )
              DEPENDS="$LEVEL1/include" ;;
-	KS_Solvers/Davidson | KS_Solvers/Davidson_RCI | KS_Solvers/CG | KS_Solvers/ParO | KS_Solvers/DENSE | KS_Solvers/RMM )
+	KS_Solvers/Davidson | KS_Solvers/Davidson_RCI | KS_Solvers/CG | KS_Solvers/ParO | KS_Solvers/DENSE | KS_Solvers/RMM | KS_Solvers/Direct )
 	     DEPENDS="$DEPEND2" ;;
 	ACFDT/src )
              DEPENDS="$DEPEND3 $LEVEL2/PW/src $LEVEL2/PHonon/PH $LEVEL2/LR_Modules" ;;
 	atomic/src | GWW/gww )
 	     DEPENDS="$DEPEND3" ;;
 	PW/src | CPV/src )
-	     DEPENDS="$DEPEND3 $LEVEL2/KS_Solvers/Davidson $LEVEL2/KS_Solvers/CG $LEVEL2/KS_Solvers/ParO $LEVEL2/KS_Solvers/DENSE $LEVEL2/KS_Solvers/RMM $LEVEL2/dft-d3" ;;
+	     DEPENDS="$DEPEND3 $LEVEL2/KS_Solvers/Davidson $LEVEL2/KS_Solvers/CG $LEVEL2/KS_Solvers/ParO $LEVEL2/KS_Solvers/DENSE $LEVEL2/KS_Solvers/RMM $LEVEL2/KS_Solvers/Direct $LEVEL2/dft-d3" ;;
 	PP/src )
 	     DEPENDS="$DEPEND3 $LEVEL2/PW/src $LEVEL2/dft-d3" ;;
 	PW/tools | PWCOND/src | GWW/pw4gww | NEB/src )
