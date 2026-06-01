@@ -119,6 +119,8 @@
   !! frequency on real-axis, wsph(nqstep)
   REAL(KIND = DP), ALLOCATABLE :: wsi(:)
   !! frequency on imag-axis at iw, wi(nsiw(nstemp))
+  REAL(KIND = DP), ALLOCATABLE :: dwsi(:)
+  !! frequency weight for sparse sampling, counts # of uniform indices represented, dwsi(nsiw(nstemp))
   REAL(KIND = DP), ALLOCATABLE :: en(:)
   !! Energy grid over Fermi window
   REAL(KIND = DP), ALLOCATABLE :: dosen(:)
