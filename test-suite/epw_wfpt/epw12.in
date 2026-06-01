@@ -27,7 +27,6 @@
 
   lwfpt = .true.
   elecselfen = .true.
-  ahc_nbnd = 4
   ahc_win_max = 100.0
   ahc_win_min = -100.0
 
