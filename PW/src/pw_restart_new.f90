@@ -1032,7 +1032,7 @@ MODULE pw_restart_new
             ispin = isk(ik)
             filename = TRIM(dirname) // 'wfc' // updw(ispin) // &
                  & TRIM(int_to_char(ik_g))
-            IF (is_wann) filename = TRIM(dirname) // 'wfcwann' // updw(ispin) // &
+            IF (is_wann) filename = TRIM(dirname) // 'wan' // updw(ispin) // &
                                  & TRIM(int_to_char(ik_g))
             !
             if(exx_is_active()) filenameace = TRIM(dirname) // 'ace' // updw(ispin) // &
@@ -1042,7 +1042,7 @@ MODULE pw_restart_new
             !
             ispin = 1
             filename = TRIM(dirname) // 'wfc' // TRIM(int_to_char(ik_g))
-            IF (is_wann) filename = TRIM(dirname) // 'wfcwann' // TRIM(int_to_char(ik_g))
+            IF (is_wann) filename = TRIM(dirname) // 'wan' // TRIM(int_to_char(ik_g))
             !
             if(exx_is_active()) filenameace = TRIM(dirname) // 'ace' // TRIM(int_to_char(ik_g))
             !
@@ -1530,12 +1530,12 @@ MODULE pw_restart_new
       CHARACTER(LEN=*), INTENT(IN) :: dirname
       INTEGER, INTENT(IN) :: ik
       COMPLEX(dp), INTENT(OUT) :: arr(:,:)
-      CHARACTER(LEN=*), OPTIONAL, INTENT(IN) :: label_
+      CHARACTER(LEN=3), OPTIONAL, INTENT(IN) :: label_
       INTEGER, OPTIONAL, INTENT(OUT)  :: ierr_
       !
       CHARACTER(LEN=2), DIMENSION(2) :: updw = (/ 'up', 'dw' /)
       CHARACTER(LEN=320)   :: filename, msg 
-      CHARACTER(LEN=320)   :: label 
+      CHARACTER(LEN=3)     :: label 
       LOGICAL              :: read_ace
       LOGICAL              :: read_wann
       INTEGER              :: i, ik_g, ig
@@ -1551,15 +1551,14 @@ MODULE pw_restart_new
       !
       if(present(label_)) then 
          label = label_
-         if(TRIM(label).eq."ace") then 
+         if(label.eq."ace") then 
             if(.not.exx_is_active()) CALL errore ('pw_restart-read_collected_wfc',&
                  "ace but not exx_is_active", 1 ) 
             read_ace = .true.
-            read_wann = .false.
-         else if(TRIM(label).eq."wfc") then
+         else if(label.eq."wfc") then
             read_ace = .false.
             read_wann = .false.
-         else if(TRIM(label).eq."wfcwann") then
+         else if(label.eq."wan") then
             read_ace = .false.
             read_wann = .true. 
          else 
@@ -1617,12 +1616,12 @@ MODULE pw_restart_new
          !
          ik_g = MOD ( ik_g-1, nkstot/2 ) + 1 
          ispin = isk(ik)
-         filename = TRIM(dirname) // TRIM(label) // updw(ispin) // &
+         filename = TRIM(dirname) // label // updw(ispin) // &
               & TRIM(int_to_char(ik_g))
          !
       ELSE
          !
-         filename = TRIM(dirname) // TRIM(label) // TRIM(int_to_char(ik_g))
+         filename = TRIM(dirname) // label // TRIM(int_to_char(ik_g))
          !
       ENDIF
       !
