@@ -911,7 +911,7 @@ MODULE pw_restart_new
     END SUBROUTINE pw_write_schema
     !
     !------------------------------------------------------------------------
-    SUBROUTINE write_collected_wfc( )
+    SUBROUTINE write_collected_wfc( wann_spin_component )
       !------------------------------------------------------------------------
       !
       USE mp,                   ONLY : mp_sum, mp_max
@@ -945,6 +945,14 @@ MODULE pw_restart_new
       CHARACTER(LEN=2), DIMENSION(2) :: updw = (/ 'up', 'dw' /)
       CHARACTER(LEN=256)    :: dirname
       CHARACTER(LEN=320)    :: filename, filenameace
+      INTEGER, OPTIONAL, INTENT (IN)  :: wann_spin_component
+      !
+      LOGICAL               :: is_wann
+      !
+      is_wann = .false. 
+      IF (present (wann_spin_component) ) THEN
+         is_wann = .true.
+      ENDIF
       !
       dirname = restart_dir ()
       !
@@ -981,6 +989,9 @@ MODULE pw_restart_new
       ALLOCATE ( mill_k( 3, npwx ) )
       !
       k_points_loop: DO ik = 1, nks
+         !
+         ! one spin component at the time in KCW
+         IF ( is_wann .AND. lsda .AND. isk(ik) /= wann_spin_component) CYCLE
          !
          ! ik_g is the index of k-point ik in the global list
          !
@@ -1021,6 +1032,8 @@ MODULE pw_restart_new
             ispin = isk(ik)
             filename = TRIM(dirname) // 'wfc' // updw(ispin) // &
                  & TRIM(int_to_char(ik_g))
+            IF (is_wann) filename = TRIM(dirname) // 'wan' // updw(ispin) // &
+                                 & TRIM(int_to_char(ik_g))
             !
             if(exx_is_active()) filenameace = TRIM(dirname) // 'ace' // updw(ispin) // &
                  & TRIM(int_to_char(ik_g))
@@ -1029,6 +1042,7 @@ MODULE pw_restart_new
             !
             ispin = 1
             filename = TRIM(dirname) // 'wfc' // TRIM(int_to_char(ik_g))
+            IF (is_wann) filename = TRIM(dirname) // 'wan' // TRIM(int_to_char(ik_g))
             !
             if(exx_is_active()) filenameace = TRIM(dirname) // 'ace' // TRIM(int_to_char(ik_g))
             !
@@ -1523,6 +1537,7 @@ MODULE pw_restart_new
       CHARACTER(LEN=320)   :: filename, msg 
       CHARACTER(LEN=3)     :: label 
       LOGICAL              :: read_ace
+      LOGICAL              :: read_wann
       INTEGER              :: i, ik_g, ig
       INTEGER              :: npol_, nbnd_
       INTEGER              :: ike, iks, ngk_g, npw_g, ispin
@@ -1542,12 +1557,17 @@ MODULE pw_restart_new
             read_ace = .true.
          else if(label.eq."wfc") then
             read_ace = .false.
-         else
+            read_wann = .false.
+         else if(label.eq."wan") then
+            read_ace = .false.
+            read_wann = .true. 
+         else 
             CALL errore ('pw_restart - read_collected_wfc', "wrong label", 1 )
          end if
       else
          label = "wfc"
          read_ace = .false.
+         read_wann = .false.
       end if
       !
       ! ... the root processor of each pool reads
@@ -1630,7 +1650,11 @@ MODULE pw_restart_new
         WRITE(stdout, '(5X,A,I8,A)') 'ACE potential read for ', nbnd_, ' bands'
         nbndproj = nbnd_
         !
-      ELSE IF ( nbnd_ < nbnd .and..not. read_ace) THEN
+      ELSE IF(read_wann) THEN
+        !
+        WRITE(stdout, '(5X,A,I8,A)') 'Read ', nbnd_, ' Wannier functions'
+        !
+      ELSE IF ( nbnd_ < nbnd .and..not. read_ace .and. .not. read_wann) THEN
         !
         WRITE (msg,'("The number of bands for this run is",I6,", but only",&
              & I6," bands were read from file")')  nbnd, nbnd_  
