@@ -513,6 +513,7 @@ SUBROUTINE sternheimer_kernel_old(first_iter, npert, i_ref, lrdvpsi, iudvpsi, &
   USE io_global,             ONLY : stdout
   USE mp_global,             ONLY : inter_pool_comm 
   USE gvecs,                 ONLY : ngms
+  USE incdrhoscf_mod,        ONLY : incdrhoscf
   !
   LOGICAL, INTENT (IN) :: first_iter
   INTEGER, INTENT (IN) :: i_ref
@@ -645,7 +646,7 @@ SUBROUTINE sternheimer_kernel_old(first_iter, npert, i_ref, lrdvpsi, iudvpsi, &
        ENDIF
      ENDIF
      !
-     CALL incdrhoscf (drhoscf(1,current_spin,1), weight, ik, &
+     CALL incdrhoscf (drhoscf(:,current_spin,1), weight, ik, &
                       dbecsum(1,1,current_spin,1), DPsi)
     !
 !!## DEBUG 

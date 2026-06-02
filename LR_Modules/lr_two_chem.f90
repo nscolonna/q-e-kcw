@@ -1015,6 +1015,7 @@ SUBROUTINE sternheimer_kernel_twochem(first_iter, time_reversed, npert, lrdvpsi,
    USE qpoint_aux,            ONLY : ikmks, ikmkmqs, becpt
    USE eqv,                   ONLY : dpsi, dvpsi, evq
    USE apply_dpot_mod,        ONLY : apply_dpot_bands
+   USE incdrhoscf_mod,        ONLY : incdrhoscf, incdrhoscf_nc
    !
    IMPLICIT NONE
    !
