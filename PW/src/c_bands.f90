@@ -77,13 +77,15 @@ SUBROUTINE c_bands( iter )
   ELSEIF ( isolve == 3 ) THEN
      WRITE( stdout, '(5X,"ParO style diagonalization")')
   ELSEIF ( isolve == 4 ) THEN
-     IF (rmm_use_davidson(iter)) THEN 
+     IF (rmm_use_davidson(iter)) THEN
        WRITE( stdout, '(5X,"Davidson diagonalization with overlap")' )
-     ELSE IF (rmm_use_paro(iter)) THEN 
+     ELSE IF (rmm_use_paro(iter)) THEN
       WRITE( stdout, '(5X,"ParO style diagonalization")')
-     ELSE 
+     ELSE
        WRITE( stdout, '(5X,"RMM-DIIS diagonalization")')
-     END IF 
+     END IF
+  ELSEIF ( isolve == 5 ) THEN
+     WRITE( stdout, '(5X,"Direct diagonalization of the dense Hamiltonian matrix")')
   ELSE
      CALL errore ( 'c_bands', 'invalid type of diagonalization', isolve)
   ENDIF
@@ -217,6 +219,7 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
   !
   USE control_flags,        ONLY : scissor
   USE sci_mod,              ONLY : evcc
+  USE diag_direct,          ONLY : diag_direct_run_k
 #if defined (__OSCDFT)
   USE plugin_flags,     ONLY : use_oscdft
   USE oscdft_base,      ONLY : oscdft_ctx
@@ -500,31 +503,17 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
           !
           IF ( use_para_diag ) THEN
              !
-             IF (.not. use_gpu) THEN
-                !
-                ! make sure that all processors have the same wfc
-                CALL pregterg( h_psi, s_psi, okvan, g_psi, &
+             CALL pregterg( h_psi, s_psi, okvan, g_psi, &
                             npw, npwx, nbnd, nbndx, evc, ethr, &
                             et(1,ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
-                !
-             ELSE
-                !
-                CALL pregterg_gpu( h_psi, s_psi, okvan, g_psi, &
-                            npw, npwx, nbnd, nbndx, evc, ethr, &
-                            et(1, ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
-                ! 
-             END IF
              !
           ELSE
              !
-             !$acc host_data use_device(et)
              CALL regterg (  h_psi, s_psi, okvan, g_psi, &
                       npw, npwx, nbnd, nbndx, evc, ethr, &
                       et(1, ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
-             !$acc end host_data
              !
           END IF
-          !$acc update self(et)
           !
           avg_iter = avg_iter + dav_iter
           !
@@ -726,6 +715,14 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
           NULLIFY( sevc )
        END IF
        !
+    ELSE IF ( isolve == 5 ) THEN
+       !
+       ! ... Full-band diagonalization with an explicit, dense H matrix
+       !
+       CALL diag_direct_run_k(ik, npw, nbnd, evc, et(1,ik), notconv)
+       !
+       avg_iter = avg_iter + 1.0_DP
+       !
     ELSE
        !
        ! ... Davidson diagonalization
@@ -747,30 +744,17 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
           !
           IF ( use_para_diag ) then
              !
-             IF (.not. use_gpu ) THEN
-                !
-                CALL pcegterg( h_psi, s_psi, okvan, g_psi, &
-                               npw, npwx, nbnd, nbndx, npol, evc, ethr, &
-                               et(1,ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
-                !
-             ELSE
-                !
-                CALL pcegterg_gpu( h_psi, s_psi, okvan, g_psi, &
-                               npw, npwx, nbnd, nbndx, npol, evc, ethr, &
-                               et(1, ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
-                !
-             END IF
+             CALL pcegterg ( h_psi, s_psi, okvan, g_psi, &
+                  npw, npwx, nbnd, nbndx, npol, evc, ethr, &
+                  et(1, ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
              !
           ELSE
              !
-             !$acc host_data use_device(et)
              CALL cegterg ( h_psi, s_psi, okvan, g_psi, &
                             npw, npwx, nbnd, nbndx, npol, evc, ethr, &
                             et(1, ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
-             !$acc end host_data 
              !
           END IF
-          !$acc update self(et)
           !
           avg_iter = avg_iter + dav_iter
           !
@@ -944,6 +928,8 @@ SUBROUTINE c_bands_nscf( )
      WRITE( stdout, '(5X,"ParO style diagonalization")')
   ELSEIF ( isolve == 4 ) THEN
      WRITE( stdout, '(5X,"RMM-DIIS diagonalization")')
+  ELSEIF ( isolve == 5 ) THEN
+     WRITE( stdout, '(5X,"Direct diagonalization of the dense Hamiltonian matrix")')
   ELSE
      CALL errore ( 'c_bands', 'invalid type of diagonalization', isolve )
   ENDIF

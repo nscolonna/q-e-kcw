@@ -71,7 +71,7 @@
   !
   CALL write_eigen_band (filband)
   !
-  CALL environment_end ( )
+  CALL environment_end ( 'BANDS' )
   !
   CALL stop_pp()
   STOP
