@@ -17,7 +17,7 @@
   CONTAINS
     !
     !----------------------------------------------------------------------
-    SUBROUTINE dvqpsi_us3(ik, uact, addnlcc, xxkq, xq0, igk, igkq, npw, npwq, evc)
+    SUBROUTINE dvqpsi_us3(ik, uact, addnlcc, xxkq, xq0, igk, igkq, npw, npwq, evc, dvscf)
     !----------------------------------------------------------------------
     !!
     !! This routine calculates dV_bare/dtau * psi for one perturbation
@@ -38,28 +38,20 @@
     !! SP - Feb 2020
     !! Pass the wfc at k (evc) explicitely to work with noncolin rotation.
     !!
+    !! JML - Nov 2024
+    !! Use modularized routines in LR_Modules and PHonon
+    !!
     USE kinds,                 ONLY : DP
-    USE pwcom,                 ONLY : nbnd
-    USE ions_base,             ONLY : nat, ityp
-    USE cell_base,             ONLY : tpiba
-    USE fft_base,              ONLY : dfftp, dffts
-    USE fft_interfaces,        ONLY : fwfft, invfft
-    USE gvect,                 ONLY : eigts1, eigts2, eigts3, mill, g, ngm
-    USE gvecs,                 ONLY : ngms
-    USE lsda_mod,              ONLY : lsda
-    USE scf,                   ONLY : rho, rho_core
-    USE noncollin_module,      ONLY : nspin_lsda, nspin_gga, npol
-    use uspp_param,            ONLY : upf
+    USE ions_base,             ONLY : nat
+    USE fft_base,              ONLY : dffts
+    USE noncollin_module,      ONLY : npol, nspin_mag
     USE wvfct,                 ONLY : npwx
-    USE nlcc_ph,               ONLY : drc
-    USE uspp,                  ONLY : nlcc_any
-    USE eqv,                   ONLY : dvpsi, dmuxc, vlocq
-    USE qpoint,                ONLY : eigqts
+    USE lsda_mod,              ONLY : lsda, current_spin
+    USE eqv,                   ONLY : dvpsi
+    USE qpoint,                ONLY : xq
+    USE fft_wave,              ONLY : invfft_wave, fwfft_wave
     USE input,                 ONLY : isk_loc
-    USE gc_lr,                 ONLY : grho, dvxc_rr, dvxc_sr, dvxc_ss, dvxc_s
-    USE funct,                 ONLY : dft_is_nonlocc
-    USE xc_lib,                ONLY : xclib_dft_is
-    USE global_var,            ONLY : lower_band, upper_band, ibndkept
+    USE global_var,            ONLY : lower_band, upper_band, nbndep
     USE ep_constants,          ONLY : czero, eps12
     !
     IMPLICIT NONE
@@ -82,212 +74,92 @@
     !! k+q point coordinate
     COMPLEX(KIND = DP), INTENT(in) :: uact(3 * nat)
     !! the pattern of displacements
-    COMPLEX(KIND = DP), INTENT(in) :: evc(npwx * npol, nbnd)
+    COMPLEX(KIND = DP), INTENT(in) :: evc(npwx * npol, nbndep)
     !! Wavefunction at k
+    COMPLEX(KIND = DP), INTENT(in) :: dvscf(dffts%nnr, nspin_mag)
+    !! Induced part of the phonon potential
     !
     ! Local variables
-    INTEGER :: na
-    !! counter on atoms
-    INTEGER :: mu
-    !! counter on modes
-    INTEGER :: ig
-    !! counter on G vectors
-    INTEGER :: nt
-    !! counter on atomic types
     INTEGER :: ibnd
     !! counter on bands
-    INTEGER :: jbnd
-    !! counter on bands
-    INTEGER ::  ir
+    INTEGER :: ir
     !! counter on real mesh
-    INTEGER :: is
-    !! counter on spin
-    INTEGER :: ip
+    INTEGER :: ipol
     !! counter on polarizations
     INTEGER :: ierr
     !! Error status
-    REAL(KIND = DP) :: fac
-    !! spin degeneracy factor
-    COMPLEX(KIND = DP) :: gtau
-    !! e^{-i G * \tau}
-    COMPLEX(KIND = DP) :: u1, u2, u3
-    !! components of displacement pattern u
-    COMPLEX(KIND = DP) :: gu0
-    !! scalar product q * u
-    COMPLEX(KIND = DP) :: gu
-    !! q * u + G * u
-    COMPLEX(KIND = DP) :: fact
-    !! e^{-i q * \tau}
-    COMPLEX(KIND = DP), ALLOCATABLE, TARGET :: aux(:)
-    !! Auxillary variable
-    COMPLEX(KIND = DP), ALLOCATABLE :: aux1(:), aux2(:)
-    !! Auxillary variable
-    COMPLEX(KIND = DP), POINTER :: auxs(:)
-    !! Auxiallary pointer
-    COMPLEX(KIND = DP), ALLOCATABLE :: drhoc(:)
-    !! response core charge density
+    REAL(KIND = DP) :: xq_bak(3)
+    !! Backup of xq
+    COMPLEX(KIND = DP), ALLOCATABLE :: dvloc(:)
+    !! Local potential (dffts)
+    COMPLEX(KIND = DP), ALLOCATABLE :: evc_r(:, :)
+    !! Wavefunction in real space
+    COMPLEX(KIND = DP), ALLOCATABLE :: dvpsi_r(:, :)
+    !! Wavefunction times local potential in real space
     !
     CALL start_clock('dvqpsi_us3')
     !
-    IF (nlcc_any .AND. addnlcc) THEN
-      ALLOCATE(drhoc(dfftp%nnr), STAT = ierr)
-      IF (ierr /= 0) CALL errore('dvqpsi_us3', 'Error allocating drhoc', 1)
-      ALLOCATE(aux(dfftp%nnr), STAT = ierr)
-      IF (ierr /= 0) CALL errore('dvqpsi_us3', 'Error allocating aux', 1)
-      ALLOCATE(auxs(dffts%nnr), STAT = ierr)
-      IF (ierr /= 0) CALL errore('dvqpsi_us3', 'Error allocating auxs', 1)
-    ENDIF
-    ALLOCATE(aux1(dffts%nnr), STAT = ierr)
-    IF (ierr /= 0) CALL errore('dvqpsi_us3', 'Error allocating aux1', 1)
-    ALLOCATE(aux2(dffts%nnr), STAT = ierr)
-    IF (ierr /= 0) CALL errore('dvqpsi_us3', 'Error allocating aux2', 1)
+    ALLOCATE(dvloc(dffts%nnr), STAT = ierr)
+    IF (ierr /= 0) CALL errore('dvqpsi_us3', 'Error allocating dvloc', 1)
+    !$acc enter data create(dvloc)
+    ALLOCATE(evc_r(dffts%nnr, npol), STAT = ierr)
+    IF (ierr /= 0) CALL errore('dvqpsi_us3', 'Error allocating evc_r', 1)
+    !$acc enter data create(evc_r)
+    ALLOCATE(dvpsi_r(dffts%nnr, npol), STAT = ierr)
+    IF (ierr /= 0) CALL errore('dvqpsi_us3', 'Error allocating evc_r', 1)
+    !$acc enter data create(dvpsi_r)
     !
-    !    We start by computing the contribution of the local potential.
-    !    The computation of the derivative of the local potential is done in
-    !    reciprocal space while the product with the wavefunction is done in real space
+    ! For LSDA, current_spin must be set to compute the correct spin component of dvloc.
     !
-    dvpsi(:, :) = czero
-    aux1(:) = czero
-    DO na = 1, nat
-      fact = tpiba * (0.d0, -1.d0) * eigqts(na)
-      mu = 3 * (na - 1)
-      u1 = uact(mu + 1)
-      u2 = uact(mu + 2)
-      u3 = uact(mu + 3)
-      IF (ABS(u1) + ABS(u2) + ABS(u3) > eps12) THEN
-        nt = ityp(na)
-        gu0 = xq0(1) * u1 + xq0(2) * u2 + xq0(3) * u3
-        DO ig = 1, ngms
-          gtau = eigts1(mill(1, ig), na) * &
-                 eigts2(mill(2, ig), na) * &
-                 eigts3(mill(3, ig), na)
-          gu = gu0 + g(1, ig) * u1 + g(2, ig) * u2 + g(3, ig) * u3
-          aux1(dffts%nl(ig)) = aux1(dffts%nl(ig)) + vlocq(ig, nt) * gu * fact * gtau
-        ENDDO
-        !
-      ENDIF
-    ENDDO
+    IF (lsda) current_spin = isk_loc(ik)
     !
-    ! add NLCC when present
+    !    We start by computing the contribution of the bare and induced local potential.
     !
-    IF (nlcc_any .AND. addnlcc) THEN
-      drhoc(:) = czero
-      DO na = 1, nat
-        fact = tpiba * (0.d0, -1.d0) * eigqts(na)
-        mu = 3 * (na - 1)
-        u1 = uact(mu + 1)
-        u2 = uact(mu + 2)
-        u3 = uact(mu + 3)
-        IF (ABS(u1) + ABS(u2) + ABS(u3) > eps12) THEN
-          nt = ityp(na)
-          gu0 = xq0(1) * u1 + xq0(2) * u2 + xq0(3) * u3
-          IF (upf(nt)%nlcc) THEN
-            DO ig = 1, ngm
-              gtau = eigts1(mill(1, ig), na) * &
-                     eigts2(mill(2, ig), na) * &
-                     eigts3(mill(3, ig), na)
-              gu = gu0 + g(1, ig) * u1 + g(2, ig) * u2 + g(3, ig) * u3
-              drhoc(dfftp%nl(ig)) = drhoc(dfftp%nl(ig)) + drc(ig, nt) * gu * fact * gtau
-            ENDDO
-          ENDIF
-        ENDIF
-      ENDDO
-      !
-      CALL invfft('Rho', drhoc, dfftp)
-      !
-      aux(:) = czero
-      IF (.NOT. lsda) THEN
-        DO ir = 1, dfftp%nnr
-          aux(ir) = drhoc(ir) * dmuxc(ir, 1, 1)
-        ENDDO
-      ELSE
-        is = isk_loc(ik)
-        DO ir = 1, dfftp%nnr
-          aux(ir) = drhoc(ir) * 0.5d0 * (dmuxc(ir, is, 1) + dmuxc(ir, is, 2))
-        ENDDO
-      ENDIF
-      !
-      fac = 1.d0 / DBLE(nspin_lsda)
-      DO is = 1, nspin_lsda
-        rho%of_r(:, is) = rho%of_r(:, is) + fac * rho_core
-      ENDDO
-      !
-      IF (xclib_dft_is('gradient')) THEN
-        CALL dgradcorr(dfftp, rho%of_r, grho, dvxc_rr, dvxc_sr, dvxc_ss, dvxc_s, xq0, drhoc, &
-                       1, nspin_gga, g, aux)
-      ENDIF
-      !
-      IF (dft_is_nonlocc()) THEN
-        CALL dnonloccorr(rho%of_r, drhoc, xq0, aux)
-      ENDIF
-      !
-      DO is = 1, nspin_lsda
-        rho%of_r(:, is) = rho%of_r(:, is) - fac * rho_core
-      ENDDO
-      !
-      CALL fwfft('Rho', aux, dfftp)
-      !
-      ! This is needed also when the smooth and the thick grids coincide to
-      ! cut the potential at the cut-off
-      !
-      auxs(:) = czero
-      DO ig = 1, ngms
-        auxs(dffts%nl(ig)) = aux(dfftp%nl(ig))
-      ENDDO
-      aux1(:) = aux1(:) + auxs(:)
-    ENDIF
+    ! Comute the bare local potential using compute_dvloc. Subroutine compute_dvloc uses
+    ! xq in the global module qpoint. So we create a backup and restore it.
     !
-    ! Now we compute dV_loc/dtau in real space
+    xq_bak = xq
+    xq = xq0
+    CALL compute_dvloc(uact, addnlcc, dvloc)
+    xq = xq_bak
     !
-    CALL invfft('Rho', aux1, dffts)
+    dvpsi(:, :) = (0.d0, 0.d0)
+    !
+    !$acc enter data copyin(dvpsi,igk,igkq,evc,dvscf)
     DO ibnd = lower_band, upper_band
-      jbnd = ibndkept(ibnd)
-      DO ip = 1, npol
-        aux2(:) = czero
-        IF (ip == 1) THEN
-          DO ig = 1, npw
-            aux2(dffts%nl(igk(ig))) = evc(ig, jbnd)
-          ENDDO
-        ELSE
-          DO ig = 1, npw
-            aux2(dffts%nl(igk(ig))) = evc(ig + npwx, jbnd)
-          ENDDO
-        ENDIF
-        !
-        !  This wavefunction is computed in real space
-        !
-        CALL invfft('Wave', aux2, dffts)
+      CALL invfft_wave(npwx, npw, igk, evc(:, ibnd), evc_r)
+      !
+      !$acc parallel loop collapse(2) private(ipol,ir)
+      DO ipol = 1, npol
         DO ir = 1, dffts%nnr
-          aux2(ir) = aux2(ir) * aux1(ir)
+          dvpsi_r(ir, ipol) = evc_r(ir, ipol)
         ENDDO
-        !
-        ! and finally dV_loc/dtau * psi is transformed in reciprocal space
-        !
-        CALL fwfft('Wave', aux2, dffts)
-        IF (ip == 1) THEN
-          DO ig = 1, npwq
-            dvpsi(ig, ibnd) = aux2(dffts%nl(igkq(ig)))
-          ENDDO
-        ELSE
-          DO ig = 1, npwq
-            dvpsi(ig + npwx, ibnd) = aux2(dffts%nl(igkq(ig)))
-          ENDDO
-        ENDIF
       ENDDO
+      !
+      !$acc data present(dvpsi_r,dvscf)
+      CALL apply_dpot(dffts%nnr, dvpsi_r, dvscf, current_spin)
+      !$acc end data
+      !
+      !$acc parallel loop collapse(2) private(ipol,ir)
+      DO ipol = 1, npol
+        DO ir = 1, dffts%nnr
+          dvpsi_r(ir, ipol) = dvpsi_r(ir, ipol) + evc_r(ir, ipol) * dvloc(ir)
+        ENDDO
+      ENDDO
+      !
+      CALL fwfft_wave(npwx, npwq, igkq, dvpsi(:, ibnd), dvpsi_r)
     ENDDO
+    !$acc exit data copyout(dvpsi) delete(igk,igkq,evc,dvscf)
     !
-    IF (nlcc_any .AND. addnlcc) THEN
-      DEALLOCATE(drhoc, STAT = ierr)
-      IF (ierr /= 0) CALL errore('dvqpsi_us3', 'Error deallocating drhoc', 1)
-      DEALLOCATE(aux, STAT = ierr)
-      IF (ierr /= 0) CALL errore('dvqpsi_us3', 'Error deallocating aux', 1)
-      DEALLOCATE(auxs, STAT = ierr)
-      IF (ierr /= 0) CALL errore('dvqpsi_us3', 'Error deallocating auxs', 1)
-    ENDIF
-    DEALLOCATE(aux1, STAT = ierr)
-    IF (ierr /= 0) CALL errore('dvqpsi_us3', 'Error deallocating aux1', 1)
-    DEALLOCATE(aux2, STAT = ierr)
-    IF (ierr /= 0) CALL errore('dvqpsi_us3', 'Error deallocating aux2', 1)
+    !$acc exit data delete(dvloc)
+    DEALLOCATE(dvloc, STAT = ierr)
+    IF (ierr /= 0) CALL errore('dvqpsi_us3', 'Error deallocating dvloc', 1)
+    !$acc exit data delete(evc_r)
+    DEALLOCATE(evc_r, STAT = ierr)
+    IF (ierr /= 0) CALL errore('dvqpsi_us3', 'Error deallocating evc_r', 1)
+    !$acc exit data delete(dvpsi_r)
+    DEALLOCATE(dvpsi_r, STAT = ierr)
+    IF (ierr /= 0) CALL errore('dvqpsi_us3', 'Error deallocating dvpsi_r', 1)
     !
     ! We add the contribution of the nonlocal potential in the US form
     ! First a term similar to the KB case.
@@ -321,7 +193,7 @@
     USE gvect,            ONLY : g
     USE ions_base,        ONLY : nat, ityp, ntyp => nsp
     USE lsda_mod,         ONLY : lsda, current_spin, nspin
-    USE wvfct,            ONLY : npwx, et
+    USE wvfct,            ONLY : npwx
     USE uspp,             ONLY : okvan, nkb, vkb
     USE uspp_param,       ONLY : nh, nhm
     USE phus,             ONLY : int1, int1_nc, int2, int2_so, alphap
@@ -330,7 +202,13 @@
     USE global_var,       ONLY : lower_band, upper_band, ibndkept
     USE noncollin_module, ONLY : noncolin, npol, lspinorb
     USE ep_constants,     ONLY : czero, zero, cone, eps12
-    USE input,            ONLY : isk_loc
+    USE input,            ONLY : isk_loc, et_loc
+#if defined(__CUDA)
+    USE cublas
+#endif
+#if defined (__ONEMKL)
+    USE epw_onemkl
+#endif
     !
     IMPLICIT NONE
     !
@@ -400,6 +278,18 @@
     !!
     COMPLEX(KIND = DP), ALLOCATABLE :: ps2_nc(:, :, :, :)
     !!
+    INTEGER, ALLOCATABLE :: nnzlist(:, :)
+    !!
+    COMPLEX(KIND = DP), ALLOCATABLE :: aux2(:, :)
+    !!
+    COMPLEX(KIND = DP), ALLOCATABLE :: aux3(:, :, :)
+    !!
+    INTEGER :: l
+    !!
+    INTEGER :: nnz
+    !!
+    INTEGER :: nbnd
+    !!
     !
     CALL start_clock('dvqpsi_us_on')
     IF (noncolin) THEN
@@ -434,9 +324,9 @@
     DO ibnd = lower_band, upper_band
       jbnd = ibndkept(ibnd)
       IF (noncolin) THEN
-        CALL compute_deff_nc(deff_nc, et(jbnd, ik))
+        CALL compute_deff_nc(deff_nc, et_loc(jbnd, ik))
       ELSE
-        CALL compute_deff(deff, et(jbnd, ik))
+        CALL compute_deff(deff, et_loc(jbnd, ik))
       ENDIF
       !
       ijkb0 = 0
@@ -456,16 +346,16 @@
                         DO js = 1, npol
                           ijs = ijs + 1
                           ps1_nc(ikb, is, ibnd) = ps1_nc(ikb, is, ibnd) + deff_nc(ih, jh, na, ijs) * &
-                                 alphap(ipol, ik)%nc(jkb, js, jbnd) * uact(mu + ipol)
+                                 alphap(ipol, ik)%nc(jkb, js, ibnd) * uact(mu + ipol)
                           ps2_nc(ikb, is, ibnd, ipol) = ps2_nc(ikb, is, ibnd, ipol) + &
-                                 deff_nc(ih, jh, na, ijs) * becp1(ik)%nc(jkb, js, jbnd) * &
+                                 deff_nc(ih, jh, na, ijs) * becp1(ik)%nc(jkb, js, ibnd) * &
                                  (0.d0, -1.d0) * uact(mu + ipol) * tpiba
                         ENDDO
                       ENDDO
                     ELSE
                       ps1(ikb, ibnd) = ps1(ikb, ibnd) + &
-                                       deff(ih, jh, na) * alphap(ipol, ik)%k(jkb, jbnd) * uact(mu + ipol)
-                      ps2(ikb, ibnd, ipol) = ps2(ikb, ibnd, ipol) + deff(ih, jh, na) * becp1(ik)%k(jkb, jbnd) * &
+                                       deff(ih, jh, na) * alphap(ipol, ik)%k(jkb, ibnd) * uact(mu + ipol)
+                      ps2(ikb, ibnd, ipol) = ps2(ikb, ibnd, ipol) + deff(ih, jh, na) * becp1(ik)%k(jkb, ibnd) * &
                                              (0.d0, -1.d0) * uact(mu + ipol) * tpiba
                     ENDIF
                     IF (okvan) THEN
@@ -475,12 +365,12 @@
                           DO js = 1, npol
                             ijs = ijs + 1
                             ps1_nc(ikb, is, ibnd) = ps1_nc(ikb, is, ibnd) + int1_nc(ih, jh, ipol, na, ijs) * &
-                               becp1(ik)%nc(jkb, js, jbnd) * uact(mu + ipol)
+                               becp1(ik)%nc(jkb, js, ibnd) * uact(mu + ipol)
                           ENDDO
                         ENDDO
                       ELSE
                         ps1(ikb, ibnd) = ps1(ikb, ibnd) + int1(ih, jh, ipol, na, current_spin) * &
-                            becp1(ik)%k(jkb, jbnd) * uact(mu + ipol)
+                            becp1(ik)%k(jkb, ibnd) * uact(mu + ipol)
                       ENDIF
                     ENDIF ! okvan
                   ENDIF  ! uact>0
@@ -494,18 +384,18 @@
                             DO js = 1, npol
                               ijs = ijs + 1
                               ps1_nc(ikb, is, ibnd) = ps1_nc(ikb, is, ibnd) + int2_so(ih, jh, ipol, nb, na, ijs) * &
-                                 becp1(ik)%nc(jkb, js, jbnd) * uact(nu + ipol)
+                                 becp1(ik)%nc(jkb, js, ibnd) * uact(nu + ipol)
                             ENDDO
                           ENDDO
                         ELSE
                           DO is = 1, npol
                             ps1_nc(ikb, is, ibnd) = ps1_nc(ikb, is, ibnd) + int2(ih, jh, ipol, nb, na) * &
-                               becp1(ik)%nc(jkb, is, jbnd) * uact(nu + ipol)
+                               becp1(ik)%nc(jkb, is, ibnd) * uact(nu + ipol)
                           ENDDO
                         ENDIF
                       ELSE
                         ps1(ikb,ibnd) = ps1(ikb,ibnd) + int2(ih, jh, ipol, nb, na) * &
-                            becp1(ik)%k(jkb, jbnd) * uact(nu + ipol)
+                            becp1(ik)%k(jkb, ibnd) * uact(nu + ipol)
                       ENDIF
                     ENDDO
                   ENDIF  ! okvan
@@ -522,16 +412,129 @@
     !
     IF (nkb > 0) THEN
       IF (noncolin) THEN
+#if defined (__ONEMKL)
+        !$omp target data map(tofrom:vkb, ps1_nc, dvpsi)
+        !$omp dispatch
+#endif
         CALL ZGEMM('n', 'n', npwq, (upper_band - lower_band + 1)*npol, nkb, &
                    cone, vkb, npwx, ps1_nc, nkb, cone, dvpsi, npwx)
+#if defined (__ONEMKL)
+        !$omp end target data
+#endif
       ELSE
+#if defined (__ONEMKL)
+        !$omp target data map(tofrom:vkb, ps1, dvpsi)
+        !$omp dispatch
+#endif
         CALL ZGEMM('n', 'n', npwq, (upper_band - lower_band + 1), nkb, &
                    cone, vkb, npwx, ps1, nkb, cone, dvpsi, npwx)
+#if defined (__ONEMKL)
+        !$omp end target data
+#endif
       ENDIF
     ENDIF
     !
     !      This term is proportional to (k+q+G)_\alpha*beta(k+q+G)
     !
+#if defined (__CUDA) || defined (__ONEMKL)
+    !   Figure out which values of ikb, ipol need accumulation
+    ALLOCATE(nnzlist(3*nkb, 2))
+    l = 0
+    DO ikb = 1, nkb
+      DO ipol = 1, 3
+        ok = .FALSE.
+        DO ibnd = lower_band, upper_band
+          IF (noncolin) THEN
+            ok = ok .OR. (ABS(ps2_nc(ikb, 1, ibnd, ipol) ) > eps12) .OR. &
+                         (ABS(ps2_nc(ikb, 2, ibnd, ipol) ) > eps12)
+          ELSE
+            ok = ok .OR. (ABS(ps2(ikb, ibnd, ipol)) > eps12)
+          ENDIF
+          IF (ok) EXIT
+        ENDDO
+        IF (ok) THEN
+          l = l + 1
+          nnzlist(l, 1) = ikb
+          nnzlist(l, 2) = ipol
+        ENDIF
+      ENDDO
+    ENDDO
+
+    nnz = l
+    nbnd = upper_band - lower_band + 1
+    ALLOCATE(aux2(npwq, nnz), STAT = ierr)
+    IF (ierr /= 0) CALL errore('dvqpsi_us_only3', 'Error allocating aux2', 1)
+    ALLOCATE(aux3(nnz, nbnd, npol), STAT = ierr)
+    IF (ierr /= 0) CALL errore('dvqpsi_us_only3', 'Error allocating aux3', 1)
+
+    DO ibnd = lower_band, upper_band
+      DO l = 1, nnz
+        ikb = nnzlist(l, 1)
+        ipol = nnzlist(l, 2)
+        IF (noncolin) THEN
+          aux3(l, ibnd - lower_band + 1, 1) = ps2_nc(ikb, 1, ibnd, ipol)
+          aux3(l, ibnd - lower_band + 1, 2) = ps2_nc(ikb, 2, ibnd, ipol)
+        ELSE
+          aux3(l, ibnd - lower_band + 1, 1) = ps2(ikb, ibnd, ipol)
+        ENDIF
+      ENDDO
+    ENDDO
+ 
+    !TODO: vkb is the largest object here, consider splitting it if memory issues arise
+    !$acc data copyin(igkq,vkb,xxkq,g,aux3,nnzlist) &
+    !$acc      create(aux2) copy(dvpsi)
+    !$omp target data map(to:igkq,vkb,xxkq,g,aux3,nnzlist) &
+    !$omp             map(alloc:aux2) map(tofrom:dvpsi)
+
+    ! Construct the auxiliary array for each allowed value of ikb, ipol
+#if defined (__CUDA)
+    !$acc parallel loop gang vector collapse(2) private(igg,ikb,ipol)
+#elif defined (__ONEMKL)
+    !$omp target teams distribute parallel do collapse(2) private(igg,ikb,ipol)
+#endif
+    DO l = 1, nnz
+       DO ig = 1, npwq
+          igg = igkq(ig)
+          ikb = nnzlist(l, 1)
+          ipol = nnzlist(l, 2)
+          aux2(ig, l) = vkb(ig, ikb) * (xxkq(ipol) + g(ipol, igg))
+       ENDDO
+    ENDDO
+#if defined (__CUDA)
+    !$acc end parallel loop
+#elif defined (__ONEMKL)
+    !$omp end target teams distribute parallel do
+#endif
+
+#if defined(__CUDA)
+    !$acc host_data use_device(aux2,aux3,dvpsi)
+    CALL CUBLASZGEMM('n', 'n', npwq, nbnd, nnz, cone, aux2, npwq, aux3(1, 1, 1), nnz, cone, &
+                     dvpsi(1, 1), npwx * npol)
+    !$acc end host_data
+    IF (noncolin) THEN
+      !$acc host_data use_device(aux2,aux3,dvpsi)
+      CALL CUBLASZGEMM('n', 'n', npwq, nbnd, nnz, cone, aux2, npwq, aux3(1, 1, 2), nnz, cone, &
+                       dvpsi(1 + npwx, 1), npwx * npol) 
+      !$acc end host_data
+    ENDIF
+#else
+#if defined (__ONEMKL)
+    !$omp dispatch
+#endif
+    CALL ZGEMM('n', 'n', npwq, nbnd, nnz, cone, aux2, npwq, aux3(1, 1, 1), nnz, cone, &
+                 dvpsi(1, lower_band), npwx * npol)
+    IF (noncolin) THEN
+#if defined (__ONEMKL)
+      !$omp dispatch
+#endif
+      CALL ZGEMM('n', 'n', npwq, nbnd, nnz, cone, aux2, npwq, aux3(1, 1, 2), nnz, cone, &
+                   dvpsi(1 + npwx, lower_band), npwx * npol)
+    ENDIF
+#endif
+    !$omp end target data
+    !$acc end data
+    DEALLOCATE(nnzlist, aux2, aux3)
+#else
     DO ikb = 1, nkb
       DO ipol = 1, 3
         ok = .FALSE.
@@ -561,6 +564,7 @@
         ENDIF
       ENDDO
     ENDDO
+#endif
     !
     DEALLOCATE(aux, STAT = ierr)
     IF (ierr /= 0) CALL errore('dvqpsi_us_only3', 'Error deallocating aux', 1)
@@ -623,7 +627,6 @@
     USE uspp,             ONLY : okvan, ijtoh
     USE mp,               ONLY : mp_sum
     USE fft_base,         ONLY : dfftp
-    USE fft_interfaces,   ONLY : fwfft
     USE ep_constants,     ONLY : zero, czero
     USE mp_images,        ONLY : intra_image_comm
     USE global_var,       ONLY : veff, ig_s, ig_e
@@ -669,8 +672,6 @@
     !! e^{-i q * \tau} * CONJG(e^{-i q * \tau})
     COMPLEX(KIND = DP) :: fact1
     !! -i * omega
-    COMPLEX(KIND = DP), EXTERNAL :: ZDOTC
-    !! the scalar product function
     COMPLEX(KIND = DP), ALLOCATABLE :: aux1(:), aux2(:), aux5(:)
     !! Auxiallary array
     COMPLEX(KIND = DP), ALLOCATABLE :: sk(:)
@@ -786,7 +787,7 @@
                     DO ig = 1, ngvec
                       aux5(ig) = sk(ig) * (g(ipol, ig + ig_s - 1) + xq(ipol))
                     ENDDO
-                    int2(ih, jh, ipol, na, nb) = fact * fact1 * ZDOTC(ngvec, aux1, 1, aux5, 1)
+                    int2(ih, jh, ipol, na, nb) = fact * fact1 * DOT_PRODUCT(aux1(1:ngvec), aux5(1:ngvec))
                     !
                   ENDDO !ipol
                   !
@@ -803,7 +804,7 @@
                     DO ig = 1, ngvec
                       aux2(ig) = veff(dfftp%nl(ig + ig_s - 1), is) * g(ipol, ig + ig_s - 1)
                     ENDDO
-                    int1(ih, jh, ipol, nb, is) = - fact1 * ZDOTC(ngvec, aux1, 1, aux2, 1)
+                    int1(ih, jh, ipol, nb, is) = - fact1 * DOT_PRODUCT(aux1(1:ngvec), aux2(1:ngvec))
                   ENDDO ! ipol
                 ENDDO ! is
               ENDIF ! ityp
@@ -832,8 +833,6 @@
         ENDDO ! ih
       ENDIF ! upf
     ENDDO ! ntb
-    CALL mp_sum(int1, intra_image_comm)
-    CALL mp_sum(int2, intra_image_comm)
     !
     IF (noncolin) THEN
       CALL set_int12_nc(0)
@@ -937,8 +936,6 @@
     !! the values of q+G
     REAL(KIND = DP), ALLOCATABLE :: ylmk0(:, :)
     !! the spherical harmonics at q+G
-    COMPLEX(KIND = DP), EXTERNAL :: ZDOTC
-    !! the scalar product function
     COMPLEX(KIND = DP), ALLOCATABLE :: aux1(:), aux2(:, :)
     !! Auxillary variable
     COMPLEX(KIND = DP), ALLOCATABLE :: qgm(:)
@@ -1020,7 +1017,7 @@
                                          eigqts(na)
                   ENDDO
                   DO is = 1, nspin_mag
-                    int3(ih, jh, na, is, ipert) = omega * ZDOTC(ngvec, aux1, 1, aux2(1, is), 1)
+                    int3(ih, jh, na, is, ipert) = omega * DOT_PRODUCT(aux1(1:ngvec), aux2(1:ngvec, is))
                   ENDDO
                 ENDIF
               ENDDO
@@ -1044,8 +1041,6 @@
         ENDIF ! upf
       ENDDO ! nt
     ENDDO ! ipert
-    !
-    CALL mp_sum(int3, intra_image_comm)
     !
     ! Sum of the USPP and PAW terms
     ! (see last two terms in Eq.(12) in PRB 81, 075123 (2010))
@@ -1101,7 +1096,7 @@
     USE lrus,             ONLY : int3, int3_nc, becp1
     USE qpoint,           ONLY : npwq
     USE eqv,              ONLY : dvpsi
-    USE global_var,       ONLY : lower_band, upper_band, ibndkept
+    USE global_var,       ONLY : lower_band, upper_band
     USE noncollin_module, ONLY : noncolin, npol
     USE ep_constants,     ONLY : czero
     !
@@ -1119,8 +1114,6 @@
     INTEGER :: nt
     !! Counter on atomic types
     INTEGER :: ibnd
-    !! Counter on bands
-    INTEGER :: jbnd
     !! Counter on bands
     INTEGER :: ih
     !! Counter on beta functions
@@ -1159,7 +1152,6 @@
             ! We multiply the integral for the becp term and the beta_n
             !
             DO ibnd = lower_band, upper_band
-              jbnd = ibndkept(ibnd)
               DO ih = 1, nh(nt)
                  ikb = ijkb0 + ih
                  IF (noncolin) THEN
@@ -1174,12 +1166,12 @@
                      DO is = 1, npol
                        DO js = 1, npol
                          ijs = ijs + 1
-                         sum_nc(is) = sum_nc(is) + int3_nc(ih, jh, na, ijs, ipert) * becp1(ik)%nc(jkb, js, jbnd)
+                         sum_nc(is) = sum_nc(is) + int3_nc(ih, jh, na, ijs, ipert) * becp1(ik)%nc(jkb, js, ibnd)
                        ENDDO
                      ENDDO
                    ELSE
                      sum_k = sum_k + int3(ih,jh,na,current_spin,ipert) * &
-                                 becp1(ik)%k(jkb, jbnd)
+                                 becp1(ik)%k(jkb, ibnd)
                    ENDIF
                  ENDDO
                  IF (noncolin) THEN

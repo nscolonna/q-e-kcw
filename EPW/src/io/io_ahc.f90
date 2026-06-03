@@ -17,6 +17,10 @@ MODULE io_ahc
 !!
 IMPLICIT NONE
 !
+INTEGER :: nbnd_from_ahc_file = -1
+!! nbnd read from ahc_info.dat. Set by read_ahc_info(), checked by check_ahc_bands().
+!! This should equal nbnd from pwcom (the NSCF total number of bands).
+!
 CONTAINS
   !
   SUBROUTINE read_sthmat(iq_irr, lwin, lwinq)
@@ -67,14 +71,16 @@ CONTAINS
   !----------------------------------------------------------------------------
   !
   USE kinds,            ONLY : DP
-  USE ep_constants,     ONLY : zero, one, czero, eps4
+  USE ep_constants,     ONLY : zero, one, czero, eps4, ryd2ev
   USE pwcom,            ONLY : nbnd, nks
   USE klist,            ONLY : nkstot
   USE modes,            ONLY : nmodes
-  USE input,            ONLY : ahc_nbnd, ahc_nbndskip, dvscf_dir
+  USE input,            ONLY : ahc_nbnd, ahc_nbndskip, dvscf_dir, &
+                               ahc_rest_fan_broadening
   USE global_var,       ONLY : nbndep, sthmatq
   USE kfold,            ONLY : ktokpmq
   USE parallelism,      ONLY : fkbounds
+  USE io_var,           ONLY : iuahcsth, iuahcgkk, iuahcet
   !
   IMPLICIT NONE
   !
@@ -115,18 +121,14 @@ CONTAINS
   !! First band inside the outer window
   INTEGER :: ik_global
   !! Global index of k point (for pool parallelization)
-  INTEGER :: iuahcsth
-  !! File unit for upper Fan matrix from ph.x
-  INTEGER :: iuahcgkk
-  !! File unit for E-ph matrix from ph.x
-  INTEGER :: iuahcet
-  !! File unit for Band energy from ph.x
   INTEGER :: recl
   !! Record length of the ph.x data
   INTEGER :: ios
   !! Integer variable for I/O control
   INTEGER :: ierr
   !! Error status
+  REAL(KIND = DP) :: delta_e
+  !! Energy difference
   REAL(KIND = DP), ALLOCATABLE :: inv_delta_e(:, :)
   !! 1 / delta_e
   REAL(KIND = DP), ALLOCATABLE :: etk_ph(:, :)
@@ -170,24 +172,24 @@ CONTAINS
   fileetq = TRIM(dvscf_dir) // 'ahc_dir/ahc_etq_iq' // TRIM(int_to_char(iq_irr)) // '.bin'
   !
   INQUIRE(IOLENGTH=recl) sth_mat
-  OPEN(NEWUNIT=iuahcsth, FILE=TRIM(filesth), ACTION='read', FORM='unformatted', &
+  OPEN(UNIT=iuahcsth, FILE=TRIM(filesth), ACTION='read', FORM='unformatted', &
        ACCESS='direct', STATUS='old', RECL=recl, IOSTAT=ios)
   IF (ios /= 0) CALL errore('read_sthmat', 'error opening '//TRIM(filesth), 1)
   !
   INQUIRE(IOLENGTH=recl) ep_mat_ph
-  OPEN(NEWUNIT=iuahcgkk, FILE=TRIM(fileepph), ACTION='read', FORM='unformatted', &
+  OPEN(UNIT=iuahcgkk, FILE=TRIM(fileepph), ACTION='read', FORM='unformatted', &
        ACCESS='direct', STATUS='old', RECL=recl, IOSTAT=ios)
   IF (ios /= 0) CALL errore('read_sthmat', 'error opening '//TRIM(fileepph), 1)
   !
   INQUIRE(IOLENGTH=recl) etk_ph
-  OPEN(NEWUNIT=iuahcet, FILE=TRIM(fileetk), ACTION='read', FORM='unformatted', &
+  OPEN(UNIT=iuahcet, FILE=TRIM(fileetk), ACTION='read', FORM='unformatted', &
        ACCESS='direct', STATUS='old', RECL=recl, IOSTAT=ios)
   IF (ios /= 0) CALL errore('read_sthmat', 'error opening '//TRIM(fileetk), 1)
   READ(iuahcet, REC=1) etk_ph
   CLOSE(iuahcet)
   !
   INQUIRE(IOLENGTH=recl) etq_ph
-  OPEN(NEWUNIT=iuahcet, FILE=TRIM(fileetq), ACTION='read', FORM='unformatted', &
+  OPEN(UNIT=iuahcet, FILE=TRIM(fileetq), ACTION='read', FORM='unformatted', &
        ACCESS='direct', STATUS='old', RECL=recl, IOSTAT=ios)
   IF (ios /= 0) CALL errore('read_sthmat', 'error opening '//TRIM(fileetq), 1)
   READ(iuahcet, REC=1) etq_ph
@@ -207,11 +209,12 @@ CONTAINS
     ! Add additional term coming from states outside the outer window.
     !
     ! inv_delta_e(kbnd, ibnd) = 1 / ( e_ibnd(k) - e_kbnd(k+q) )
+    ! inv_delta_e(kbnd, ibnd) = Re 1 / ( e_ibnd(k) - e_kbnd(k+q) + im * 100 meV)
     !
     DO ibnd = 1, ahc_nbnd
       DO kbnd = 1, nbnd
-        inv_delta_e(kbnd, ibnd) = one / ( etk_ph(ibnd + ahc_nbndskip, ik_global) &
-                                        - etq_ph(kbnd, ik_global) )
+        delta_e = etk_ph(ibnd + ahc_nbndskip, ik_global) - etq_ph(kbnd, ik_global)
+        inv_delta_e(kbnd, ibnd) = REAL(one / CMPLX(delta_e, ahc_rest_fan_broadening / ryd2ev, KIND=DP), KIND=DP)
       ENDDO ! kbnd
     ENDDO ! ibnd
     !
@@ -336,6 +339,7 @@ CONTAINS
   USE input,            ONLY : ahc_nbnd, dvscf_dir
   USE global_var,       ONLY : dw_mat, nbndep
   USE parallelism,      ONLY : fkbounds
+  USE io_var,           ONLY : iuahcdw
   !
   IMPLICIT NONE
   !
@@ -364,8 +368,6 @@ CONTAINS
   !! Counter on modes
   INTEGER :: idir
   !! Counter on directions
-  INTEGER :: iuahcdw
-  !! File unit for Debye-Waller matrix from ph.x
   INTEGER :: recl
   !! Record length of the ph.x data
   INTEGER :: ios
@@ -392,7 +394,7 @@ CONTAINS
   filedw = TRIM(dvscf_dir) // 'ahc_dir/ahc_dw.bin'
   !
   INQUIRE(IOLENGTH=recl) dw_mat_temp
-  OPEN(NEWUNIT=iuahcdw, FILE=TRIM(filedw), ACTION='read', FORM='unformatted', &
+  OPEN(UNIT=iuahcdw, FILE=TRIM(filedw), ACTION='read', FORM='unformatted', &
        ACCESS='direct', STATUS='old', RECL=recl, IOSTAT=ios)
   IF (ios /= 0) CALL errore('read_dwmat', 'error opening '//TRIM(filedw), 1)
   !
@@ -449,6 +451,207 @@ CONTAINS
   !
   !--------------------------------------------------------------------------
   END SUBROUTINE read_dwmat
+  !--------------------------------------------------------------------------
+  !
+  !--------------------------------------------------------------------------
+  SUBROUTINE read_ahc_info()
+  !--------------------------------------------------------------------------
+  !!
+  !! Read ahc_info.dat from ahc_dir to obtain ahc_nbnd, ahc_nbndskip, and
+  !! nbnd used in the ph.x AHC calculation.
+  !! If the user set ahc_nbnd or ahc_nbndskip in the EPW input, print a
+  !! deprecation warning and override with the values from the file.
+  !!
+  !--------------------------------------------------------------------------
+  !
+  USE io_global,        ONLY : stdout, ionode, ionode_id
+  USE input,            ONLY : ahc_nbnd, ahc_nbndskip, dvscf_dir
+  USE mp,               ONLY : mp_bcast
+  USE mp_global,        ONLY : world_comm
+  !
+  IMPLICIT NONE
+  !
+  CHARACTER(LEN=256) :: filename
+  !! Path to ahc_info.dat
+  CHARACTER(LEN=256) :: label
+  !! Label read from file
+  INTEGER :: iun
+  !! File unit
+  INTEGER :: ios
+  !! I/O status
+  INTEGER :: ahc_nbnd_file
+  !! ahc_nbnd read from file
+  INTEGER :: ahc_nbndskip_file
+  !! ahc_nbndskip read from file
+  INTEGER :: nbnd_file
+  !! nbnd read from file
+  LOGICAL :: file_exists
+  !! Whether ahc_info.dat exists
+  !
+  filename = TRIM(dvscf_dir) // 'ahc_dir/ahc_info.dat'
+  !
+  IF (ionode) THEN
+    !
+    INQUIRE(FILE=TRIM(filename), EXIST=file_exists)
+    !
+    IF (.NOT. file_exists) THEN
+      WRITE(stdout, '(5x,a)') 'ERROR: File not found: ' // TRIM(filename)
+      WRITE(stdout, '(5x,a)') 'Please rerun ph.x with electron_phonon = "ahc" to generate this file,'
+      WRITE(stdout, '(5x,a)') 'or manually create ahc_dir/ahc_info.dat (see PHonon/PH/ahc.f90 for format).'
+    ENDIF
+    !
+  ENDIF
+  !
+  CALL mp_bcast(file_exists, ionode_id, world_comm)
+  IF (.NOT. file_exists) CALL errore('read_ahc_info', &
+      'ahc_info.dat not found in ahc_dir. Rerun ph.x AHC or create it manually.', 1)
+  !
+  IF (ionode) THEN
+    !
+    OPEN(NEWUNIT=iun, FILE=TRIM(filename), FORM='formatted', STATUS='old', IOSTAT=ios)
+    IF (ios /= 0) CALL errore('read_ahc_info', 'Error opening ' // TRIM(filename), 1)
+    !
+    READ(iun, '(A14, I8)', IOSTAT=ios) label, ahc_nbnd_file
+    IF (ios /= 0) CALL errore('read_ahc_info', 'Error reading ahc_nbnd from ahc_info.dat', 1)
+    READ(iun, '(A14, I8)', IOSTAT=ios) label, ahc_nbndskip_file
+    IF (ios /= 0) CALL errore('read_ahc_info', 'Error reading ahc_nbndskip from ahc_info.dat', 1)
+    READ(iun, '(A14, I8)', IOSTAT=ios) label, nbnd_file
+    IF (ios /= 0) CALL errore('read_ahc_info', 'Error reading nbnd from ahc_info.dat', 1)
+    !
+    CLOSE(iun)
+    !
+    WRITE(stdout, '(5x,a,I5)') 'AHC info: ahc_nbnd     = ', ahc_nbnd_file
+    WRITE(stdout, '(5x,a,I5)') 'AHC info: ahc_nbndskip = ', ahc_nbndskip_file
+    WRITE(stdout, '(5x,a,I5)') 'AHC info: nbnd         = ', nbnd_file
+    !
+    ! Override with values from file
+    !
+    ahc_nbnd = ahc_nbnd_file
+    ahc_nbndskip = ahc_nbndskip_file
+    nbnd_from_ahc_file = nbnd_file
+    !
+  ENDIF
+  !
+  CALL mp_bcast(ahc_nbnd, ionode_id, world_comm)
+  CALL mp_bcast(ahc_nbndskip, ionode_id, world_comm)
+  CALL mp_bcast(nbnd_from_ahc_file, ionode_id, world_comm)
+  !
+  !--------------------------------------------------------------------------
+  END SUBROUTINE read_ahc_info
+  !--------------------------------------------------------------------------
+  !
+  !--------------------------------------------------------------------------
+  SUBROUTINE check_ahc_bands(excluded_band)
+  !--------------------------------------------------------------------------
+  !!
+  !! Check consistency between ahc_nbnd, ahc_nbndskip, nbndep, nbnd, and
+  !! the excluded_band array from bands_skipped.
+  !! Must be called after read_ahc_info() and setup_nnkp().
+  !!
+  !--------------------------------------------------------------------------
+  !
+  USE io_global,        ONLY : stdout
+  USE pwcom,            ONLY : nbnd
+  USE input,            ONLY : ahc_nbnd, ahc_nbndskip
+  USE global_var,       ONLY : nbndep
+  !
+  IMPLICIT NONE
+  !
+  LOGICAL, INTENT(IN) :: excluded_band(:)
+  !! Boolean array of excluded bands (size nbnd)
+  !
+  INTEGER :: ibnd
+  !! Band counter
+  LOGICAL :: has_error
+  !! Whether any error was found
+  CHARACTER(LEN=256) :: correct_exclude
+  !! The correct exclude_bands string
+  CHARACTER(LEN=6), EXTERNAL :: int_to_char
+  !
+  ! Check nbnd consistency (nbnd from pwcom is set by this point)
+  !
+  IF (nbnd_from_ahc_file > 0 .AND. nbnd_from_ahc_file /= nbnd) THEN
+    WRITE(stdout, '(5x,a,I5)') 'ERROR: nbnd from ahc_info.dat = ', nbnd_from_ahc_file
+    WRITE(stdout, '(5x,a,I5)') '       nbnd from NSCF         = ', nbnd
+    CALL errore('check_ahc_bands', &
+        'nbnd mismatch between AHC calculation and current NSCF. Rerun AHC with the same nbnd.', 1)
+  ENDIF
+  !
+  has_error = .FALSE.
+  !
+  ! Check low bands (1:ahc_nbndskip) are all excluded
+  !
+  DO ibnd = 1, ahc_nbndskip
+    IF (.NOT. excluded_band(ibnd)) THEN
+      WRITE(stdout, '(5x,a,I5,a)') 'ERROR: Band ', ibnd, &
+          ' is not excluded but must be (below ahc_nbndskip).'
+      has_error = .TRUE.
+    ENDIF
+  ENDDO
+  !
+  ! Check high bands (ahc_nbndskip+ahc_nbnd+1:nbnd) are all excluded
+  !
+  DO ibnd = ahc_nbndskip + ahc_nbnd + 1, nbnd
+    IF (.NOT. excluded_band(ibnd)) THEN
+      WRITE(stdout, '(5x,a,I5,a)') 'ERROR: Band ', ibnd, &
+          ' is not excluded but must be (above ahc_nbndskip + ahc_nbnd).'
+      has_error = .TRUE.
+    ENDIF
+  ENDDO
+  !
+  ! Check middle bands (ahc_nbndskip+1:ahc_nbndskip+ahc_nbnd) are NOT excluded
+  !
+  DO ibnd = ahc_nbndskip + 1, ahc_nbndskip + ahc_nbnd
+    IF (excluded_band(ibnd)) THEN
+      WRITE(stdout, '(5x,a,I5,a)') 'ERROR: Band ', ibnd, &
+          ' is excluded but must not be (inside AHC window).'
+      has_error = .TRUE.
+    ENDIF
+  ENDDO
+  !
+  IF (has_error) THEN
+    !
+    ! Build the correct exclude_bands string
+    !
+    IF (ahc_nbndskip > 0 .AND. ahc_nbndskip + ahc_nbnd < nbnd) THEN
+      correct_exclude = '1:' // TRIM(ADJUSTL(int_to_char(ahc_nbndskip))) &
+          // ',' // TRIM(ADJUSTL(int_to_char(ahc_nbndskip + ahc_nbnd + 1))) &
+          // ':' // TRIM(ADJUSTL(int_to_char(nbnd)))
+    ELSEIF (ahc_nbndskip > 0) THEN
+      correct_exclude = '1:' // TRIM(ADJUSTL(int_to_char(ahc_nbndskip)))
+    ELSEIF (ahc_nbndskip + ahc_nbnd < nbnd) THEN
+      correct_exclude = TRIM(ADJUSTL(int_to_char(ahc_nbndskip + ahc_nbnd + 1))) &
+          // ':' // TRIM(ADJUSTL(int_to_char(nbnd)))
+    ELSE
+      correct_exclude = '(none)'
+    ENDIF
+    !
+    WRITE(stdout, '(5x,a)')
+    WRITE(stdout, '(5x,a,I5)') 'ahc_nbndskip (from ahc_info.dat) = ', ahc_nbndskip
+    WRITE(stdout, '(5x,a,I5)') 'ahc_nbnd     (from ahc_info.dat) = ', ahc_nbnd
+    WRITE(stdout, '(5x,a,I5)') 'nbnd         (from ahc_info.dat) = ', nbnd
+    WRITE(stdout, '(5x,a)')
+    WRITE(stdout, '(5x,a)') 'You must set bands_skipped = ''exclude_bands = ' &
+        // TRIM(correct_exclude) // ''''
+    WRITE(stdout, '(5x,a)')
+    !
+    CALL errore('check_ahc_bands', 'Inconsistent bands_skipped for WFPT/AHC', 1)
+    !
+  ENDIF
+  !
+  ! Also check nbndep == ahc_nbnd (should be guaranteed by the above checks,
+  ! but verify explicitly)
+  !
+  IF (nbndep /= ahc_nbnd) THEN
+    WRITE(stdout, '(5x,a,I5)') 'ERROR: nbndep = ', nbndep
+    WRITE(stdout, '(5x,a,I5)') '       ahc_nbnd = ', ahc_nbnd
+    CALL errore('check_ahc_bands', 'nbndep /= ahc_nbnd (internal consistency error)', 1)
+  ENDIF
+  !
+  WRITE(stdout, '(5x,a)') 'AHC band consistency checks passed.'
+  !
+  !--------------------------------------------------------------------------
+  END SUBROUTINE check_ahc_bands
   !--------------------------------------------------------------------------
   !
 !------------------------------------------------------------------------------

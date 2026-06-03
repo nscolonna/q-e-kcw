@@ -22,6 +22,17 @@
     COMPLEX(KIND = DP), ALLOCATABLE :: arr(:, :)
   END TYPE twodarray
   !
+  INTEGER :: s_k(3, 3, 96)
+  !! the symmetry operations for the k-points, including TR
+  !! IMPORTANT NOTE : s_k differs from s in symm_base.
+  !!   1. For non-magnetic systems, it doubles the symmetries by including time reversal operations
+  !!   2. It includes a -1 factor for operators including time reversal.
+  !!   It should be only applied for time-reversal odd vectors (e.g. wavevectors, current).
+  !!   See SUBROUTINE kpoints_time_reversal_init.
+  INTEGER :: nsym_k
+  !! Number of symmetry operations for the k-points, the maximum is 48*TR
+  INTEGER :: t_rev_k(96)
+  !! A temporary array for kpoint_grid. Should be cleanup in future.
   INTEGER :: ntrev
   !! 2 if time-reversal symmetric (time_reversal == .true.), 1 if not.
   LOGICAL, ALLOCATABLE :: exband_rotate(:)
@@ -96,6 +107,7 @@
     USE control_flags, ONLY : iverbosity
     USE cell_base,     ONLY : at, bg
     USE ions_base,     ONLY : nat, amass, nat, ityp
+    USE rigid,         ONLY : cdiagh2
     !
     IMPLICIT NONE
     !
@@ -123,13 +135,7 @@
     !! Whether we are in the -q list
     !
     ! Local variables
-    INTEGER :: neig
-    !! Lapack nb of eig.
     INTEGER :: info
-    !!
-    INTEGER :: ifail(nmodes)
-    !!
-    INTEGER :: iwork(5 * nmodes)
     !!
     INTEGER :: imode
     !! Mode index
@@ -155,18 +161,12 @@
     !! Phonon freq
     REAL(KIND = DP) :: w2(nmodes)
     !! Phonon freq
-    REAL(KIND = DP) :: rwork(7 * nmodes)
-    !!
     REAL(KIND = DP) :: wtmp(nmodes)
     !!
     REAL(KIND = DP) :: scart(3, 3)
     !!
     COMPLEX(KIND = DP) :: gamma(nmodes, nmodes)
     !! The Gamma matrix for the symmetry operation on the dyn mat
-    COMPLEX(KIND = DP) :: cwork(2 * nmodes)
-    !!
-    COMPLEX(KIND = DP) :: dynp(nmodes * (nmodes + 1) / 2)
-    !! Complex dynmat packed (upper triangular part for zhpevx)
     COMPLEX(KIND = DP) :: cfac
     !!
     COMPLEX(KIND = DP) :: dyn1(nmodes, nmodes)
@@ -190,12 +190,12 @@
     !
     DO jmode = 1, nmodes
       DO imode = 1, jmode
-        dynp(imode + (jmode - 1) * jmode / 2) = (dyn1(imode, jmode) + CONJG(dyn1(jmode, imode))) / 2.d0
+        dyn1(imode, jmode) = &
+          (dyn1(imode, jmode) + CONJG(dyn1(jmode, imode))) / 2.d0
       ENDDO
     ENDDO
     !
-    CALL ZHPEVX('V', 'A', 'U', nmodes, dynp , 0.0, 0.0, &
-                 0, 0, -1.0, neig, w1, cz1, nmodes, cwork, rwork, iwork, ifail, info)
+    CALL cdiagh2(nmodes, dyn1, nmodes, w1, cz1)
     !
     IF (iverbosity == 1) THEN
       !
@@ -263,12 +263,12 @@
       !
       DO jmode = 1, nmodes
         DO imode = 1, jmode
-          dynp(imode + (jmode - 1) * jmode / 2) = (dyn1(imode, jmode) + CONJG(dyn1(jmode, imode))) / 2.d0
+          dyn1(imode, jmode) = &
+            (dyn1(imode, jmode) + CONJG(dyn1(jmode, imode))) / 2.d0
         ENDDO
       ENDDO
       !
-      CALL ZHPEVX('V', 'A', 'U', nmodes, dynp, 0.0, 0.0, &
-                  0, 0, -1.0, neig, w2, cz2, nmodes, cwork, rwork, iwork, ifail, info)
+      CALL cdiagh2(nmodes, dyn1, nmodes, w2, cz2)
       !
       ! Check the frequencies
       !
@@ -365,17 +365,19 @@
     !! SP - Sep. 2019: Cleaning.
     !--------------------------------------------------------------------------
     USE kinds,         ONLY : DP
-    USE global_var,    ONLY : epmatq, nbndep
+    USE input,         ONLY : exciton
+    USE global_var,    ONLY : epmatq, nbndep, epf17, nk_loc
     USE modes,         ONLY : nmodes
     USE ep_constants,  ONLY : cone, czero, one, ryd2mev, eps8
-    USE pwcom,         ONLY : nbnd, nks
+    USE pwcom,         ONLY : nbnd
     USE ions_base,     ONLY : amass, ityp
+    USE mp_global,     ONLY : my_pool_id
     !
     IMPLICIT NONE
     !
-    LOGICAL, INTENT(in) :: lwin(nbndep, nks)
+    LOGICAL, INTENT(in) :: lwin(nbndep, nk_loc)
     !! Bands at k within outer energy window
-    LOGICAL, INTENT(in) :: lwinq(nbndep, nks)
+    LOGICAL, INTENT(in) :: lwinq(nbndep, nk_loc)
     !! Bands at k+q within outer energy window
     LOGICAL, INTENT(in) :: exband(nbnd)
     !! Bands excluded from the calculation of overlap and projection matrices
@@ -417,8 +419,9 @@
     !! temporary variables
     COMPLEX(KIND = DP), ALLOCATABLE :: epmatq_opt(:, :, :, :)
     !! e-p matrix elements in the outer window
+    CHARACTER(LEN = 20) :: tp, rank_char, filename ! ZD: test
     !
-    ALLOCATE(epmatq_opt(nbndep, nbndep, nks, nmodes), STAT = ierr)
+    ALLOCATE(epmatq_opt(nbndep, nbndep, nk_loc, nmodes), STAT = ierr)
     IF (ierr /= 0) CALL errore('rotate_epmat', 'Error allocating epmatq_opt', 1)
     !
     ! the mass factors:
@@ -446,7 +449,7 @@
     ! slim down to the first ndimwin(ikq), ndimwin(ik) states within the outer window
     !
     epmatq_opt = czero
-    DO ik = 1, nks
+    DO ik = 1, nk_loc
       jbnd = 0
       DO j = 1, nbndep
         IF (lwin(j, ik)) THEN
@@ -465,7 +468,7 @@
     ! ep_mode(j) = cfac * sum_i ep_cart(i) * u(i,j)
     !
     epmatq(:, :, :, :, iq) = czero
-    DO ik = 1, nks
+    DO ik = 1, nk_loc
       DO jbnd = 1, nbndep
         DO ibnd = 1, nbndep
           !
@@ -486,7 +489,10 @@
             epmatq_opt(ibnd, jbnd, ik, :), 1, czero, eptmp, 1)
           ENDIF
           !
-          !! ZD
+          ! ZD: Store the coarse-grid e-ph matrix for ex-ph calculations
+          IF(exciton) THEN
+            epf17(ibnd, jbnd, ik, :) = eptmp(:)
+          ENDIF
           !
           ! rotate epmat in the cartesian representation for this q in the star
           !
@@ -759,15 +765,16 @@
     !----------------------------------------------------------------------
     USE kinds,         ONLY : DP
     USE ep_constants,  ONLY : zero, eps4, eps6, twopi, ci, cone
-    USE io_global,     ONLY : ionode_id, meta_ionode
+    USE io_global,     ONLY : ionode_id, meta_ionode, meta_ionode_id
     USE mp_global,     ONLY : inter_pool_comm
+    USE mp_world,      ONLY : world_comm
     USE mp,            ONLY : mp_bcast
-    USE pwcom,         ONLY : nkstot, nbnd
+    USE pwcom,         ONLY : nbnd
     USE cell_base,     ONLY : at
     USE symm_base,     ONLY : time_reversal
     USE input,         ONLY : filukk, nbndsub
     USE io_var,        ONLY : iunukk
-    USE global_var,    ONLY : nbndep
+    USE global_var,    ONLY : nbndep, nkpts
     USE input,         ONLY : et_all, xk_all
     USE low_lvl,       ONLY : s_crystocart, rotate_cart
     !
@@ -827,19 +834,19 @@
     ntrev = 1
     IF (time_reversal) ntrev = 2
     !
-    ALLOCATE(degen_grp_inds(nbndep, nkstot), STAT = ierr)
+    ALLOCATE(degen_grp_inds(nbndep, nkpts), STAT = ierr)
     IF (ierr /= 0) CALL errore('setup_rotate_wavefunction', 'Error allocating degen_grp_inds', 1)
-    ALLOCATE(degen_grp_ndim(nbndep, nkstot), STAT = ierr)
+    ALLOCATE(degen_grp_ndim(nbndep, nkpts), STAT = ierr)
     IF (ierr /= 0) CALL errore('setup_rotate_wavefunction', 'Error allocating degen_grp_ndim', 1)
-    ALLOCATE(num_degen_grps(nkstot), STAT = ierr)
+    ALLOCATE(num_degen_grps(nkpts), STAT = ierr)
     IF (ierr /= 0) CALL errore('setup_rotate_wavefunction', 'Error allocating num_degen_grps', 1)
-    ALLOCATE(sym_ktok(nkstot, nsym, ntrev), STAT = ierr)
+    ALLOCATE(sym_ktok(nkpts, nsym, ntrev), STAT = ierr)
     IF (ierr /= 0) CALL errore('setup_rotate_wavefunction', 'Error allocating sym_ktok', 1)
     ALLOCATE(exband_rotate(nbnd), STAT = ierr)
     IF (ierr /= 0) CALL errore('setup_rotate_wavefunction', 'Error allocating exband_rotate', 1)
-    ALLOCATE(g0vec_sym(3, nkstot, nsym, ntrev), STAT = ierr)
+    ALLOCATE(g0vec_sym(3, nkpts, nsym, ntrev), STAT = ierr)
     IF (ierr /= 0) CALL errore('setup_rotate_wavefunction', 'Error allocating g0vec_sym', 1)
-    ALLOCATE(emiskv(nkstot, nsym, ntrev), STAT = ierr)
+    ALLOCATE(emiskv(nkpts, nsym, ntrev), STAT = ierr)
     IF (ierr /= 0) CALL errore('setup_rotate_wavefunction', 'Error allocating emiskv', 1)
     !
     degen_grp_inds(:, :) = 0
@@ -850,7 +857,7 @@
     !
     ! Compute sym_ktok: index of S(k) in xk_all
     !
-    DO ik = 1, nkstot
+    DO ik = 1, nkpts
       !
       DO itrev = 1, ntrev
         !
@@ -863,7 +870,7 @@
           !
           ! Find jk such that xk_all(:, jk) == sxkvec + G (mod G)
           !
-          DO jk = 1, nkstot
+          DO jk = 1, nkpts
             xk_diff = xk_all(:, jk) - sxkvec
             !
             xk_diff_crys(:) = zero
@@ -884,7 +891,7 @@
             !
             ! If match is not found, raise error.
             !
-            IF (jk == nkstot) THEN
+            IF (jk == nkpts) THEN
               CALL errore('setup_rotate_wavefunction', &
                   'k2 such that k2 = S(k) + G not found', 1)
             ENDIF
@@ -922,10 +929,10 @@
         READ(iunukk, *) jbnd
       ENDDO
       !
-      DO ik = 1, nkstot * nbndep * nbndsub
+      DO ik = 1, nkpts * nbndep * nbndsub
          READ(iunukk, *) dummy_complex
       ENDDO
-      DO ik = 1, nkstot * nbndep
+      DO ik = 1, nkpts * nbndep
         READ(iunukk, *) dummy_logical
       ENDDO
       !
@@ -936,11 +943,11 @@
       CLOSE(iunukk)
     ENDIF ! meta_ionode
     !
-    CALL mp_bcast(exband_rotate, ionode_id, inter_pool_comm)
+    CALL mp_bcast(exband_rotate, meta_ionode_id, world_comm)
     !
     ! Check band energy of symmetry equivalent k points are equal
     !
-    DO ik = 1, nkstot
+    DO ik = 1, nkpts
       DO itrev = 1, ntrev
         DO isym = 1, nsym
           jk = sym_ktok(ik, isym, itrev)
@@ -957,7 +964,7 @@
     !
     ! Loop over k points and bands to find degeneracy
     !
-    DO ik = 1, nkstot
+    DO ik = 1, nkpts
       igrp = 1
       ibnd = 0
       DO ibnd_all = 1, nbnd
@@ -990,7 +997,7 @@
     !
     ! Check degen_grp_inds of symmetry equivalent k points are equal
     !
-    DO ik = 1, nkstot
+    DO ik = 1, nkpts
       DO itrev = 1, ntrev
         DO isym = 1, nsym
           jk = sym_ktok(ik, isym, itrev)
@@ -1025,23 +1032,24 @@
     USE wavefunctions, ONLY : evc
     USE fft_base,      ONLY : dffts
     USE fft_wave,      ONLY : invfft_wave, fwfft_wave
-    USE pwcom,         ONLY : nbnd, nks, nkstot
+    USE pwcom,         ONLY : nbnd
     USE cell_base,     ONLY : at, bg
     USE wvfct,         ONLY : npwx
     USE noncollin_module, ONLY : npol, noncolin
     USE units_lr,      ONLY : iuwfc, lrwfc
     USE io,            ONLY : readwfc, readgmap
-    USE io_var,        ONLY : iudmat
+    USE io_var,        ONLY : iudmat, iusymk
     USE global_var,    ONLY : nbndep, gmap, ngk_all, igk_k_all, ibndkept, &
-                              ng0vec, g0vec_all_r, ngxxf
+                              ng0vec, g0vec_all_r, ngxxf, nk_loc, nkpts
     USE parallelism,   ONLY : fkbounds
     USE kfold,         ONLY : ktokpmq, createkmap
-    USE input,         ONLY : xk_loc, xk_all
+    USE input,         ONLY : xk_loc, xk_all, lsda
     USE low_lvl,       ONLY : fractrasl, rotate_cart, s_crystocart
+    USE lsda_mod,      ONLY : current_spin
     !
     IMPLICIT NONE
     !
-    LOGICAL, INTENT(in) :: lwin(nbndep, nks)
+    LOGICAL, INTENT(in) :: lwin(nbndep, nk_loc)
     !! Bands at k within outer energy window
     INTEGER, INTENT(in) :: nsym
     !! the number of symmetries of the crystal
@@ -1104,8 +1112,6 @@
     !! Record number
     INTEGER :: lrdmat
     !! Size of dmat file
-    INTEGER :: iusymk
-    !! Unit for reading and writing symk file
     INTEGER :: ierr
     !! Error index
     INTEGER :: igsk_tmp(npwx)
@@ -1116,6 +1122,8 @@
     !! Index for k+q+G
     REAL(KIND = DP) :: xk_diff(3)
     !! k-point vector S(k) - k
+    REAL(KIND = DP) :: zero_vect(3)
+    !! zero vector
     REAL(KIND = DP) :: s_cart(3, 3)
     !! Symmetry matrix in Cartesian basis.
     COMPLEX(KIND = DP) :: su2(2, 2)
@@ -1132,10 +1140,14 @@
     !! Auxillary wavefunction
     COMPLEX(KIND = DP), ALLOCATABLE :: aux3(:, :)
     !! Auxillary wavefunction
-    COMPLEX(KIND = DP) :: aux4(npwx * npol, nbnd)
+    COMPLEX(KIND = DP), ALLOCATABLE :: aux4(:, :)
     !! Rotated psi_m,Sk WF by SU(2)
-    COMPLEX(KIND = DP) :: aux5(npwx * npol, nbnd)
+    COMPLEX(KIND = DP), ALLOCATABLE :: aux5(:, :)
     !! Rotated psi_n,k WF by SU(2)
+    CHARACTER(LEN = 256) :: fnm
+    !! Buffer file name
+    fnm = ''
+    IF (TRIM(lsda) == 'down') fnm = '.down'
     !
     WRITE(stdout, '(5x,a)') 'Compute wavefunction overlap <psi(Sk)|S|psi(k)>'
     !
@@ -1147,8 +1159,12 @@
     IF (ierr /= 0) CALL errore('calc_rotation_gauge', 'Error allocating aux2', 1)
     ALLOCATE(aux3(npwx * npol, nbndep), STAT = ierr)
     IF (ierr /= 0) CALL errore('calc_rotation_gauge', 'Error allocating aux3', 1)
+    ALLOCATE(aux4(npwx * npol, nbnd), STAT = ierr)
+    IF (ierr /= 0) CALL errore('calc_rotation_gauge', 'Error allocating aux4', 1)
+    ALLOCATE(aux5(npwx * npol, nbnd), STAT = ierr)
+    IF (ierr /= 0) CALL errore('calc_rotation_gauge', 'Error allocating aux5', 1)
     !
-    CALL fkbounds(nkstot, lower_bnd, upper_bnd)
+    CALL fkbounds(nkpts, lower_bnd, upper_bnd)
     !
     ! close all sequential files in order to re-open them as direct access
     ! close all .wfc files in order to prepare shuffled read
@@ -1157,6 +1173,10 @@
     ! never remove this barrier
     CALL mp_barrier(inter_pool_comm)
     !
+    current_spin = 1
+    IF (TRIM(lsda) == 'down') current_spin = 2
+    !
+    zero_vect(:) = zero
     ! First, do necessary allocations
     !
     ! BEGIN FOR_LATER_USE (compute dmat only between degenerate states)
@@ -1177,9 +1197,9 @@
     ! ENDDO
     ! END FOR_LATER_USE
     !
-    ALLOCATE(dmat_all(nbndep, nbndep, nks, nsym, ntrev))
+    ALLOCATE(dmat_all(nbndep, nbndep, nk_loc, nsym, ntrev))
     !
-    DO ik = 1, nks
+    DO ik = 1, nk_loc
       !
       WRITE(stdout, '(5x,a,I8)') 'Computing dmat, ik = ', ik
       !
@@ -1187,10 +1207,14 @@
       !
       ik_gl = ik + lower_bnd - 1
       !
+      ! Here isk_gl_ is the aboslute k point number with spin.
+      ! nsk is the in pool k point number with spin
+      CALL ktokpmq(xk_loc(:, ik), zero_vect, +1, ipool, nsk, isk_gl_)
       ! Read wavefunction psi(k)
       !
-      ipooltmp = my_pool_id + 1
-      CALL readwfc(ipooltmp, ik, evc)
+      ipooltmp = ipool
+      !
+      CALL readwfc(ipooltmp, nsk, evc)
       !
       DO itrev = 1, ntrev
         DO isym = 1, nsym
@@ -1201,10 +1225,10 @@
           xk_diff(:) = xk_all(:, isk_gl) - xk_loc(:, ik)
           CALL ktokpmq(xk_loc(:, ik), xk_diff, +1, ipool, nsk, isk_gl_)
           !
-          if (isk_gl_ /= isk_gl) then
+          IF (isk_gl_ - (current_spin - 1) * nkpts /= isk_gl) THEN
             CALL errore('calc_rotation_gauge', &
                 'isk_gl from ktokpmq not equal to isk_gl from sym_ktok', 1)
-          endif
+          ENDIF
           !
           ! Read wavefunction psi(Sk) for isk_gl = sym_ktok(ik_gl, isym)
           !
@@ -1316,7 +1340,7 @@
           ! So, we need an additional phase factor exp(-i S(k) v) = emiskv.
           ! This is done after calculating the overlap.
           !
-          CALL fractrasl(npw, igk, aux5, eigv(:, invs(isym)), cone)
+          CALL fractrasl(nbnd, npw, igk, aux5, eigv(:, invs(isym)), cone)
           !
           ! ---------------------------------------------------------------------
           ! wave function rotation to generate matrix elements for the star of q
@@ -1334,11 +1358,12 @@
           ! This invfft and fwfft calls are the most time-consuming step.
           !
           aux3 = czero
+          !$acc data copy(aux3) copyin(igk,igsk,aux5)
           DO ibnd = 1, nbndep
-            aux1 = czero
-            aux2 = czero
             jbnd = ibndkept(ibnd)
+            !$acc data copyout(aux1) present(igk,aux5)
             CALL invfft_wave(npwx, npw, igk, aux5(:, jbnd), aux1)
+            !$acc end data
             !
             IF (itrev == 1) THEN
               aux2 = aux1
@@ -1346,8 +1371,11 @@
               aux2 = CONJG(aux1)
             ENDIF
             !
+            !$acc data copyin(aux2) present(igsk,aux3)
             CALL fwfft_wave(npwx, npwsk, igsk, aux3(:, ibnd), aux2)
+            !$acc end data
           ENDDO
+          !$acc end data
           !
           ! Calculate overlap between aux4 (psi(Sk)) and aux3 (S * psi(k))
           ! TODO: use ZGEMM
@@ -1387,7 +1415,7 @@
     ALLOCATE(dmat_temp(nbndep, nbndep), STAT = ierr)
     IF (ierr /= 0) CALL errore('calc_rotation_gauge', 'Error allocating dmat_temp', 1)
     !
-    DO ik = 1, nks
+    DO ik = 1, nk_loc
       !
       ! Find index of first and last band inside the outer window
       !
@@ -1436,7 +1464,7 @@
     !
     ! Write dmat to outdir/prefix.dmat file.
     !
-    lrdmat = 2 * nbndep * nbndep * nks
+    lrdmat = 2 * nbndep * nbndep * nk_loc
     CALL diropn(iudmat, 'dmat', lrdmat, exst)
     !
     DO itrev = 1, ntrev
@@ -1450,10 +1478,10 @@
     ! Write sym_ktok to prefix.symk file. sym_ktok contain all k-points.
     !
     IF (meta_ionode) THEN
-      OPEN(NEWUNIT=iusymk, FILE = TRIM(prefix) // '.symk', FORM = 'formatted')
-      WRITE(iusymk, '(3i10)') nkstot, nsym, ntrev
+      OPEN(UNIT=iusymk, FILE = TRIM(prefix) // TRIM(fnm) // '.symk', FORM = 'formatted')
+      WRITE(iusymk, '(3i10)') nkpts, nsym, ntrev
       !
-      DO ik = 1, nkstot
+      DO ik = 1, nkpts
         DO itrev = 1, ntrev
           DO isym = 1, nsym
             WRITE(iusymk, '(4i8)') ik, isym, itrev, sym_ktok(ik, isym, itrev)
@@ -1476,8 +1504,14 @@
     IF (ierr /= 0) CALL errore('calc_rotation_gauge', 'Error deallocating evsk', 1)
     DEALLOCATE(aux1, STAT = ierr)
     IF (ierr /= 0) CALL errore('calc_rotation_gauge', 'Error deallocating aux1', 1)
+    DEALLOCATE(aux2, STAT = ierr)
+    IF (ierr /= 0) CALL errore('calc_rotation_gauge', 'Error deallocating aux2', 1)
     DEALLOCATE(aux3, STAT = ierr)
     IF (ierr /= 0) CALL errore('calc_rotation_gauge', 'Error deallocating aux3', 1)
+    DEALLOCATE(aux4, STAT = ierr)
+    IF (ierr /= 0) CALL errore('calc_rotation_gauge', 'Error deallocating aux4', 1)
+    DEALLOCATE(aux5, STAT = ierr)
+    IF (ierr /= 0) CALL errore('calc_rotation_gauge', 'Error deallocating aux5', 1)
     !
     !--------------------------------------------------------------------------
     END SUBROUTINE calc_rotation_gauge
@@ -1543,6 +1577,7 @@
     USE io_files,      ONLY : prefix
     USE io_var,        ONLY : iuqmap
     USE ep_constants,  ONLY : eps4
+    USE input,         ONLY : lsda
     !
     IMPLICIT NONE
     !
@@ -1577,10 +1612,15 @@
     !! Symmetry matrix read from file
     REAL(KIND = DP) :: ft_isym(3)
     !! Fractional translation read from file
+    CHARACTER(LEN = 256) :: fnm
+    !! Buffer file name
+    !
+    fnm = ''
+    IF (TRIM(lsda) == 'down') fnm = '.down'
     !
     IF (meta_ionode) THEN
       !
-      OPEN(iuqmap, FILE = TRIM(prefix) // '.qmap', FORM = 'formatted')
+      OPEN(iuqmap, FILE = TRIM(prefix)// TRIM(fnm) // '.qmap', FORM = 'formatted')
       !
       ! Read iq-th data from file.
       !
@@ -1633,6 +1673,8 @@
     USE io_global,     ONLY : meta_ionode, meta_ionode_id
     USE io_files,      ONLY : prefix
     USE ep_constants,  ONLY : eps4
+    USE io_var,        ONLY : iusymk
+    USE input,         ONLY : lsda
     !
     IMPLICIT NONE
     !
@@ -1643,24 +1685,27 @@
     INTEGER, INTENT(in) :: nkstot
     !! Total number of k-points
     !
-    INTEGER :: iusymk
-    !! Unit for reading and writing symk file
     INTEGER :: nkstot_, nsym_, ntrev_
     !! Number read from file
     INTEGER :: ik, itrev, isym, ik_, isym_, itrev_
     !! Counters
     INTEGER :: ierr
     !! Error index
+    CHARACTER(LEN = 256) :: fnm
+    !! Buffer file name
     !
     ntrev = 1
     IF (time_reversal) ntrev = 2
+    !
+    fnm = ''
+    IF (TRIM(lsda) == 'down') fnm = '.down'
     !
     ALLOCATE(sym_ktok(nkstot, nsym, ntrev), STAT = ierr)
     IF (ierr /= 0) CALL errore('read_sym_ktok', 'Error allocating sym_ktok', 1)
     !
     IF (meta_ionode) THEN
       !
-      OPEN(NEWUNIT=iusymk, FILE = TRIM(prefix) // '.symk', FORM = 'formatted')
+      OPEN(UNIT=iusymk, FILE = TRIM(prefix) // TRIM(fnm) // '.symk', FORM = 'formatted')
       !
       READ(iusymk, '(3i10)') nkstot_, nsym_, ntrev_
       IF (nkstot_ /= nkstot) CALL errore('read_sym_ktok', &
@@ -1721,22 +1766,23 @@
     USE kinds,         ONLY : DP
     USE ep_constants,  ONLY : czero, cone, twopi
     USE io_files,      ONLY : diropn
-    USE pwcom,         ONLY : nks
     USE ions_base,     ONLY : nat, tau
     USE cell_base,     ONLY : at, bg
     USE symm_base,     ONLY : s, nsym, ft, irt
     USE modes,         ONLY : nmodes
-    USE global_var,    ONLY : nbndep, sthmatq
+    USE global_var,    ONLY : nbndep, sthmatq, nk_loc
     USE kfold,         ONLY : ktokpmq
     USE low_lvl,       ONLY : s_crystocart
     USE io_ahc,        ONLY : read_sthmat
     USE io_var,        ONLY : iudmat
+    USE input,         ONLY : lsda
+    USE lsda_mod,      ONLY : current_spin
     !
     IMPLICIT NONE
     !
-    LOGICAL, INTENT(in) :: lwin(nbndep, nks)
+    LOGICAL, INTENT(in) :: lwin(nbndep, nk_loc)
     !! Outer windows at k+q
-    LOGICAL, INTENT(in) :: lwinq(nbndep, nks)
+    LOGICAL, INTENT(in) :: lwinq(nbndep, nk_loc)
     !! Outer windows at k+q
     INTEGER, INTENT(in) :: iq
     !! Current q-point index
@@ -1812,15 +1858,15 @@
     !
     CALL start_clock('unfold_sthmat')
     !
-    ALLOCATE(sthmat_irr(nbndep, nbndep, nks, nmodes, nmodes), STAT = ierr)
+    ALLOCATE(sthmat_irr(nbndep, nbndep, nk_loc, nmodes, nmodes), STAT = ierr)
     IF (ierr /= 0) CALL errore('unfold_sthmat', 'Error allocating sthmat_irr', 1)
     ALLOCATE(sthtmp1(nbndep, nbndep), STAT = ierr)
     IF (ierr /= 0) CALL errore('unfold_sthmat', 'Error allocating sthtmp1', 1)
-    ALLOCATE(sthtmp2(nbndep, nbndep, nks, nmodes, nmodes), STAT = ierr)
+    ALLOCATE(sthtmp2(nbndep, nbndep, nk_loc, nmodes, nmodes), STAT = ierr)
     IF (ierr /= 0) CALL errore('unfold_sthmat', 'Error allocating sthtmp2', 1)
-    ALLOCATE(sthtmp3(nbndep, nbndep, nks, nmodes), STAT = ierr)
+    ALLOCATE(sthtmp3(nbndep, nbndep, nk_loc, nmodes), STAT = ierr)
     IF (ierr /= 0) CALL errore('unfold_sthmat', 'Error allocating sthtmp3', 1)
-    ALLOCATE(dmat(nbndep, nbndep, nks), STAT = ierr)
+    ALLOCATE(dmat(nbndep, nbndep, nk_loc), STAT = ierr)
     IF (ierr /= 0) CALL errore('unfold_sthmat', 'Error allocating dmat', 1)
     !
     CALL read_qmap(iq, iq_irr, iq_first, isym, isym1, timerev, s, ft, nsym)
@@ -1849,7 +1895,7 @@
     ! If iq /= iq_first, rotate sthmatq_save to upmatq(iq).
     ! Check sthmatq_save contains the right irreducible q-point.
     IF (iq_first_save /= iq_first) CALL errore('unfold_sthmat', &
-        'iq_first_save /= iq_first')
+        'iq_first_save /= iq_first', 1)
     sthmatq = sthmatq_save
     !
     ! Setup symmetry operation. Compute rtau, s_cart, ft_cart.
@@ -1865,7 +1911,7 @@
     !
     ! TODO: Open dmat only once
     !
-    lrdmat = 2 * nbndep * nbndep * nks
+    lrdmat = 2 * nbndep * nbndep * nk_loc
     CALL diropn(iudmat, 'dmat', lrdmat, exst)
     !
     ! Compute phase factor
@@ -1910,7 +1956,7 @@
     !
     DO jmode = 1, nmodes
       DO imode = 1, nmodes
-        DO ik = 1, nks
+        DO ik = 1, nk_loc
           !
           CALL ZGEMM('N', 'N', nbndep, nbndep, nbndep, &
             cone, dmat(1, 1, ik), nbndep, &
@@ -1934,7 +1980,7 @@
     !
     DO jmode = 1, nmodes
       !
-      ndim = nbndep * nbndep * nks
+      ndim = nbndep * nbndep * nk_loc
       !
       ! sthtmp3(:, kmode) = sum_imode sthtmp2(:, imode, jmode) * CONJG(rotmat(kmode, imode))
       !
@@ -1989,9 +2035,8 @@
     USE mp,            ONLY : mp_sum
     USE mp_pools,      ONLY : inter_pool_comm
     USE ep_constants,  ONLY : czero
-    USE pwcom,         ONLY : nks, nkstot
     USE modes,         ONLY : nmodes
-    USE global_var,    ONLY : nbndep, sthmatq
+    USE global_var,    ONLY : nbndep, sthmatq, nk_loc, nkpts
     USE parallelism,   ONLY : fkbounds
     !
     IMPLICIT NONE
@@ -2016,13 +2061,13 @@
     COMPLEX(KIND = DP), ALLOCATABLE :: sthmat_temp(:, :, :, :, :)
     !! Temporary storage of sthmat
     !
-    ALLOCATE(sthmat_temp(nbndep, nbndep, nkstot, nmodes, nmodes), STAT = ierr)
+    ALLOCATE(sthmat_temp(nbndep, nbndep, nkpts, nmodes, nmodes), STAT = ierr)
     IF (ierr /= 0) CALL errore('shuffle_sthmat', 'Error allocating sthmat_temp', 1)
     !
-    CALL fkbounds(nkstot, lower_bnd, upper_bnd)
+    CALL fkbounds(nkpts, lower_bnd, upper_bnd)
     !
     sthmat_temp = czero
-    DO ik = 1, nks
+    DO ik = 1, nk_loc
       ik_gl = ik + lower_bnd - 1
       isk = sym_ktok(ik_gl, isym1, itrev)
       sthmat_temp(:, :, isk, :, :) = sthmatq(:, :, ik, :, :)
@@ -2032,7 +2077,7 @@
     !
     sthmatq(:, :, :, :, :) = czero
     !
-    DO ik = 1, nks
+    DO ik = 1, nk_loc
       ik_gl = ik + lower_bnd - 1
       sthmatq(:, :, ik, :, :) = sthmat_temp(:, :, ik_gl, :, :)
     ENDDO
@@ -2077,6 +2122,64 @@
     END SUBROUTINE rotate_wfn_deallocate
     !-----------------------------------------------------------------------
     !
+    !--------------------------------------------------------------------------
+    SUBROUTINE kpoints_time_reversal_init()
+    !--------------------------------------------------------------------------
+    !!
+    !!  If needed, add time_reversal symmetry into k points grid,
+    !!  then, the symmetry of k is (Crystal symmetry)*TR
+    !!
+    !--------------------------------------------------------------------------
+    !
+    USE input,              ONLY : scattering, lsda
+    USE symm_base,          ONLY : s, nsym, time_reversal, t_rev
+    USE noncollin_module,   ONLY : noncolin, domag
+    USE io_global,          ONLY : stdout
+    !
+    IMPLICIT NONE
+    !
+    INTEGER :: isym
+    !
+    LOGICAL :: tr_epw = .FALSE.
+    !
+    IF (scattering) tr_epw = time_reversal
+    !
+    t_rev_k = 0
+    !
+    IF (tr_epw) THEN
+      WRITE(stdout,'(5x, a)') "Add time reversal symmetry into k grid."
+      nsym_k = nsym * 2
+    ELSE
+      nsym_k = nsym
+    ENDIF
+    !
+    ! Copy symmetries from s to s_k, multiply -1 if symmetry involves time reversal.
+    !
+    IF (domag .AND. noncolin) THEN
+      ! Noncollinear magnetism
+      DO isym = 1, nsym
+        IF (t_rev(isym) == 0) THEN
+          s_k(:, :, isym) = s(:, :, isym)
+        ELSE
+          s_k(:, :, isym) = -s(:, :, isym)
+        ENDIF
+      ENDDO
+    ELSE
+      DO isym = 1, nsym
+        s_k(:, :, isym) = s(:, :, isym)
+      ENDDO
+      !
+      IF (tr_epw) THEN
+        ! Rotation + time reversal applied to k vector, so multiply -1 sign.
+        DO isym = 1, nsym
+          s_k(:, :, isym + nsym) = -s(:, :, isym)
+        ENDDO
+      ENDIF
+    ENDIF
+    !
+    !-----------------------------------------------------------------------
+    END SUBROUTINE kpoints_time_reversal_init
+    !-----------------------------------------------------------------------
   !-----------------------------------------------------------------------------
   END MODULE symmetry
   !-----------------------------------------------------------------------------

@@ -724,7 +724,7 @@
     !
     IMPLICIT NONE
     !
-    INTEGER, INTENT(inout) :: valueRSS(2)
+    INTEGER(KIND = 8), INTENT(out) :: valueRSS(2)
     !! Contains the value of the memory in kB
     !
     ! Local variables
@@ -973,13 +973,13 @@
     !----------------------------------------------------------------------
     !
     !----------------------------------------------------------------------
-    SUBROUTINE fractrasl(npw, igk, evc, eigv1, eig0v)
+    SUBROUTINE fractrasl(nbnd, npw, igk, evc, eigv1, eig0v)
     !----------------------------------------------------------------------
     !!
     !! Routine to compute fractional translations
     !!
     USE kinds,            ONLY : DP
-    USE wvfct,            ONLY : nbnd, npwx
+    USE wvfct,            ONLY : npwx
     USE noncollin_module, ONLY : noncolin, npol
     USE global_var,       ONLY : ngxxf
     !
@@ -987,6 +987,8 @@
     !
     INTEGER, INTENT(in) :: npw
     !! Number of plane-waves
+    INTEGER, INTENT(in) :: nbnd
+    !! Number of bands
     INTEGER, INTENT(in) :: igk(npw)
     !! G mapping
     COMPLEX(KIND = DP), INTENT(inout) :: evc(npwx * npol, nbnd)
@@ -1383,8 +1385,53 @@
     ENDIF
     !
     ! Look at the first element of each intervals.
-    pre_minloc = MINLOC(ABS(val_intval(:) - ind), 1)
-    pre_minval = MINVAL(ABS(val_intval(:) - ind), 1)
+    nit = (NINT(LOG(REAL(n_intval, KIND = DP)) / LOG(2.0d0)) + 1) * 2
+    lp = 1
+    rp = n_intval
+    !
+    DO it = 1, nit
+      ! WRITE(stdout, *) "it, lp, rp:", it, lp, rp
+      IF (it == nit) CALL errore('bisection', 'Maximum number of iteration reached in bisection', 1)
+    
+      IF (val_intval(lp) == ind) THEN
+        pre_minval = 0
+        pre_minloc = lp
+        EXIT
+      ENDIF
+    
+      IF (val_intval(rp) == ind) THEN
+        pre_minval = 0
+        pre_minloc = rp
+        EXIT
+      ENDIF
+    
+      cp = (lp + rp) / 2
+      IF (val_intval(cp) == ind) THEN
+        pre_minval = 0
+        pre_minloc = cp
+        EXIT
+      ENDIF
+    
+      IF (lp == cp) THEN
+        IF (ABS(val_intval(lp) - ind) < ABS(val_intval(rp) - ind)) THEN
+          pre_minval = ABS(val_intval(lp) - ind)
+          pre_minloc = lp
+        ELSE
+          pre_minval = ABS(val_intval(rp) - ind)
+          pre_minloc = rp
+        ENDIF
+        EXIT
+      ENDIF
+    
+      prod = SIGN(1, (val_intval(lp) - ind)) * SIGN(1, (val_intval(cp) - ind))
+      IF (prod == 0) CALL errore('bisection', 'prod should not be zero', 1)
+    
+      IF (prod < 0) THEN
+        rp = cp
+      ELSE
+        lp = cp
+      ENDIF
+    ENDDO
     !
     ! The ind is one of those first element (special case) - we are done
     IF (pre_minval == 0) THEN
@@ -1406,9 +1453,8 @@
       ! 2) Do a pre-search to deterine in which intervals the index lies.
       !
       ! The sign of the product tels us on which side of the interval does the index ind lies.
-      IF ( val_intval(pre_minloc) - ind /= 0 .AND. val_intval(pre_minloc - 1) - ind /= 0) THEN
-        prod = (val_intval(pre_minloc) - ind) / ABS(val_intval(pre_minloc) - ind) &
-             * (val_intval(pre_minloc - 1) - ind) / ABS(val_intval(pre_minloc - 1) - ind)
+      IF ( (val_intval(pre_minloc) /= ind) .AND. (val_intval(pre_minloc - 1) /= ind) ) THEN
+        prod = SIGN(1, val_intval(pre_minloc) - ind) * SIGN(1, val_intval(pre_minloc - 1) - ind)
       ELSE
         prod = 0
       ENDIF
@@ -1503,7 +1549,7 @@
         ENDIF
       ENDIF
       ! v_sgn(lp) and v_sgn(rp) cannot be 0 at this point
-      prod_2 = (v_sgn(lp) / ABS(v_sgn(lp))) * (v_sgn(rp) / ABS(v_sgn(rp)))
+      prod_2 = SIGN(1, v_sgn(lp)) * SIGN(1, v_sgn(rp))
       !
       ! If prod not 0 but they are contiguous, ind = 0
       IF (lp + 1 == rp) THEN
@@ -1538,7 +1584,7 @@
         ENDIF
       ELSE
         ! v_sgn(lp) and v_sgn(cp) cannot be 0 at this point
-        prod_2 = (v_sgn(lp) / ABS(v_sgn(lp))) * (v_sgn(cp) / ABS(v_sgn(cp)))
+        prod_2 = SIGN(1, v_sgn(lp)) * SIGN(1, v_sgn(cp))
       ENDIF
       IF (prod_2 < 0) THEN
         rp = cp

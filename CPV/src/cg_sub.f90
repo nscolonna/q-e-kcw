@@ -19,7 +19,8 @@ contains
 !! and        https://journals.aps.org/rmp/abstract/10.1103/RevModPhys.64.1045 (conjugate gradient)
 
       use kinds, only: dp
-      use control_flags, only: tpre, iverbosity, tfor, tprnfor
+      use control_flags, only: iverbosity
+      use cp_control, only: tfor, tpre
 
 !---ensemble-DFT
       use energies, only: eht, epseu, exc, etot, eself, enl, ekin,          &
@@ -150,9 +151,9 @@ contains
          call errore(' runcg_uspp ', ' parallelization over bands not yet implemented ', 1)
 #if defined(__CUDA)
       if (nkbus > 0 ) &
-         call errore(' runcg_uspp ', ' Ultrasoft case not ported to GPU ', 1)
+         call errore('runcg_uspp','USPP for GPU not present in this version', 1)
       if (tens) &
-         call errore(' runcg_uspp ', ' Ensemble DFT case not ported to GPU ', 1)
+         call errore('runcg_uspp','Ensemble DFT for GPU not present in this version', 1)
 #endif
       if (pre_state .and. nkbus > 0) &
          call errore(' runcg_uspp ', ' preconditioning with kinetic energy not implemented for ultrasoft pseudopotentials')
@@ -711,16 +712,16 @@ contains
 #if defined (__CUDA)
       if (.not. tens) then
          c0_d = c0
-         if (tfor .or. tprnfor) call nlfq_bgrp(c0_d, betae, bec, becdr, fion)
+         if (tfor) call nlfq_bgrp(c0_d, betae, bec, becdr, fion)
       else
          c0_d = c0diag
-         if (tfor .or. tprnfor) call nlfq_bgrp(c0_d, betae, becdiag, becdrdiag, fion)
+         if (tfor) call nlfq_bgrp(c0_d, betae, becdiag, becdrdiag, fion)
       endif
 #else
       if (.not. tens) then
-         if (tfor .or. tprnfor) call nlfq_bgrp(c0, betae, bec, becdr, fion)
+         if (tfor) call nlfq_bgrp(c0, betae, bec, becdr, fion)
       else
-         if (tfor .or. tprnfor) call nlfq_bgrp(c0diag, betae, becdiag, becdrdiag, fion)
+         if (tfor) call nlfq_bgrp(c0diag, betae, becdiag, becdrdiag, fion)
       endif
 #endif
 !$acc end data
@@ -821,11 +822,11 @@ contains
       ! only in US-case
 
       if (tefield .and. (evalue .ne. 0.d0)) then
-         call bforceion(fion, tfor .or. tprnfor, ipolp, qmat, bec, becdr, gqq, evalue)
+         call bforceion(fion, tfor, ipolp, qmat, bec, becdr, gqq, evalue)
 
       endif
       if (tefield2 .and. (evalue2 .ne. 0.d0)) then
-         call bforceion(fion, tfor .or. tprnfor, ipolp2, qmat2, bec, becdr, gqq2, evalue2)
+         call bforceion(fion, tfor, ipolp2, qmat2, bec, becdr, gqq2, evalue2)
       endif
       deallocate (hpsi0, hpsi, gi, hi)
       deallocate (s_minus1, k_minus1)

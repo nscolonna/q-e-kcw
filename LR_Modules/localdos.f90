@@ -1,9 +1,39 @@
 !
-! Copyright (C) 2001-2023 Quantum ESPRESSO group
+! Copyright (C) 2001-2026 Quantum ESPRESSO group
 ! This file is distributed under the terms of the
 ! GNU General Public License. See the file `License'
 ! in the root directory of the present distribution,
 ! or http://www.gnu.org/copyleft/gpl.txt .
+!
+!-----------------------------------------------------------------------
+subroutine localdos_wrapper (ldos_data)
+  !-----------------------------------------------------------------------
+  !
+  !    Wrapper subroutine that accepts dfpt_ldos_type and calls localdos
+  !
+  !    TODO: Use dfpt_ldos_type everywhere and deprecate localdos
+  !
+  USE kinds,      ONLY : DP
+  USE dfpt_type,  ONLY : dfpt_ldos_type
+  USE paw_variables, ONLY : okpaw
+  !
+  implicit none
+  !
+  TYPE(dfpt_ldos_type), INTENT(INOUT) :: ldos_data
+  !
+  ! Call the original localdos subroutine
+  CALL localdos(ldos_data%ldos, ldos_data%ldoss, ldos_data%becsum_dos, ldos_data%dos_ef)
+  !
+  ! For non-PAW calculations, becsum_dos is not needed anymore so deallocate it.
+  ! In the non-PAW but USPP case, becsum_dos still needs to be allocated and computed in
+  ! localdos since it is used to update ldos.
+  ! In the NCPP case, becsum_dos is not needed at all but is being computed. This can be
+  ! optimized in the future.
+  !
+  IF (.NOT. okpaw) DEALLOCATE(ldos_data%becsum_dos)
+  !
+end subroutine localdos_wrapper
+!-----------------------------------------------------------------------
 !
 !-----------------------------------------------------------------------
 subroutine localdos (ldos, ldoss, becsum1, dos_ef)
@@ -65,27 +95,13 @@ subroutine localdos (ldos, ldoss, becsum1, dos_ef)
   ! weights
   real(DP), external :: w0gauss
   !
-  integer :: npw, ik, is, ig, ibnd, j, is1, is2, v_siz
+  integer :: npw, ik, is, ig, ibnd, j, is1, is2
   ! counters
   integer :: ios
   ! status flag for i/o
   !
   !  initialize ldos and dos_ef
   !
-  ! For device buffer
-#if defined(__CUDA)
-  INTEGER, POINTER, DEVICE :: nl_d(:)
-  !
-  nl_d  => dffts%nl_d
-  !$acc update device(evc) 
-#else
-  INTEGER, ALLOCATABLE :: nl_d(:)
-  !
-  ALLOCATE( nl_d(dffts%ngm) )
-  nl_d  = dffts%nl
-#endif
-  v_siz = dffts%nnr
-
   call start_clock ('localdos')
   IF (noncolin) THEN
      allocate (becsum1_nc( (nhm * (nhm + 1)) / 2, nat, npol, npol))
@@ -110,8 +126,8 @@ subroutine localdos (ldos, ldoss, becsum1, dos_ef)
      ! unperturbed wfs in reciprocal space read from unit iuwfc
      !
      if (nksq > 1) then
-             call get_buffer (evc, lrwfc, iuwfc, ikks(ik))
-             !$acc update device(evc)
+        call get_buffer (evc, lrwfc, iuwfc, ikks(ik))
+        !$acc update device(evc)
      endif
      call init_us_2 (npw, igk_k(1,ikks(ik)), xk (1, ikks(ik)), vkb, .true.)
      !
@@ -135,10 +151,10 @@ subroutine localdos (ldos, ldoss, becsum1, dos_ef)
            !$acc kernels
            psic_nc = (0.d0, 0.d0)
            !$acc end kernels
-           !$acc parallel loop present(igk_k, psic_nc)
+           !$acc parallel loop present(igk_k, psic_nc, dffts, dffts%nl)
            do ig = 1, npw
-              psic_nc (nl_d (igk_k(ig,ikks(ik))), 1 ) = evc (ig, ibnd)
-              psic_nc (nl_d (igk_k(ig,ikks(ik))), 2 ) = evc (ig+npwx, ibnd)
+              psic_nc (dffts%nl (igk_k(ig,ikks(ik))), 1 ) = evc (ig, ibnd)
+              psic_nc (dffts%nl (igk_k(ig,ikks(ik))), 2 ) = evc (ig+npwx, ibnd)
            enddo
            !$acc end parallel loop
            !$acc host_data use_device(psic_nc)
@@ -146,7 +162,7 @@ subroutine localdos (ldos, ldoss, becsum1, dos_ef)
            CALL invfft ('Rho', psic_nc(:,2), dffts)
            !$acc end host_data
            !$acc parallel loop present(psic_nc, ldoss)
-           do j = 1, v_siz
+           do j = 1, dffts%nnr
               ldoss (j, 1) = ldoss (j, 1) + &
                     w1 * ( DBLE(psic_nc(j,1))**2+AIMAG(psic_nc(j,1))**2 + &
                            DBLE(psic_nc(j,2))**2+AIMAG(psic_nc(j,2))**2)
@@ -154,8 +170,8 @@ subroutine localdos (ldos, ldoss, becsum1, dos_ef)
            !$acc end parallel loop
            IF (nspin_mag==4) THEN
               !$acc parallel loop present(psic_nc, ldoss)
-              DO j = 1, v_siz
-              !
+              DO j = 1, dffts%nnr
+                 !
                  ldoss(j,2) = ldoss(j,2) + w1*2.0_DP* &
                              (DBLE(psic_nc(j,1))* DBLE(psic_nc(j,2)) + &
                              AIMAG(psic_nc(j,1))*AIMAG(psic_nc(j,2)))
@@ -175,16 +191,16 @@ subroutine localdos (ldos, ldoss, becsum1, dos_ef)
            !$acc kernels
            psic (:) = (0.d0, 0.d0)
            !$acc end kernels
-           !$acc parallel loop present(psic)
+           !$acc parallel loop present(psic,igk_k,dffts, dffts%nl)
            do ig = 1, npw
-              psic (nl_d (igk_k(ig,ikks(ik)) ) ) = evc (ig, ibnd)
+              psic (dffts%nl(igk_k(ig,ikks(ik)) ) ) = evc (ig, ibnd)
            enddo
            !$acc end parallel loop
            !$acc host_data use_device(psic)
            CALL invfft ('Rho', psic, dffts)
            !$acc end host_data
            !$acc parallel loop present(ldoss, psic)
-           do j = 1, v_siz
+           do j = 1, dffts%nnr
               ldoss (j, current_spin) = ldoss (j, current_spin) + &
                     w1 * ( DBLE ( psic (j) ) **2 + AIMAG (psic (j) ) **2)
            enddo

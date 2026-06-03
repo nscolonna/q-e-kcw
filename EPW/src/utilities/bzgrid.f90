@@ -13,9 +13,53 @@
   !! This module contains the routines related to k-point or q-point grid
   !! generation as well as selection of k/q points.
   !!
+  !----------------------------------------------------------------------
+  !
+  USE symm_base,        ONLY : s, nsym, t_rev
+  USE symmetry,         ONLY : s_k, nsym_k, t_rev_k
+  !
   IMPLICIT NONE
   !
   CONTAINS
+    !
+    !-----------------------------------------------------------------------
+    SUBROUTINE load_mesh(nrr_k, irvec_k)
+    !-----------------------------------------------------------------------
+    !
+    USE pwcom,            ONLY : nelec
+    USE modes,            ONLY : nmodes
+    USE input,            ONLY : lfast_kmesh, nqf1, nqf2, nqf3, scattering
+    USE global_var,       ONLY : nqf, nqtotf, nktotf, nkqtotf
+    USE symmetry,         ONLY : kpoints_time_reversal_init
+    USE io_global,        ONLY : stdout
+    USE input,            ONLY : lsda
+    !
+    IMPLICIT NONE
+    !
+    INTEGER, INTENT(IN) :: nrr_k
+    !! number of electronic WS points
+    INTEGER, INTENT(IN) :: irvec_k(3, nrr_k)
+    !! Coordinates of real space vector for electrons
+    !
+    !
+    IF (lfast_kmesh) THEN
+      ! The fine q-grid is not create (will be generated on the fly later)
+      ! The fine k-grid consists of point within the fsthick window using k-point symmetry
+      CALL loadkmesh_fst(nrr_k, irvec_k, nelec)
+      nqtotf = nqf1 * nqf2 * nqf3
+      nqf = nqtotf
+      WRITE(stdout, '(5x, a, 3i5)') 'Using uniform q-mesh: ', nqf1, nqf2, nqf3
+    ELSE
+      IF (TRIM(lsda) == 'none') CALL kpoints_time_reversal_init()
+      CALL loadqmesh_serial()
+      CALL loadkmesh_para()
+    ENDIF
+    ! Defines the total number of k-points
+    nktotf = nkqtotf / 2
+    !
+    !-----------------------------------------------------------------------
+    END SUBROUTINE load_mesh
+    !-----------------------------------------------------------------------
     !
     !-----------------------------------------------------------------------
     SUBROUTINE loadkmesh_para()
@@ -33,13 +77,14 @@
                           rand_k, rand_nk, mp_mesh_k, system_2d, eig_read, vme, &
                           scell_mat_plrn, scell_mat, as, bs
     USE global_var,ONLY : nkqtotf, nkqf, xkf, wkf, nkf, xkfd, deltaq, &
-                          xkf_irr, wkf_irr, bztoibz, s_bztoibz
+                          xkf_irr, wkf_irr, bztoibz, s_bztoibz, spin_fac
     USE cell_base, ONLY : at, bg
-    USE symm_base, ONLY : s, t_rev, time_reversal, nsym
+    USE symm_base, ONLY : time_reversal
     USE io_var,    ONLY : iunkf, iunRpscell, iunkgridscell
     USE low_lvl,   ONLY : init_random_seed, matinv3
     USE ep_constants,  ONLY : eps4, eps8
     USE noncollin_module, ONLY : noncolin
+    USE upf_utils, ONLY : imatches
 # if defined(__MPI)
     USE parallel_include, ONLY : MPI_INTEGER2
 # endif
@@ -48,7 +93,6 @@
     !
     CHARACTER(LEN = 10) :: coordinate_type
     !! filkf coordinate type (crystal or cartesian)
-    LOGICAL, EXTERNAL :: imatches
     !! Regex matching text.
     INTEGER :: ios
     !! INTEGER variable for I/O control
@@ -97,7 +141,7 @@
     REAL(KIND = DP), ALLOCATABLE :: Gs(:, :)
     !! Supercell G-vectors within primitive reciprocal unit cell
     !
-    IF (mpime == ionode_id) THEN
+    IF (my_pool_id == ionode_id) THEN
       IF (filkf /= '') THEN ! load from file
         !
         WRITE(stdout, *) '    Using k-mesh file: ', TRIM(filkf)
@@ -285,7 +329,10 @@
           ! returns the number of irr points nkqtotf
           ! xkf_irr and wkf_irr are allocated inside with dimension nkqtotf
           ! xkf_irr is in crystal coordinate
-          CALL kpoint_grid_epw(nsym, time_reversal, s, t_rev, nkf1, nkf2, nkf3, nkqtotf)
+          !! ymPan: The last flag is introduced in order to decide whether or not to 
+          !! calculate xkf_irr
+          CALL kpoint_grid_epw(nsym_k, .FALSE., s_k, t_rev_k, nkf1, nkf2, nkf3, nkqtotf, &
+                               .TRUE.)
           !
           ALLOCATE(xkf_(3, 2 * nkqtotf), STAT = ierr)
           IF (ierr /= 0) CALL errore('loadkmesh_para', 'Error allocating xkf_', 1)
@@ -401,7 +448,7 @@
     ENDIF
     !
     nkf = nkqf / 2
-    IF (mpime /= ionode_id) THEN
+    IF (my_pool_id /= ionode_id) THEN
       ALLOCATE(xkf_(3, nkqtotf), STAT = ierr)
       IF (ierr /= 0) CALL errore('loadkmesh_para', 'Error allocating xkf_', 1)
       ALLOCATE(wkf_(nkqtotf), STAT = ierr)
@@ -469,17 +516,14 @@
         ENDDO
       ENDDO
     ENDIF
-    IF (noncolin) THEN
-      wkf(:) = wkf_(lower_bnd:upper_bnd) / 2.d0
-    ELSE
-      wkf(:) = wkf_(lower_bnd:upper_bnd)
-    ENDIF
+    wkf(:) = wkf_(lower_bnd:upper_bnd) / 2.d0 * spin_fac
     !
     IF (ABS(SUM(wkf_ (:)) - 2.d0) > eps4) &
       WRITE(stdout, '(5x,"WARNING: k-point weigths do not add up to 1 [loadkmesh_para]")')
     !
-    WRITE(stdout, '(5x,"Size of k point mesh for interpolation: ",i10)') nkqtotf
-    WRITE(stdout, '(5x,"Max number of k points per pool:",7x,i10)') nkqf
+    ! S. Mishra: Avoid doubling the k-points while printing
+    WRITE(stdout, '(5x,"Size of k point mesh for interpolation: ",i10)') nkqtotf / 2
+    WRITE(stdout, '(5x,"Max number of k points per pool:",7x,i10)') nkqf / 2
     !
     DEALLOCATE(xkf_, STAT = ierr)
     IF (ierr /= 0) CALL errore('loadkmesh_para', 'Error deallocating xkf_', 1)
@@ -498,25 +542,24 @@
     !!
     !-----------------------------------------------------------------------
     USE io_global, ONLY : ionode_id, stdout
-    USE mp_global, ONLY : inter_pool_comm
+    USE mp_global, ONLY : inter_pool_comm, my_pool_id
     USE mp,        ONLY : mp_bcast
     USE mp_world,  ONLY : mpime
     USE kinds,     ONLY : DP
-    USE input,     ONLY : filkf, nkf1, nkf2, nkf3, &
+    USE input,     ONLY : filkf, nkf1, nkf2, nkf3, lsda, &
                           rand_k, rand_nk, mp_mesh_k, system_2d, eig_read, vme
     USE global_var,ONLY : xkf, wkf, nkqtotf, nkf, nkqf, xkfd, deltaq
     USE cell_base, ONLY : at, bg
-    USE symm_base, ONLY : s, t_rev, time_reversal, nsym
+    USE symm_base, ONLY : time_reversal
     USE io_var,    ONLY : iunkf
     USE low_lvl,   ONLY : init_random_seed
     USE ep_constants,  ONLY : eps4
+    USE upf_utils, ONLY : imatches
     !
     IMPLICIT NONE
     !
     CHARACTER(LEN = 10) :: coordinate_type
     !! filkf coordinate type (crystal or cartesian)
-    LOGICAL, EXTERNAL  :: imatches
-    !! Regex matching text.
     INTEGER :: ios
     !! INTEGER variable for I/O control
     INTEGER :: ik
@@ -534,7 +577,7 @@
     REAL(KIND = DP), ALLOCATABLE :: wkf_tmp(:)
     !! weights k-points
     !
-    IF (mpime == ionode_id) THEN
+    IF (my_pool_id == ionode_id) THEN
       IF (filkf /= '') THEN ! load from file
         !
         ! Each pool gets its own copy from the action=read statement
@@ -731,7 +774,8 @@
     IF (ABS(SUM(wkf) - 2.d0) > eps4) &
       WRITE(stdout,'(5x,"WARNING: k-point weigths do not add up to 1 [loadkmesh_serial]")')
     !
-    WRITE(stdout, '(5x,"Size of k point mesh for interpolation: ",i10)') nkqtotf
+    WRITE(stdout, '(5x,"Size of k point mesh for interpolation: ",i10)') nkqtotf / 2
+    IF (TRIM(lsda) /= 'none') wkf(:) = wkf(:) / 2.0d0
     !
     !-----------------------------------------------------------------------
     END SUBROUTINE loadkmesh_serial
@@ -794,10 +838,8 @@
     USE mp_global,        ONLY : inter_pool_comm, my_pool_id, npool
     USE mp,               ONLY : mp_bcast, mp_sum, mp_barrier
     USE input,            ONLY : nkf1, nkf2, nkf3, iterative_bte
-    USE global_var,       ONLY : wkf_fst, xkf_fst, nkqf, xkf, wkf, nkf, nkqtotf
-    USE symm_base,        ONLY : s, t_rev, nsym
+    USE global_var,       ONLY : wkf_fst, xkf_fst, nkqf, xkf, wkf, nkf, nkqtotf, spin_fac
     USE ep_constants,     ONLY : byte2Mb, eps4, zero
-    USE noncollin_module, ONLY : noncolin
     !
     IMPLICIT NONE
     !
@@ -829,11 +871,12 @@
     !! coordinates k-points
     REAL(KIND = DP), ALLOCATABLE :: wkf_(:)
     !! weights k-points
+    WRITE(stdout, '(5x, a, 3i5)') 'Using uniform MP k-mesh: ', nkf1, nkf2, nkf3
     !
     ! This routine select the k-points with eigenvalues within the fsthick and
     ! then create a bztoibz mapping of those points and their symmetry operation s_bztoibz
     ! xkf_fst and wkf_fst are allocated inside
-    CALL kpoint_grid_fst(nsym, s, t_rev, nrr_k, &
+    CALL kpoint_grid_fst(nsym_k, s_k, t_rev_k, nrr_k, &
                          irvec_k, nkf1, nkf2, nkf3, nkqtotf, nelec)
     !
     ALLOCATE(xkf_(3, 2 * nkqtotf), STAT = ierr)
@@ -907,14 +950,10 @@
     IF (ierr /= 0) CALL errore('loadkmesh_fst', 'Error allocating wkf', 1)
     xkf(:,:) = xkf_(:, lower_bnd:upper_bnd)
     !
-    IF (noncolin) THEN
-      wkf(:) = wkf_(lower_bnd:upper_bnd) / 2.d0
-    ELSE
-      wkf(:) = wkf_(lower_bnd:upper_bnd)
-    ENDIF
+    wkf(:) = wkf_(lower_bnd:upper_bnd) / 2.0d0 * spin_fac
     !
-    WRITE(stdout, '(5x,"Size of k point mesh for interpolation: ",i10)' ) nkqtotf
-    WRITE(stdout, '(5x,"Max number of k points per pool:",7x,i10)' ) nkqf
+    WRITE(stdout, '(5x,"Size of k point mesh for interpolation: ",i10)' ) nkqtotf/2
+    WRITE(stdout, '(5x,"Max number of k points per pool:",7x,i10)' ) nkqf/2
     !
     DEALLOCATE(xkf_, STAT = ierr)
     IF (ierr /= 0) CALL errore('loadkmesh_fst', 'Error deallocating xkf_', 1)
@@ -926,13 +965,17 @@
     !-----------------------------------------------------------------------
     !
     !-----------------------------------------------------------------------
-    SUBROUTINE kpoint_grid_epw(n_sym, time_reversal, s, t_rev, nkc1, nkc2, nkc3, n_irr)
+    SUBROUTINE kpoint_grid_epw(n_sym, time_reversal, s, t_rev, nkc1, nkc2, &
+                               nkc3, n_irr, compute_xkf_irr)
     !-----------------------------------------------------------------------
     !!
     !!  Automatic generation of a uniform grid of k-points with symmetry.
     !!  Routine copied from PW/src/kpoint_grid.f90.
     !!  We had to duplicate because the bztoibz array was deallocated and is needed in  EPW
     !!  This routine is sequential. For parallelized routine, see kpoint_grid_fst
+    !!
+    !!  NOTE: s (which is alias for s_k, not s in symm_base) already includes the -1 factor
+    !!        for time-reversal operation. Hence, t_rev is not used.
     !!
     USE kinds,            ONLY : DP
     USE parallelism,      ONLY : fkbounds
@@ -951,12 +994,14 @@
     !! Number of symmetry
     INTEGER, INTENT(in) :: nkc1, nkc2, nkc3
     !! k-grid
-    INTEGER, INTENT(in) :: t_rev(48)
+    INTEGER, INTENT(in) :: t_rev(96)
     !! Time-reversal sym
-    INTEGER, INTENT(in) :: s(3, 3, 48)
+    INTEGER, INTENT(in) :: s(3, 3, 96)
     !! Symmetry matrice.
     INTEGER, INTENT(inout) :: n_irr
     !! Number of IBZ points
+    LOGICAL, INTENT(IN) :: compute_xkf_irr
+    !! whether or not to calculate xkf_irr
     !
     ! Local variables
     LOGICAL :: in_the_list
@@ -1025,6 +1070,10 @@
         !  check if there are equivalent k-point to this in the list
         !  (excepted those previously found to be equivalent to another)
         !  check both k and -k
+        !
+        ! ZL: The time reversal symmetry is included in n_sym and s
+        !     by kpoints_time_reversal_init
+        !
         DO ns = 1, n_sym
           DO i = 1, 3
             xkr(i) = s(i, 1, ns) * xkg(1, nk) &
@@ -1032,7 +1081,6 @@
                    + s(i, 3, ns) * xkg(3, nk)
             xkr(i) = xkr(i) - NINT(xkr(i))
           ENDDO
-          IF(t_rev(ns) == 1) xkr = -xkr
           xx = xkr(1) * nkc1
           yy = xkr(2) * nkc2
           zz = xkr(3) * nkc3
@@ -1053,29 +1101,6 @@
                  'something wrong in the checking algorithm', 1)
             ENDIF
           ENDIF
-           ! We comment this out because n_sym == 48 and not 24.
-           !IF (time_reversal) THEN
-           !   xx =-xkr(1) * nkc1
-           !   yy =-xkr(2) * nkc2
-           !   zz =-xkr(3) * nkc3
-           !   in_the_list = ABS(xx - NINT(xx)) <= eps6 .AND. &
-           !                 ABS(yy - NINT(yy)) <= eps6 .AND. &
-           !                 ABS(zz - NINT(zz)) <= eps6
-           !   IF (in_the_list) THEN
-           !     i = MOD(NINT(-xkr(1) * nkc1  + 2 * nkc1), nkc1) + 1
-           !     j = MOD(NINT(-xkr(2) * nkc2  + 2 * nkc2), nkc2) + 1
-           !     k = MOD(NINT(-xkr(3) * nkc3  + 2 * nkc3), nkc3) + 1
-           !     n = (k - 1) + (j - 1) * nkc3 + (i - 1) * nkc2 * nkc3 + 1
-           !     IF (n > nk .AND. equiv(n) == n) THEN
-           !       equiv(n) = nk
-           !       wkk(nk) = wkk(nk) + 1.0d0
-           !       s_save(n) = -ns
-           !     ELSE
-           !       IF (equiv(n) /= nk .OR. n < nk) CALL errore('kpoint_grid', &
-           !       'something wrong in the checking algorithm', 2)
-           !     ENDIF
-           !   ENDIF
-           !ENDIF
         ENDDO
       ENDIF
     ENDDO
@@ -1085,47 +1110,58 @@
     DO nk = 1, nkr
       bztoibz(nk) = equiv(nk)
     ENDDO
-    DO nk = 1, nkr
-      ! If its an irreducible point
-      IF (equiv(nk) == nk) THEN
-        n_irr = n_irr + 1
-        bztoibz(nk) = n_irr
-        DO ik = nk, nkr
-          IF (equiv(ik) == nk) THEN
-            bztoibz(ik) = n_irr
-          ENDIF
-        ENDDO
-        ! Then you have the identity matrix
-        s_bztoibz(nk) = 1
-      ELSE
-        s_bztoibz(nk) = s_save(nk)
-      ENDIF
-    ENDDO
-    !
-    ! Create the IBZ k-point list and weights
-    ! Note: xkf_irr is in crystal coordinate.
-    ALLOCATE(xkf_irr(3, n_irr), STAT = ierr)
-    IF (ierr /= 0) CALL errore('kpoint_grid_epw', 'Error allocating xkf_irr', 1)
-    ALLOCATE(wkf_irr(n_irr), STAT = ierr)
-    IF (ierr /= 0) CALL errore('kpoint_grid_epw', 'Error allocating wkf_irr', 1)
-    xkf_irr(:, :) = zero
-    wkf_irr(:)    = zero
-    n_irr = 0
-    fact = zero
-    DO nk = 1, nkr
-      IF (equiv(nk) == nk) THEN
-        n_irr = n_irr + 1
-        wkf_irr(n_irr) = wkk(nk)
-        fact = fact + wkf_irr(n_irr)
-        ! bring back into to the first BZ
-        xkf_irr(:, n_irr) = xkg(:, nk) - NINT(xkg(:, nk))
-      ENDIF
-    ENDDO
-    !
-    ! Normalize weights to one
-    DO nk = 1, n_irr
-      wkf_irr(nk) = wkf_irr(nk) / fact
-    ENDDO
+    IF (compute_xkf_irr) THEN 
+      DO nk = 1, nkr
+        ! If its an irreducible point
+        IF (equiv(nk) == nk) THEN
+          n_irr = n_irr + 1
+          bztoibz(nk) = n_irr
+          DO ik = nk, nkr
+            IF (equiv(ik) == nk) THEN
+              bztoibz(ik) = n_irr
+            ENDIF
+          ENDDO
+          ! Then you have the identity matrix
+          s_bztoibz(nk) = 1
+        ELSE
+          s_bztoibz(nk) = s_save(nk)
+        ENDIF
+      ENDDO
+      ! Create the IBZ k-point list and weights
+      ! Note: xkf_irr is in crystal coordinate.
+      ALLOCATE(xkf_irr(3, n_irr), STAT = ierr)
+      IF (ierr /= 0) CALL errore('kpoint_grid_epw', 'Error allocating xkf_irr', 1)
+      ALLOCATE(wkf_irr(n_irr), STAT = ierr)
+      IF (ierr /= 0) CALL errore('kpoint_grid_epw', 'Error allocating wkf_irr', 1)
+      xkf_irr(:, :) = zero
+      wkf_irr(:)    = zero
+      n_irr = 0
+      fact = zero
+      DO nk = 1, nkr
+        IF (equiv(nk) == nk) THEN
+          n_irr = n_irr + 1
+          wkf_irr(n_irr) = wkk(nk)
+          fact = fact + wkf_irr(n_irr)
+          ! bring back into to the first BZ
+          xkf_irr(:, n_irr) = xkg(:, nk) - NINT(xkg(:, nk))
+        ENDIF
+      ENDDO
+      !
+      ! Normalize weights to one
+      DO nk = 1, n_irr
+        wkf_irr(nk) = wkf_irr(nk) / fact
+      ENDDO
+    ELSE 
+      DO nk=1, nkr
+        ! If its an irreducible point
+        IF (equiv(nk) == nk) THEN
+          n_irr = n_irr +1
+          s_bztoibz(nk) = 1
+        ELSE 
+          s_bztoibz(nk) = s_save(nk)
+        ENDIF
+      ENDDO
+    ENDIF
     !
     RETURN
     !-----------------------------------------------------------------------
@@ -1143,22 +1179,25 @@
     !!  bztoibz and s_bztoibz are allocated and computed here with dimension
     !!  nkpt_bzfst = number of point in the full BZ within the fsthick.
     !!
+    !!  NOTE: s (which is alias for s_k, not s in symm_base) already includes the -1 factor
+    !!        for time-reversal operation. Hence, t_rev is not used.
+    !!
     USE kinds,            ONLY : DP
     USE parallelism,      ONLY : fkbounds
     USE mp,               ONLY : mp_barrier, mp_sum, mp_bcast
     USE mp_world,         ONLY : world_comm
-    USE mp_global,        ONLY : my_pool_id, npool
+    USE mp_global,        ONLY : my_pool_id, npool, inter_pool_comm, inter_image_comm
     USE io_global,        ONLY : stdout
-    USE input,            ONLY : fsthick, fermi_energy, nbndsub, scissor
+    USE input,            ONLY : fsthick, fermi_energy, nbndsub, scissor, lsda
     USE ep_constants,     ONLY : zero, twopi, ci, eps6, eps2, ryd2ev, czero
     USE global_var,       ONLY : chw, wkf_fst, xkf_fst, s_bztoibz, bztoibz, map_fst, &
-                                 nkpt_bzfst, nbndskip
+                                 nkpt_bzfst, nbndskip, spin_fac
     USE wannier2bloch,    ONLY : hamwan2bloch
-    USE noncollin_module, ONLY : noncolin
     USE ep_constants,     ONLY : one, two, eps8
 # if defined(__MPI)
     USE parallel_include, ONLY : MPI_INTEGER, MPI_SUM, MPI_IN_PLACE, MPI_INTEGER2
 # endif
+    USE pwcom,            ONLY : ef
     !
     IMPLICIT NONE
     !
@@ -1166,9 +1205,9 @@
     !! Number of Bravais symmetry
     INTEGER, INTENT(in) :: nkf1, nkf2, nkf3
     !! Fine k-point grid
-    INTEGER, INTENT(in) :: t_rev(48)
+    INTEGER, INTENT(in) :: t_rev(96)
     !! Time-reversal symmetry operation
-    INTEGER, INTENT(in) :: s(3,3,48)
+    INTEGER, INTENT(in) :: s(3,3,96)
     !! Symmetry matrix of the crystal
     INTEGER, INTENT(in) :: nrr_k
     !! Number of WS points for electrons
@@ -1208,6 +1247,8 @@
     !! Counter on symmetries
     INTEGER :: icbm
     !! Index of the CBM
+    INTEGER :: ibnd
+    !! Band index
     INTEGER :: pos
     !! Position of the minimum in a vector
     INTEGER :: ierr
@@ -1256,6 +1297,8 @@
     !! Temporary k-point per core inside fsthick
     REAL(KIND = DP), ALLOCATABLE :: xkf_in(:,:)
     !! Global k-point coordinate of the full BZ inside [fsthick * 1.1]
+    REAL(KIND = DP), ALLOCATABLE :: etf_tmp(:,:)
+    !! Eigen-energies for a given k-point
     COMPLEX(KIND = DP) :: cufkk(nbndsub, nbndsub)
     !! Rotation matrix, fine mesh, points k
     COMPLEX(KIND = DP) :: cfac(nrr_k)
@@ -1279,6 +1322,8 @@
     IF (ierr /= 0) CALL errore('kpoint_grid_fst', 'Error allocating xkf_tmp', 1)
     ALLOCATE(map_tmp(nkpt), STAT = ierr)
     IF (ierr /= 0) CALL errore('kpoint_grid_fst', 'Error allocating map_tmp', 1)
+    ALLOCATE(etf_tmp(nbndsub, nkpt), STAT = ierr)
+    IF (ierr /= 0) CALL errore('kpoint_grid_fst', 'Error allocating etf_tmp', 1)
     xkf_para(:,:) = zero
     xkf_tmp(:,:)  = zero
     map_para(:)   = 0
@@ -1304,42 +1349,43 @@
     ! Compute Hamiltonian : Wannier -> Bloch
     ! We select the k-points for which the eigenenergy is within the fsthick
     IF (nbndskip > 0) THEN
-      IF (noncolin) THEN
-        nelec_aux = nelec - one * nbndskip
-      ELSE
-        nelec_aux = nelec - two * nbndskip
-      ENDIF
+      nelec_aux = nelec - spin_fac * nbndskip
     ELSE
       nelec_aux = nelec
     ENDIF
     !
     icbm = 1
-    IF (ABS(scissor) > eps6) THEN
-      IF (noncolin) THEN
-        icbm = FLOOR(nelec_aux / 1.0d0) + 1
-      ELSE
-        icbm = FLOOR(nelec_aux / 2.0d0) + 1
-      ENDIF
-    ENDIF
+    IF (ABS(scissor) > eps6) icbm = FLOOR(nelec_aux / spin_fac) + 1
     ! This is simply because dgemv take only real number (not integer)
     irvec_r = REAL(irvec_k, KIND = DP)
+    !$omp parallel do &
+    !$omp private(rdotk,cfac,cufkk)
     DO ik = 1, nkpt
       CALL DGEMV('t', 3, nrr_k, twopi, irvec_r, 3, xkf_para(:, ik), 1, 0.0_DP, rdotk, 1 )
       cfac(:) = EXP(ci * rdotk(:))
-      CALL hamwan2bloch(nbndsub, nrr_k, cufkk, etf(:), chw, cfac)
+      CALL hamwan2bloch(nbndsub, nrr_k, cufkk, etf_tmp(:, ik), chw, cfac)
       !
       ! Apply scissor shift
-      etf(icbm:nbndsub) = etf(icbm:nbndsub) + scissor
-      !
+      IF (TRIM(lsda) /= 'none') THEN
+        DO ibnd = 1, nbndsub
+          IF (etf_tmp(ibnd, ik) > ef) etf_tmp(ibnd, ik) = etf_tmp(ibnd, ik) + scissor
+        ENDDO
+      ELSE
+         etf_tmp(icbm:nbndsub, ik) = etf_tmp(icbm:nbndsub, ik) + scissor
+      ENDIF
+    ENDDO
+    !$omp end parallel do
+    !
+    DO ik = 1, nkpt
       ! We take a slightly bigger fsthick as some point do not fully respect crystal symmetry.
-      IF (MINVAL(ABS(etf(:) - fermi_energy)) < fsthick * 1.2) THEN
+      IF (MINVAL(ABS(etf_tmp(:, ik) - fermi_energy)) < fsthick * 1.2) THEN
         nk_inside(my_pool_id + 1)             = nk_inside(my_pool_id + 1) + 1
         xkf_tmp(:, nk_inside(my_pool_id + 1)) = xkf_para(:, ik)
         map_tmp(nk_inside(my_pool_id + 1))    = map_para(ik)
       ENDIF
     ENDDO ! ik
     !
-    CALL mp_sum(nk_inside, world_comm)
+    CALL mp_sum(nk_inside, inter_pool_comm)
     !
     ! Total number of points inside the fsthick
     nkpt_bzfst = SUM(nk_inside)
@@ -1376,8 +1422,8 @@
     ENDDO ! ik
     !
     ! Now merge everything accross cores
-    CALL mp_sum(xkf_in, world_comm)
-    CALL mp_sum(map_fst, world_comm)
+    CALL mp_sum(xkf_in, inter_pool_comm)
+    CALL mp_sum(map_fst, inter_pool_comm)
     !
     DEALLOCATE(xkf_para, STAT = ierr)
     IF (ierr /= 0) CALL errore('kpoint_grid_fst', 'Error deallocating xkf_para', 1)
@@ -1426,7 +1472,6 @@
                    + s(i, 3, ns) * xkf_in(3, ik + lower_bnd - 1)
             xkr(i) = xkr(i) - NINT(xkr(i))
           ENDDO
-          IF(t_rev(ns) == 1) xkr = -xkr
           xx = xkr(1) * nkf1
           yy = xkr(2) * nkf2
           zz = xkr(3) * nkf3
@@ -1479,12 +1524,12 @@
       !
     ENDDO ! ik
     !
-    CALL mp_sum(equiv, world_comm)
-    CALL mp_sum(wkf_in, world_comm)
+    CALL mp_sum(equiv, inter_pool_comm)
+    CALL mp_sum(wkf_in, inter_pool_comm)
 # if defined(__MPI)
     !CALL MPI_TYPE_CREATE_F90_INTEGER(SIK2, int2type, ierr)
     !CALL MPI_ALLreduce(MPI_IN_PLACE, s_save, nkpt_bzfst, int2type, MPI_SUM, world_comm, ierr)
-    CALL MPI_ALLreduce(MPI_IN_PLACE, s_save, nkpt_bzfst, MPI_INTEGER2, MPI_SUM, world_comm, ierr)
+    CALL MPI_ALLreduce(MPI_IN_PLACE, s_save, nkpt_bzfst, MPI_INTEGER2, MPI_SUM, inter_pool_comm, ierr)
 #endif
     !
     DEALLOCATE(equiv_loc, STAT = ierr)
@@ -1577,7 +1622,13 @@
       CALL hamwan2bloch(nbndsub, nrr_k, cufkk, etf(:), chw, cfac)
       !
       ! Apply scissor shift
-      etf(icbm:nbndsub) = etf(icbm:nbndsub) + scissor
+      IF (TRIM(lsda) /= 'none') THEN
+        DO ibnd = 1, nbndsub
+          IF (etf(ibnd) > ef) etf(ibnd) = etf(ibnd) + scissor
+        ENDDO
+      ELSE
+         etf(icbm:nbndsub) = etf(icbm:nbndsub) + scissor
+      ENDIF
       !
       IF (MINVAL(ABS(etf(:) - fermi_energy)) < fsthick) THEN
         n_check = n_check + 1
@@ -1637,18 +1688,17 @@
                           rand_q, rand_nq, mp_mesh_q, system_2d, lscreen
     USE global_var,ONLY : xqf, wqf, nqf, nqtotf
     USE cell_base, ONLY : at, bg
-    USE symm_base, ONLY : s, t_rev, time_reversal, nsym
+    USE symm_base, ONLY : time_reversal
     USE io_var,    ONLY : iunqf
     USE noncollin_module, ONLY : noncolin
     USE ep_constants,  ONLY : eps4
     USE low_lvl,   ONLY : init_random_seed
+    USE upf_utils, ONLY : imatches
     !
     IMPLICIT NONE
     !
     CHARACTER(LEN = 10) :: coordinate_type
     !! filkf coordinate type (crystal or cartesian)
-    LOGICAL, EXTERNAL  :: imatches
-    !! Regex matching text.
     INTEGER :: iq
     !! Q-point index
     INTEGER :: lower_bnd
@@ -1674,7 +1724,7 @@
         WRITE(stdout, *) '    Using q-mesh file: ', TRIM(filqf)
         IF (lscreen) WRITE(stdout, *) '     WARNING: if lscreen=.TRUE., q-mesh needs to be [-0.5:0.5] (crystal)'
         OPEN(UNIT = iunqf, FILE = filqf, STATUS = 'old', FORM = 'formatted', IOSTAT = ios)
-        IF (ios /= 0) CALL errore('loadkmesh_para', 'Opening file ' // filqf, ABS(ios))
+        IF (ios /= 0) CALL errore('loadqmesh_para', 'Opening file ' // filqf, ABS(ios))
         READ(iunqf, *) nqtotf, coordinate_type
         IF (TRIM(coordinate_type) .EQ. ' ') coordinate_type = 'crystal'
         IF (.NOT. imatches("crystal", coordinate_type) .AND. .NOT. imatches("cartesian", coordinate_type)) &
@@ -1846,7 +1896,7 @@
     !!
     !-----------------------------------------------------------------------
     USE io_global, ONLY : ionode_id
-    USE mp_global, ONLY : inter_pool_comm
+    USE mp_global, ONLY : inter_pool_comm, my_pool_id
     USE mp,        ONLY : mp_bcast
     USE mp_world,  ONLY : mpime
     USE kinds,     ONLY : DP
@@ -1857,17 +1907,16 @@
                           scell_mat_plrn, scell_mat, as, bs
     USE global_var,ONLY : xqf, wqf, nqtotf, nqf
     USE cell_base, ONLY : at, bg
-    USE symm_base, ONLY : s, t_rev, time_reversal, nsym
+    USE symm_base, ONLY : time_reversal
     USE io_var,    ONLY : iunqf
     USE low_lvl,   ONLY : init_random_seed, matinv3
     USE ep_constants,  ONLY : eps4, eps8
+    USE upf_utils, ONLY : imatches
     !
     IMPLICIT NONE
     !
     CHARACTER(LEN = 10) :: coordinate_type
     !! filqf coordinate type (crystal or cartesian)
-    LOGICAL, EXTERNAL  :: imatches
-    !! Regex matching text.
     INTEGER :: iq
     !! Q-index
     INTEGER :: i, j, k
@@ -1899,7 +1948,7 @@
     REAL(KIND = DP), ALLOCATABLE :: Gs(:, :)
     !! Supercell G-vectors within primitive reciprocal unit cell
     !
-    IF (mpime == ionode_id) THEN
+    IF (my_pool_id == ionode_id) THEN
       IF (filqf /= '') THEN ! load from file
         !
         ! Each pool gets its own copy from the action=read statement
@@ -2125,7 +2174,7 @@
     !
     CALL mp_bcast(nqf, ionode_id, inter_pool_comm)
     CALL mp_bcast(nqtotf, ionode_id, inter_pool_comm)
-    IF (mpime /= ionode_id) THEN
+    IF (my_pool_id /= ionode_id) THEN
       ALLOCATE(xqf(3, nqtotf), STAT = ierr)
       IF (ierr /= 0) CALL errore('loadqmesh_serial', 'Error allocating xqf', 1)
       ALLOCATE(wqf(nqtotf), STAT = ierr)
@@ -2238,7 +2287,8 @@
                               scell_mat_plrn, nbndsub, selecqread
     USE global_var,    ONLY : selecq, nqf
     USE mp_world,      ONLY : mpime, world_comm
-    USE io_global,     ONLY : ionode_id, stdout
+    USE mp_global,     ONLY : my_pool_id
+    USE io_global,     ONLY : meta_ionode, meta_ionode_id, stdout
     USE mp,            ONLY : mp_bcast
     !
     IMPLICIT NONE
@@ -2288,21 +2338,21 @@
       !
     ELSE
       ! Check if the file has been pre-computed
-      IF (mpime == ionode_id) THEN
+      IF (meta_ionode) THEN
         INQUIRE(FILE = 'selecq.fmt', EXIST = exst)
       ENDIF
-      CALL mp_bcast(exst, ionode_id, world_comm)
+      CALL mp_bcast(exst, meta_ionode_id, world_comm)
       !
       IF (exst) THEN
         IF (selecqread) THEN
           WRITE(stdout, '(5x,a)')' '
-          WRITE(stdout, '(5x,a)')'Reading selecq.fmt file. '
+          WRITE(stdout, '(5x,a)')'Reading selecq.fmt file.'
           CALL qwindow(exst, totq, nrr_k, irvec_r, cufkk, cufkq, homogeneous)
         ELSE
           WRITE(stdout, '(5x,a)')' '
-          WRITE(stdout, '(5x,a)')'A selecq.fmt file was found but re-created because selecqread == .FALSE. '
+          WRITE(stdout, '(5x,a)')'A selecq.fmt file was found but re-created because selecqread == .FALSE.  '
           CALL qwindow(.FALSE., totq, nrr_k, irvec_r, cufkk, cufkq, homogeneous)
-        ENDIF
+        ENDIF !selecqread
       ELSE ! exst
         IF (selecqread) THEN
           CALL errore( 'qwindow_wrap', 'Variable selecqread == .TRUE. but file selecq.fmt not found.',1 )
@@ -2333,21 +2383,21 @@
     USE kinds,         ONLY : DP
     USE global_var,    ONLY : nqf, xqf, xkf, chw, nkf, nqtotf, &
                               map_rebal, nktotf, bztoibz, map_fst, &
-                              selecq
-    USE io_global,     ONLY : ionode_id, stdout
+                              selecq, spin_fac
+    USE io_global,     ONLY : meta_ionode, meta_ionode_id, stdout
     USE io_var,        ONLY : iunselecq
-    USE mp_global,     ONLY : npool, world_comm, my_pool_id
+    USE mp_global,     ONLY : npool, world_comm, my_pool_id, inter_pool_comm
     USE mp_world,      ONLY : mpime
     USE mp,            ONLY : mp_sum, mp_bcast
     USE ep_constants,  ONLY : twopi, ci, zero, eps6, ryd2ev, czero
     USE input,         ONLY : nbndsub, fsthick, mp_mesh_k, nkf1, nkf2, &
                               nkf3, iterative_bte, restart_step, scissor,      &
-                              ephwrite, lfast_kmesh
-    USE noncollin_module, ONLY : noncolin
+                              ephwrite, lfast_kmesh, a2f_iso, lsda
     USE pwcom,         ONLY : ef, nelec
     USE wannier2bloch, ONLY : hamwan2bloch
-    USE parallelism,  ONLY : poolgather
+    USE parallelism,   ONLY : poolgather
     USE low_lvl,       ONLY : create_interval, bisection
+    USE pwcom,         ONLY : ef
     !
     IMPLICIT NONE
     !
@@ -2432,7 +2482,7 @@
     cfacq(:) = czero
     ! 
     IF (exst) THEN
-      IF (mpime == ionode_id) THEN
+      IF (meta_ionode) THEN
         OPEN(UNIT = iunselecq, FILE = 'selecq.fmt', STATUS = 'old', IOSTAT = ios)
         READ(iunselecq, *) totq
         ALLOCATE(selecq(totq), STAT = ierr)
@@ -2442,13 +2492,13 @@
         READ(iunselecq, *) selecq(:)
         CLOSE(iunselecq)
       ENDIF
-      CALL mp_bcast(totq, ionode_id, world_comm)
-      IF (mpime /= ionode_id) THEN
+      CALL mp_bcast(totq, meta_ionode_id, world_comm)
+      IF (.NOT. meta_ionode) THEN
         ALLOCATE(selecq(totq), STAT = ierr)
         IF (ierr /= 0) CALL errore('qwindow', 'Error allocating selecq', 1)
       ENDIF
-      CALL mp_bcast(nqtot , ionode_id, world_comm)
-      CALL mp_bcast(selecq, ionode_id, world_comm)
+      CALL mp_bcast(nqtot , meta_ionode_id, world_comm)
+      CALL mp_bcast(selecq, meta_ionode_id, world_comm)
       IF (nqtot /= nqtotf) THEN
         CALL errore('qwindow', 'Cannot read from selecq.fmt, the q-point grid or &
           & fsthick window are different from read one. Remove the selecq.fmt file and restart.', 1 )
@@ -2457,7 +2507,7 @@
       IF (homogeneous) THEN
         ! In case of k-point symmetry
         IF (mp_mesh_k .AND. (.NOT. lfast_kmesh)) THEN
-          IF (iterative_bte .OR. ephwrite) THEN
+          IF (iterative_bte .OR. ephwrite .OR. a2f_iso) THEN
             ALLOCATE(bztoibz_tmp(nkf1 * nkf2 * nkf3), STAT = ierr)
             IF (ierr /= 0) CALL errore('qwindow', 'Error allocating bztoibz_tmp', 1)
             bztoibz_tmp(:) = 0
@@ -2481,6 +2531,8 @@
       !
       IF (homogeneous) THEN
         ! First store eigen energies on full grid.
+        !$omp parallel do &
+        !$omp private(ikk,xkk,rdotk,cfac,cufkk)
         DO ik = 1, nkf
           ikk = 2 * ik - 1
           xkk = xkf(:, ikk)
@@ -2488,11 +2540,12 @@
           cfac(:) = EXP(ci * rdotk(:))
           CALL hamwan2bloch(nbndsub, nrr_k, cufkk, etf_loc(:, ik), chw, cfac)
         ENDDO
+        !$omp end parallel do
         CALL poolgather(nbndsub, nktotf, nkf, etf_loc, etf_all)
         !
         ! In case of k-point symmetry
         IF (mp_mesh_k .AND. (.NOT. lfast_kmesh)) THEN
-          IF (iterative_bte .OR. ephwrite) THEN
+          IF (iterative_bte .OR. ephwrite .OR. a2f_iso) THEN
             ALLOCATE(bztoibz_tmp(nkf1 * nkf2 * nkf3), STAT = ierr)
             IF (ierr /= 0) CALL errore('qwindow', 'Error allocating bztoibz_tmp', 1)
             bztoibz_tmp(:) = 0
@@ -2508,17 +2561,15 @@
         ! Apply a scissor shift to CBM if required by user
         ! The shift is apply to k and k+q
         IF (ABS(scissor) > eps6) THEN
-          IF (noncolin) THEN
-            icbm = FLOOR(nelec / 1.0d0) + 1
-          ELSE
-            icbm = FLOOR(nelec / 2.0d0) + 1
-          ENDIF
+          icbm = FLOOR(nelec / spin_fac) + 1
           !
-          DO ik = 1, nktotf
-            DO ibnd = icbm, nbndsub
-              etf_all(ibnd, ik) = etf_all(ibnd, ik) + scissor
+          IF (TRIM(lsda) /= 'none') THEN
+            DO ibnd = 1, nbndsub
+              IF (MAXVAL(etf_all(ibnd, :)) > ef) etf_all(ibnd, :) = etf_all(ibnd, :) + scissor
             ENDDO
-          ENDDO
+          ELSE
+            etf_all(icbm:nbndsub, :) = etf_all(icbm:nbndsub, :) + scissor
+          ENDIF
         ENDIF
         !
         ! Note 1: To find if a k+q point is within the fsthick we need to obtain the mapping
@@ -2541,49 +2592,52 @@
         DO iq = 1, nqf
           ! xqf has to be in crystal coordinate
           IF (lfast_kmesh) THEN
-            ! The q-point coordinate is generate on the fly for each q-point
+            ! The q-point coordinate is generated on the fly for each q-point
             CALL xqf_otf(iq, xxq)
           ELSE
             xxq = xqf(:, iq)
           ENDIF
           !
           found(:) = 0
+          !$omp parallel do &
+          !$omp private(ikk,xkk,xkq,ind1,ind2) &
+          !$omp reduction(+:found)
           DO ik = 1, nkf
+            !!
+            IF (MINVAL(ABS(etf_loc(:, ik) - ef)) > fsthick) THEN
+              CYCLE
+            ENDIF
+            !
             ikk = 2 * ik - 1
             xkk = xkf(:, ikk)
             xkq = xkk + xxq
             !
-            CALL kpmq_map(xkk, (/0d0, 0d0, 0d0/), 1, ind1)
             CALL kpmq_map(xkk, xxq, 1, ind2)
-            IF (ind1 == 0 .OR. ind2 == 0) CALL errore ('qwindow', 'ind1 or ind2 cannot be 0', 1)
+            IF (ind2 == 0) CALL errore ('qwindow', 'ind2 cannot be 0', 1)
             !
             IF (lfast_kmesh) THEN
               ! Bisection method to find the index on the grid of the points inside fsthick
               ! from the index on the full BZ grid.
-              CALL bisection(SIZE(map_fst, 1), map_fst, ind1, n_intval, val_intval, pos_intval)
-              IF (ind1 == 0) CYCLE
+              ! map_fst is already sorted
               CALL bisection(SIZE(map_fst, 1), map_fst, ind2, n_intval, val_intval, pos_intval)
               IF (ind2 == 0) CYCLE
             ENDIF
             !
             ! Use k-point symmetry
             IF (mp_mesh_k) THEN
-              IF ((MINVAL(ABS(etf_all(:, bztoibz(ind1)) - ef)) < fsthick) .AND. &
-                  (MINVAL(ABS(etf_all(:, bztoibz(ind2)) - ef)) < fsthick)) THEN
-                found(my_pool_id + 1) = 1
-                EXIT ! exit the loop 
+              IF (MINVAL(ABS(etf_all(:, bztoibz(ind2)) - ef)) < fsthick) THEN
+                found(my_pool_id + 1) = found(my_pool_id + 1) + 1
               ENDIF
             ELSE
-              IF ((MINVAL(ABS(etf_all(:, ind1) - ef)) < fsthick) .AND. &
-                  (MINVAL(ABS(etf_all(:, ind2) - ef)) < fsthick)) THEN
-                found(my_pool_id + 1) = 1
-                EXIT ! exit the loop
+              IF (MINVAL(ABS(etf_all(:, ind2) - ef)) < fsthick) THEN
+                found(my_pool_id + 1) = found(my_pool_id + 1) + 1
               ENDIF
             ENDIF
             !
           ENDDO ! k-loop
+          !$omp end parallel do
           ! If found on any k-point from the pools
-          CALL mp_sum(found, world_comm)
+          CALL mp_sum(found, inter_pool_comm)
           !
           IF (SUM(found) > 0) THEN
             totq = totq + 1
@@ -2598,13 +2652,7 @@
         !
         ! Apply a scissor shift to CBM if required by user
         ! The shift is apply to k and k+q
-        IF (ABS(scissor) > eps6) THEN
-          IF (noncolin) THEN
-            icbm = FLOOR(nelec / 1.0d0) + 1
-          ELSE
-            icbm = FLOOR(nelec / 2.0d0) + 1
-          ENDIF
-        ENDIF
+        IF (ABS(scissor) > eps6) icbm = FLOOR(nelec / spin_fac) + 1
         !
         ! First compute the k-points eigenenergies for efficiency reasons
         nkloc = 0
@@ -2617,9 +2665,13 @@
           CALL hamwan2bloch(nbndsub, nrr_k, cufkk, etf_tmp(:), chw, cfac)
           !
           IF (ABS(scissor) > eps6) THEN
-            DO ibnd = icbm, nbndsub
-              etf_tmp(ibnd) = etf_tmp(ibnd) + scissor
-            ENDDO
+            IF (TRIM(lsda) /= 'none') THEN
+              DO ibnd = 1, nbndsub
+                IF (etf_tmp(ibnd) > ef) etf_tmp(ibnd) = etf_tmp(ibnd) + scissor
+              ENDDO
+            ELSE
+              etf_tmp(icbm:nbndsub) = etf_tmp(icbm:nbndsub) + scissor
+            ENDIF
           ENDIF
           ! Check for the k-points in this pool
           IF (MINVAL(ABS(etf_tmp(:) - ef)) < fsthick) THEN
@@ -2647,9 +2699,13 @@
             CALL hamwan2bloch(nbndsub, nrr_k, cufkq, etf_tmp(:), chw, cfacq)
             !
             IF (ABS(scissor) > eps6) THEN
-              DO ibnd = icbm, nbndsub
-                etf_tmp(ibnd) = etf_tmp(ibnd) + scissor
-              ENDDO
+              IF (TRIM(lsda) /= 'none') THEN
+                DO ibnd = 1, nbndsub
+                  IF (etf_tmp(ibnd) > ef) etf_tmp(ibnd) = etf_tmp(ibnd) + scissor
+                ENDDO
+              ELSE
+                etf_tmp(icbm:nbndsub) = etf_tmp(icbm:nbndsub) + scissor
+              ENDIF
             ENDIF
             !
             IF (MINVAL(ABS(etf_tmp(:) - ef)) < fsthick) THEN
@@ -2658,7 +2714,7 @@
             ENDIF
           ENDDO ! ik
           ! If found on any k-point from the pools
-          CALL mp_sum(found, world_comm)
+          CALL mp_sum(found, inter_pool_comm)
           IF (SUM(found(:)) > 0) THEN
             totq = totq + 1
             selecq_tmp(totq) = iq
@@ -2675,7 +2731,7 @@
       DEALLOCATE(selecq_tmp, STAT = ierr)
       IF (ierr /= 0) CALL errore('qwindow', 'Error deallocating selecq_tmp', 1)
       !
-      IF (mpime == ionode_id) THEN
+      IF (meta_ionode) THEN
         OPEN(UNIT = iunselecq, FILE = 'selecq.fmt', ACTION = 'write')
         WRITE(iunselecq, *) totq    ! Selected number of q-points
         WRITE(iunselecq, *) nqtotf  ! Total number of q-points
@@ -2859,7 +2915,6 @@
     !!
     USE kinds,         ONLY : DP
     USE io_global,     ONLY : stdout
-    USE symm_base,     ONLY : nsym
     USE global_var,    ONLY : bztoibz, nktotf, ixkqf_tr, s_bztoibz_full, xqf, &
                               nkpt_bzfst, map_fst, s_bztoibz, map_rebal
     USE input,         ONLY : nkf1, nkf2, nkf3, epmatkqread, lfast_kmesh
@@ -2869,7 +2924,7 @@
     !
     INTEGER(KIND = 8), INTENT(in) :: nind
     !! Total number of elements per cpu
-    INTEGER, INTENT(inout) :: bztoibz_mat(nsym, nktotf)
+    INTEGER, INTENT(inout) :: bztoibz_mat(nsym_k, nktotf)
     !! For a given k-point in the IBZ gives gives the index of all the kpt in BZ connected by symmetry
     INTEGER, INTENT(in) :: sparse_q(nind)
     !! Q-point mapping index
@@ -2922,6 +2977,7 @@
       IF (ierr /= 0) CALL errore('symm_mapping', 'Error allocating pos_intval', 1)
       ! We select 1 point every n_interval
       CALL create_interval(SIZE(map_fst, 1), map_fst, n_intval, val_intval, pos_intval)
+      !$omp parallel do private(iq,ik,xxq,nkq_abs)
       DO ind = 1, nind
         iq = sparse_q(ind)
         ik = sparse_k(ind)
@@ -2937,6 +2993,7 @@
         s_bztoibz_full(ind) = s_bztoibz(nkq_abs)
         ixkqf_tr(ind) = bztoibz(nkq_abs)
       ENDDO
+      !$omp end parallel do
     ELSE
       ! This call is required because for a epmatkqread restart because then
       ! qwindow is not called and therefore the map_rebal is not applied
@@ -2955,6 +3012,7 @@
         bztoibz_mat(n_sym(ik), ik) = ikbz
       ENDDO
       !
+      !$omp parallel do private(iq,ik,nkq_abs)
       DO ind = 1, nind
         iq = sparse_q(ind)
         ik = sparse_k(ind)
@@ -2963,6 +3021,7 @@
         s_bztoibz_full(ind) = s_bztoibz(nkq_abs)
         ixkqf_tr(ind) = bztoibz(nkq_abs)
       ENDDO
+      !$omp end parallel do
     ENDIF ! lfast_kmesh
     !
     WRITE(stdout, '(5x,"Symmetry mapping finished")')
@@ -3043,11 +3102,10 @@
     !-----------------------------------------------------------------------
     USE kinds,         ONLY : DP
     USE cell_base,     ONLY : at, bg
-    USE symm_base,     ONLY : s, nsym
     USE global_var,    ONLY : nkf, nktotf
-    USE ep_constants,  ONLY : eps6, zero
+    USE ep_constants,  ONLY : eps12, zero
     USE mp,            ONLY : mp_sum
-    USE mp_global,     ONLY : world_comm
+    USE mp_global,     ONLY : world_comm, inter_pool_comm
     USE parallelism,   ONLY : fkbounds
     !
     IMPLICIT NONE
@@ -3084,7 +3142,7 @@
     !! Counter for special points on the border
     INTEGER :: ierr
     !! Error status
-    INTEGER :: xkt_sp(48, nktotf)
+    INTEGER :: xkt_sp(96, nktotf)
     !! Temp list of special k-points
     INTEGER, PARAMETER :: nrwsx = 200
     !! Variable for WS folding
@@ -3113,11 +3171,15 @@
     xkt_sp(:, :) = 0
     !
     nb_sp = 0
+    !$omp parallel do &
+    !$omp private(counter,nb,sa,sb,sr,xk,ws,S_xk) &
+    !$omp private(counter_n,n,m,l,s_xk_border,sym_found) &
+    !$omp reduction(+:nb_sp)
     DO ik = 1, nkf
       counter = 0
       ! We could skip nb==1 to avoid identity symmetry
-      DO nb = 1, nsym
-        sa(:, :) = DBLE(s(:, :, nb))
+      DO nb = 1, nsym_k
+        sa(:, :) = DBLE(s_k(:, :, nb))
         sb       = MATMUL(bg, sa)
         sr(:, :) = MATMUL(at, TRANSPOSE(sb))
         sr       = TRANSPOSE(sr)
@@ -3140,7 +3202,10 @@
         ENDDO
         sym_found = .FALSE.
         !
-        IF (DOT_PRODUCT(xk - S_xk, xk - S_xk) < eps6) THEN
+        ! SJ: eps6 fails to properly establish symmetry when nkf exceeds 1000.
+        !     If a much denser fine k-grid could be considered,
+        !     it might be possible to apply a stricter threshold.
+        IF (DOT_PRODUCT(xk - S_xk, xk - S_xk) < eps12) THEN
           counter = counter + 1
           xkt_sp(counter, ik + lower_bnd - 1) = nb
           sym_found = .TRUE.
@@ -3148,7 +3213,7 @@
         ! Now check if the symmetry was not found because the point is on border
         IF (.NOT. sym_found) THEN
           DO counter_n = 1, 27
-            IF (DOT_PRODUCT(xk(:) - s_xk_border(:, counter_n), xk(:) - s_xk_border(:, counter_n)) < eps6) THEN
+            IF (DOT_PRODUCT(xk(:) - s_xk_border(:, counter_n), xk(:) - s_xk_border(:, counter_n)) < eps12) THEN
               counter = counter + 1
               xkt_sp(counter, ik + lower_bnd - 1) = nb
             ENDIF
@@ -3161,13 +3226,14 @@
       ENDIF
       !
     ENDDO ! ik
+    !$omp end parallel do
     !
     ! Gather from all cores
-    CALL mp_sum(xkt_sp, world_comm)
-    CALL mp_sum(nb_sp, world_comm)
+    CALL mp_sum(xkt_sp, inter_pool_comm)
+    CALL mp_sum(nb_sp, inter_pool_comm)
     !
     !! 48 symmetries + 1 index for the index of kpt
-    ALLOCATE(xkf_sp(49, nb_sp), STAT = ierr)
+    ALLOCATE(xkf_sp(97, nb_sp), STAT = ierr)
     IF (ierr /= 0) CALL errore('special_points', 'Error allocating xkf_sp', 1)
     xkf_sp(:, :) = 0
     !
@@ -3176,7 +3242,7 @@
       IF (xkt_sp(2, ik) > 0) THEN
         counter = counter + 1
         xkf_sp(1, counter) = ik
-        xkf_sp(2:49, counter) = xkt_sp(:, ik)
+        xkf_sp(2:97, counter) = xkt_sp(:, ik)
       ENDIF
     ENDDO ! ik
     !
@@ -3259,16 +3325,15 @@
     USE global_var,    ONLY : nkf, nbndfst, nktotf
     USE cell_base,     ONLY : bg, at
     USE ep_constants,  ONLY : eps6, zero
-    USE symm_base,     ONLY : s, nsym
     USE parallelism,   ONLY : fkbounds
     USE mp,            ONLY : mp_sum
-    USE mp_global,     ONLY : world_comm
+    USE mp_global,     ONLY : world_comm, inter_pool_comm
     !
     IMPLICIT NONE
     !
     INTEGER, INTENT(in) :: nb_sp
     !! Lenght of xkf_sp
-    INTEGER, INTENT(in) :: xkf_sp(49, nb_sp)
+    INTEGER, INTENT(in) :: xkf_sp(97, nb_sp)
     !! Special points indexes and symmetries
     REAL(KIND = DP), INTENT(inout) :: f_out(3, nbndfst, nktotf, nstemp)
     !! In solution for iteration i
@@ -3322,6 +3387,8 @@
     vkk_all_loc(:, :, :) = zero
     special_map(:) = .FALSE.
     index_sp(:) = 0
+    !
+    !$omp parallel do private(sp)
     DO ik = 1, nkf
       DO sp = 1, nb_sp
         IF (ik + lower_bnd - 1 == xkf_sp(1, sp)) THEN
@@ -3330,47 +3397,51 @@
         ENDIF
       ENDDO
     ENDDO ! ik
+    !$omp end parallel do
     !
+    !$omp parallel do collapse(2) &
+    !$omp private(counter_average,tmp_vkk,tmp_f_out,nb,sa,sb,sr,s_vkk,s_f_out)
     DO itemp = 1, nstemp
       DO ik = 1, nkf
         IF (special_map(ik)) THEN
           counter_average = 0
           tmp_vkk = zero
           tmp_f_out = zero
-          DO nb = 1, nsym
+          DO nb = 1, nsym_k
             IF (index_sp(ik) > 0) THEN
               IF (xkf_sp(nb + 1, index_sp(ik)) > 0) THEN
                 counter_average = counter_average + 1
-                sa(:, :) = DBLE(s(:, :, xkf_sp(nb + 1, index_sp(ik))))
+                sa(:, :) = DBLE(s_k(:, :, xkf_sp(nb + 1, index_sp(ik))))
                 sb       = MATMUL(bg, sa)
                 sr(:, :) = MATMUL(at, TRANSPOSE(sb))
                 sr       = TRANSPOSE(sr)
-                DO ibnd = 1, nbndfst
-                  CALL DGEMV('n', 3, 3, 1.d0, sr, 3, vkk_all(:, ibnd, ik + lower_bnd - 1), 1, 0.d0, s_vkk(:, ibnd), 1)
-                  CALL DGEMV('n', 3, 3, 1.d0, sr, 3, f_out(:, ibnd, ik + lower_bnd - 1, itemp), 1, 0.d0, s_f_out(:, ibnd), 1)
-                  tmp_vkk(:, ibnd) = tmp_vkk(:, ibnd) + s_vkk(:, ibnd)
-                  tmp_f_out(:, ibnd) = tmp_f_out(:, ibnd) + s_f_out(:, ibnd)
-                ENDDO ! ibnd
+                !
+                CALL DGEMM('n', 'n', 3, nbndfst, 3, 1.d0, sr, 3, &
+                  vkk_all(:, :, ik + lower_bnd - 1), 3, 0.d0, &
+                  s_vkk(:, :), 3)
+                CALL DGEMM('n', 'n', 3, nbndfst, 3, 1.d0, sr, 3, &
+                  f_out(:, :, ik + lower_bnd - 1, itemp), 3, 0.d0, &
+                  s_f_out(:, :), 3)
+                !
+                tmp_vkk(:, :) = tmp_vkk(:, :) + s_vkk(:, :)
+                tmp_f_out(:, :) = tmp_f_out(:, :) + s_f_out(:, :)
               ENDIF
             ENDIF
           ENDDO ! sp
-          DO ibnd = 1, nbndfst
-            vkk_all_loc(:, ibnd, ik + lower_bnd - 1) = tmp_vkk(:, ibnd) / DBLE(counter_average)
-            f_out_loc(:, ibnd, ik + lower_bnd - 1, itemp) = tmp_f_out(:, ibnd) / DBLE(counter_average)
-          ENDDO
+          vkk_all_loc(:, :, ik + lower_bnd - 1) = tmp_vkk(:, :) / DBLE(counter_average)
+          f_out_loc(:, :, ik + lower_bnd - 1, itemp) = tmp_f_out(:, :) / DBLE(counter_average)
           !
         ELSE ! not a special point
-          DO ibnd = 1, nbndfst
-            vkk_all_loc(:, ibnd, ik + lower_bnd - 1) = vkk_all(:, ibnd, ik + lower_bnd - 1)
-            f_out_loc(:, ibnd, ik + lower_bnd - 1, itemp) = f_out(:, ibnd, ik + lower_bnd - 1, itemp)
-          ENDDO
+          vkk_all_loc(:, :, ik + lower_bnd - 1) = vkk_all(:, :, ik + lower_bnd - 1)
+          f_out_loc(:, :, ik + lower_bnd - 1, itemp) = f_out(:, :, ik + lower_bnd - 1, itemp)
         ENDIF ! special
       ENDDO! ik
     ENDDO! itemp
+    !$omp end parallel do
     !
     ! Gather from all cores
-    CALL mp_sum(vkk_all_loc, world_comm)
-    CALL mp_sum(f_out_loc, world_comm)
+    CALL mp_sum(vkk_all_loc, inter_pool_comm)
+    CALL mp_sum(f_out_loc, inter_pool_comm)
     !
     f_out = f_out_loc
     vkk_all = vkk_all_loc
