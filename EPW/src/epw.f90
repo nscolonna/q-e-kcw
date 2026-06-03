@@ -1,4 +1,6 @@
   !
+  ! Copyright (C) 2023-2026 EPW-Collaboration
+  ! Copyright (C) 2023-2026 EPW-Collaboration
   ! Copyright (C) 2016-2023 EPW-Collaboration
   ! Copyright (C) 2010-2016 Samuel Ponce', Roxana Margine, Carla Verdi, Feliciano Giustino
   ! Copyright (C) 2007-2009 Jesse Noffsinger, Brad Malone, Feliciano Giustino
@@ -10,8 +12,8 @@
   !-----------------------------------------------------------------------
   PROGRAM epw
   !-----------------------------------------------------------------------
-  !! author: Samuel Ponce', Roxana Margine, Carla Verdi, Feliciano Giustino
-  !! version: v6.0
+  !! author: The EPW Collaboration
+  !! version: v6.1
   !! license: GNU
   !! summary: EPW main driver
   !!
@@ -83,7 +85,7 @@
   REAL(KIND = DP), ALLOCATABLE :: xqc(:, :)
   !! The qpoints in the uniform coarse q-point grid.
   !
-  version_number = '6.0'
+  version_number = '6.1'
   !
   CALL init_clocks(.TRUE.)
   !

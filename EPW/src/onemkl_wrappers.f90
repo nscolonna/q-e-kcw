@@ -1,3 +1,5 @@
+  !
+  ! Copyright (C) 2023-2026 EPW-Collaboration
 #if defined (__ONEMKL)
   include "mkl_blas_omp_offload.f90"
 #endif

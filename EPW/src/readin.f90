@@ -1,4 +1,5 @@
   !
+  ! Copyright (C) 2023-2026 EPW-Collaboration
   ! Copyright (C) 2016-2023 EPW-Collaboration
   ! Copyright (C) 2010-2016 Samuel Ponce', Roxana Margine, Carla Verdi, Feliciano Giustino
   ! Copyright (C) 2007-2009 Jesse Noffsinger, Brad Malone, Feliciano Giustino
@@ -1514,10 +1515,13 @@
     WRITE(stdout, '(21x,a)') 'In this case, use the EPW results at your own risk.'
   ENDIF
   !
-  IF (lda_plus_u) THEN
-    IF (lda_plus_u_kind /= 0) CALL errore('ep_coarse_unfolding', 'Current &
-      lda_plus_u_kind is not implemented', 1)
+  ! S.Tiwari: This is a patch work to prevent a crash/should be fixed asap
+  IF (.NOT. restart) THEN
+    IF (lda_plus_u) THEN
+      IF (lda_plus_u_kind /= 0) CALL errore('ep_coarse_unfolding', 'Current &
+        lda_plus_u_kind is not implemented', 1)
       ldfptu = .TRUE.
+    ENDIF
   ENDIF
   !   There might be other variables in the input file which describe
   !   partial computation of the dynamical matrix. Read them here
