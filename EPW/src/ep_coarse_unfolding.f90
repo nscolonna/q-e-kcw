@@ -1,4 +1,5 @@
   !
+  ! Copyright (C) 2023-2026 EPW-Collaboration
   ! Copyright (C) 2016-2023 EPW-Collaboration
   ! Copyright (C) 2010-2016 Samuel Ponce', Roxana Margine, Carla Verdi, Feliciano Giustino
   ! Copyright (C) 2007-2009 Jesse Noffsinger, Brad Malone, Feliciano Giustino
@@ -60,7 +61,7 @@
                             zstar, epsi, cu, cuq, lwin, lwinq, nbndep, ibndkept,&
                             ngxx, exband, wscache, area, ngxxf, shift,          &
                             gmap, qrpl, Qmat, L, do_cutoff_2D_epw, alph, nbndskip,&
-                            wf_temp, wf, nk_loc, nkpts                                         
+                            wf_temp, wf, nk_loc, nkpts, ldfptu                                       
                             ! ZD: last line for ex-plrn
   USE input,         ONLY : et_loc, et_all, xk_all
   USE ep_constants,  ONLY : ryd2ev, zero, two, czero, eps6, eps8
@@ -83,7 +84,7 @@
   USE pw2wan,        ONLY : compute_pmn_para
   USE ep_coarse,     ONLY : ep_coarse_compute, dvscf_read
   USE noncollin_module, ONLY : m_loc, npol, noncolin, lspinorb, nspin_mag
-  USE ldaU,          ONLY : lda_plus_u, Hubbard_lmax
+  USE ldaU,          ONLY : lda_plus_u, Hubbard_lmax, lda_plus_u_kind
   USE ldaU_ph,       ONLY : dnsbare
   USE dvqhub,        ONLY : set_irr_sym_new2, sym_dns_wrapper2
   USE scf,           ONLY : rho
@@ -457,6 +458,7 @@
       READ(crystal, *) L
       READ(crystal, *) degauss
       READ(crystal, *) ngauss
+      READ(crystal, *) lda_plus_u
       !
     ENDIF ! mpime == ionode_id
     CALL mp_bcast(nat      , ionode_id, inter_pool_comm)
@@ -478,11 +480,13 @@
     CALL mp_bcast(L        , ionode_id, inter_pool_comm)
     CALL mp_bcast(degauss  , ionode_id, inter_pool_comm)
     CALL mp_bcast(ngauss   , ionode_id, inter_pool_comm)
+    CALL mp_bcast(lda_plus_u   , ionode_id, inter_pool_comm)
     IF (my_pool_id == ionode_id) THEN
       CLOSE(crystal)
     ENDIF
   ENDIF ! epwread
   !
+  IF (lda_plus_u) ldfptu = .TRUE.
   IF (system_2d /= 'no') THEN
     area = omega * bg(3, 3) / alat
     WRITE(stdout, '(5x, a, F14.8, a)') 'Area is', area, ' [Bohr^2]'
@@ -1340,8 +1344,10 @@
   DEALLOCATE(ibndkept, STAT = ierr)
   IF (ierr /= 0) CALL errore('ep_coarse_unfolding', 'Error allocating ibndkept', 1)
   IF (lda_plus_u) THEN
-    DEALLOCATE(dnsbare, STAT = ierr)
-    IF (ierr /= 0) CALL errore('ep_coarse_unfolding', 'Error deallocating dnsbare', 1)
+    IF (.NOT. epbread .AND. .NOT. epwread) THEN
+      DEALLOCATE(dnsbare, STAT = ierr)
+      IF (ierr /= 0) CALL errore('ep_coarse_unfolding', 'Error deallocating dnsbare', 1)
+    ENDIF
   ENDIF
   !
   CALL stop_clock('elphon_wrap')

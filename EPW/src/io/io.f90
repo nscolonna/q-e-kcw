@@ -1,4 +1,5 @@
   !
+  ! Copyright (C) 2023-2026 EPW-Collaboration
   ! Copyright (C) 2016-2023 EPW-Collaboration
   ! Copyright (C) 2010-2016 Samuel Ponce', Roxana Margine, Carla Verdi, Feliciano Giustino
   !
@@ -146,6 +147,7 @@
     USE mp_world,         ONLY : mpime, world_comm
     USE io_global,        ONLY : ionode_id, stdout, ionode, meta_ionode
     USE mp_pools,         ONLY : inter_pool_comm
+    USE ldaU,             ONLY : lda_plus_u, lda_plus_u_kind
 #if defined(__MPI)
     USE parallel_include, ONLY : MPI_OFFSET_KIND, MPI_DOUBLE_COMPLEX, &
                                  MPI_MODE_CREATE, MPI_MODE_WRONLY, &
@@ -230,6 +232,7 @@
       WRITE(crystal,*) L
       WRITE(crystal,*) degauss
       WRITE(crystal,*) ngauss
+      WRITE(crystal,*) lda_plus_u
       !
       WRITE(epwdata,*) ef
       WRITE(epwdata,*) nbndsub, nrr_k, nmodes, nrr_q, nrr_g
