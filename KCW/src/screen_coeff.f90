@@ -117,6 +117,13 @@ SUBROUTINE screen_coeff ()
   WRITE(stdout,'(/)')
   WRITE( stdout, '(5X,"INFO: LR CALCULATION ...")')
   !
+  IF(get_coulomb) THEN 
+    CALL kcw_R_points()
+    ALLOCATE ( Vcoulomb(2, nkstot/nspin, num_wann, num_wann), Wcoulomb(2, nkstot/nspin, num_wann, num_wann))
+    Vcoulomb = 0.D0
+    Wcoulomb = 0.D0
+  END IF
+  !
   iun_res = 987
   OPEN (iun_res, file = TRIM(tmp_dir_kcw)//TRIM(prefix)//'.LR_res.txt')
   CALL restart_screen (num_wann, iq_start, vki_r, vki_u, sh, do_real_space)
@@ -124,12 +131,6 @@ SUBROUTINE screen_coeff ()
   nsym_old = nsym
   !
   !IF(irr_bz) CALL read_qlist_ibz()
-  IF(get_coulomb) THEN 
-    CALL kcw_R_points()
-    ALLOCATE ( Vcoulomb(2, nkstot/nspin, num_wann, num_wann), Wcoulomb(2, nkstot/nspin, num_wann, num_wann))
-    Vcoulomb = 0.D0
-    Wcoulomb = 0.D0
-  END IF
   !
   DO iq = iq_start, nqs
       !! For each q in the mesh 
@@ -325,6 +326,10 @@ SUBROUTINE screen_coeff ()
       REWIND(986)
       WRITE(986,'(i5)') iq
       FLUSH(986)
+      !
+      ! Write partial res on file
+      IF (get_coulomb) CALL write_coulomb()
+      !
     ENDIF
     !
   ENDDO ! qpoints
@@ -400,6 +405,7 @@ SUBROUTINE restart_screen (num_wann, iq_start, vki_r, vki_u, sh, do_real_space)
   USE mp,               ONLY : mp_bcast
   USE mp_global,        ONLY : intra_image_comm
   USE control_kcw,      ONLY : l_do_alpha, iorb_start, iorb_end, tmp_dir_kcw, irr_bz, fbz2ibz
+  USE control_kcw,      ONLY : get_coulomb
   USE io_files,         ONLY : prefix
   !
   IMPLICIT NONE
@@ -411,6 +417,7 @@ SUBROUTINE restart_screen (num_wann, iq_start, vki_r, vki_u, sh, do_real_space)
   INTEGER :: iq_start, num_wann, iwann, iwann_, iq, iq_, iun_res
   LOGICAL :: exst, do_real_space
   !
+  !
   INQUIRE(file=TRIM(tmp_dir_kcw)//TRIM(prefix)//'.alpha.status', exist=exst)
   IF( .NOT. exst) THEN
     RETURN
@@ -420,6 +427,10 @@ SUBROUTINE restart_screen (num_wann, iq_start, vki_r, vki_u, sh, do_real_space)
   !
   iun_res = 987
   OPEN (iun_res, file = TRIM(tmp_dir_kcw)//TRIM(prefix)//'.LR_res.txt')
+  !
+  ! Read partial res for the bare and screen Coulomb (summed up to the current q point)
+  IF(get_coulomb) CALL read_coulomb()
+  !
   IF (ionode) THEN 
     !
     READ(986, '(i5)') iq_start
@@ -458,7 +469,7 @@ SUBROUTINE restart_screen (num_wann, iq_start, vki_r, vki_u, sh, do_real_space)
     ENDDO
     ! 
   ENDIF
-  ! 
+  !
   call mp_bcast ( iq_start,  ionode_id, intra_image_comm ) 
   call mp_bcast ( vki_u,     ionode_id, intra_image_comm ) 
   call mp_bcast ( vki_r,     ionode_id, intra_image_comm ) 
