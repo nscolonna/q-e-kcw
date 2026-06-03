@@ -1,5 +1,5 @@
 !
-! Copyright (C) 2016-2022 Quantum ESPRESSO group
+! Copyright (C) 2016-2026 Quantum ESPRESSO Foundation
 ! This file is distributed under the terms of the
 ! GNU General Public License. See the file `License'
 ! in the root directory of the present distribution,
@@ -948,10 +948,13 @@ MODULE pw_restart_new
       INTEGER, OPTIONAL, INTENT (IN)  :: wann_spin_component
       !
       LOGICAL               :: is_wann
+      INTEGER               :: wann_spin
       !
       is_wann = .false. 
+      wann_spin = 0
       IF (present (wann_spin_component) ) THEN
          is_wann = .true.
+         wann_spin = wann_spin_component
       ENDIF
       !
       dirname = restart_dir ()
@@ -991,7 +994,7 @@ MODULE pw_restart_new
       k_points_loop: DO ik = 1, nks
          !
          ! one spin component at the time in KCW
-         IF ( is_wann .AND. lsda .AND. isk(ik) /= wann_spin_component) CYCLE
+         IF ( is_wann .AND. lsda .AND. isk(ik) /= wann_spin) CYCLE
          !
          ! ik_g is the index of k-point ik in the global list
          !
@@ -1547,7 +1550,7 @@ MODULE pw_restart_new
       LOGICAL              :: ionode_k
       REAL(DP)             :: scalef, xk_(3), b1(3), b2(3), b3(3)
       !
-      ! ... decide whether to read wfc or ace
+      ! ... decide whether to read wfc or ace or wannier functions
       !
       if(present(label_)) then 
          label = label_
@@ -1555,6 +1558,7 @@ MODULE pw_restart_new
             if(.not.exx_is_active()) CALL errore ('pw_restart-read_collected_wfc',&
                  "ace but not exx_is_active", 1 ) 
             read_ace = .true.
+            read_wann = .false.
          else if(label.eq."wfc") then
             read_ace = .false.
             read_wann = .false.
