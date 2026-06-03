@@ -160,7 +160,7 @@ subroutine zstar_eu_us
 #endif
 !
 ! Calculate the parts with the perturbed Hartree and exchange and correlation
-! potenial
+! potential
 !
   imode0 = 0
   allocate(drhoscfh(dfftp%nnr,nspin_mag))

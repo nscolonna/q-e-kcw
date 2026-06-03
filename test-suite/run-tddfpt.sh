@@ -86,5 +86,14 @@ then
   then
     cat $3
   fi
+elif [[ "$1" == "8" ]]
+then
+  echo "Running TURBO DAVIDSON ..."
+  echo "${PARA_PREFIX} ${ESPRESSO_BUILD}/bin/turbo_davidson.x ${PARA_SUFFIX} < $2 > $3 2> $4"  
+  ${PARA_PREFIX} ${ESPRESSO_BUILD}/bin/turbo_davidson.x ${PARA_SUFFIX} < $2 > $3 2> $4
+  if [[ -e CRASH ]]
+  then
+    cat $3
+  fi
 fi
 

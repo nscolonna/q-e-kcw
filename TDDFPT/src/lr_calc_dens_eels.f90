@@ -56,7 +56,7 @@ SUBROUTINE lr_calc_dens_eels (drhoscf, dpsi)
   REAL(DP) :: weight ! weight of the k point
   INTEGER :: nnr_siz, nnrs_siz
   !
-  CALL start_clock_gpu('lr_calc_dens')
+  CALL start_clock('lr_calc_dens')
   !
   nnr_siz = dfftp%nnr
   nnrs_siz = dffts%nnr
@@ -142,7 +142,7 @@ SUBROUTINE lr_calc_dens_eels (drhoscf, dpsi)
   DEALLOCATE (drhoscfh)
   IF (okvan) DEALLOCATE (dbecsum)
   !
-  CALL stop_clock_gpu('lr_calc_dens')
+  CALL stop_clock('lr_calc_dens')
   !
   RETURN
   !
