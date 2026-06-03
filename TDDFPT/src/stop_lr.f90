@@ -14,10 +14,10 @@ SUBROUTINE stop_lr( full_run  )
   USE kinds,                ONLY : DP
   USE mp_global,            ONLY : mp_global_end
   USE lr_variables,         ONLY : n_ipol, LR_polarization, beta_store,          &
-                                 & gamma_store, zeta_store, norm0, code1,code2,  &
-                                 & lr_verbosity, itermax, bgz_suffix,            &
-                                 & eels, q1, q2, q3, calculator, iundvpsi,       &
-                                 & magnons, code3, alpha_magnons_store,  &
+                                 & gamma_store, zeta_store, norm0,        &
+                                 & lr_verbosity, itermax, bgz_suffix,     &
+                                 & eels, q1, q2, q3, calculator, iundvpsi,&
+                                 & magnons, alpha_magnons_store,          &
                                  & gamma_magnons_store, n_op
   USE io_global,            ONLY : ionode, stdout
   USE io_files,             ONLY : tmp_dir, prefix
@@ -189,13 +189,7 @@ SUBROUTINE stop_lr( full_run  )
   IF (use_environ) CALL clean_environ('TD', .TRUE.)
 #endif
   !
-  IF (eels) THEN
-     CALL environment_end(code2)
-  ELSEIF(magnons) THEN
-     CALL environment_end(code3)
-  ELSE
-     CALL environment_end(code1) 
-  ENDIF
+  CALL environment_end( )
   !
   CALL mp_global_end( )
   !
