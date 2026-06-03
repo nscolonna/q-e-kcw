@@ -71,6 +71,11 @@
   !! input file containing the objects of IR basis
   CHARACTER(LEN = 80) :: filnscf_coul
   !! input file containing electronic eigenvalues for Coulomb contribution
+  CHARACTER(LEN = 4) :: lsda
+  !! channel to take with collinear magnetism. Two options 'up' or 'down' for collinear magnetism
+  !! If lsda = 'up' the files preserve their name. If lsda 'down' all files will no contain a .down string
+  !! In the non magnetic case or in the fully collinear case this is set to 'none' by default.
+  !! Not to be confused with the variable with the same name in module lsda_mod (in QE Modules).
   !
   LOGICAL :: elecselfen
   !! if .TRUE. calculate electron selfenergy due to e-p interaction
@@ -142,6 +147,12 @@
   !! if .TRUE. fermi energy is read from the input file
   LOGICAL :: prtgkk
   !! if .TRUE. print the |g| vertex in [meV].
+  LOGICAL :: prtvkk
+  !! if .TRUE. print the VME matrix in fine Bloch grid
+  LOGICAL :: prtuf
+  !! if .TRUE. print the phonon eigenmodes in fine grid
+  LOGICAL :: prteigdiff
+  !! if .TRUE. print the eigenvalues and their differences
   LOGICAL :: lphase
   !! if .TRUE. fix the gauge when diagonalizing the interpolated dynamical matrix and electronic Hamiltonian.
   LOGICAL :: lrot
@@ -189,6 +200,8 @@
   !! if .TRUE. negative Matsubara frequencies will not be used for sampling.
   LOGICAL :: scattering
   !! if .TRUE. scattering rates are calculated
+  LOGICAL :: ltrans_crta
+  !! if .TRUE. transport properties are calculated with constant relaxation time approximation (CRTA)
   LOGICAL :: scattering_serta
   !! if .TRUE. scattering rates are calculated using self-energy relaxation-time-approx
   LOGICAL :: scatread
@@ -250,8 +263,15 @@
   !! if .true. Using Ack from written outputs
   LOGICAL :: full_diagon_plrn
   !! if .true. diagonalizing the polaron Hamiltonian with direct diagonalization
+  CHARACTER(LEN = 10) :: eigen_solver_plrn
+  !! if 'lapack' use LAPACK to diagonalize
+  !! if 'elpa' use ELPA to diagonalize
   LOGICAL :: cal_psir_plrn
   !! if .true. Generating a 3D-plot for polaron wavefunction
+  LOGICAL :: lsign_psir_plrn
+  !! if .true. Retain the sign of polaron wavefunction
+  LOGICAL :: cal_acous_plrn
+  !! if .true. Generating the acoustic contribution for polaron dtau
   LOGICAL :: interp_Ank_plrn
   !! if .true. interpolating polaron A(k) from A(Re)
   LOGICAL :: interp_Bqu_plrn
@@ -285,7 +305,16 @@
   LOGICAL :: lfast_kmesh
   !! If .TRUE. use on-the-fly generation of k point mesh within fsthick.
   LOGICAL :: epw_memdist
-  !! if .TRUE. distributed storage of epmatwp in MPI processes, only works with etf_mem = 0
+  !! Deprecated. Included in the namelist for backwards compatibility but no longer has any
+  !! effect. The distribution of the epmatwp is automatically determined by the value of etf_mem.
+  LOGICAL :: dos_tetra
+  !! if .true. calculate DOS using tetrahedron method
+  LOGICAL :: fd
+  !! if .true. ifc file came from finite displacement
+  LOGICAL :: a2f_iso
+  !! if .TRUE. Eliashberg a2f is calculated without storing g2 matrix elements to files
+  LOGICAL :: interpolate
+  !! if .TRUE. use epw to interpolate electron phonon quantities on the fine mesh. (default TRUE)
   !
   INTEGER :: ngaussw
   !! smearing type for Fermi surface average in e-ph coupling after wann. interp.
@@ -359,6 +388,8 @@
   !! Start and end band index in matrix element
   INTEGER :: nstate_plrn
   !! Number of polaron states calculated
+  INTEGER :: istate_relax_plrn
+  !! Index of excited-state polaron to be relaxed
   INTEGER :: ndos_plrn
   !! Number of grid in polaron DOS calculation
   INTEGER :: type_plrn
@@ -373,8 +404,12 @@
   !! The seed number to generate the random initial polaron wavefunction
   INTEGER :: g_start_band_plrn, g_end_band_plrn
   !! Start and end band in saving g matrix
+  REAL(KIND = DP) :: g_scale_plrn
+  !! scaling factor of g matrix
   INTEGER :: step_wf_grid_plrn
   !! number of grid to skip in output of real space wavefunction
+  INTEGER :: plot_psir_plrn
+  !! the real space wavefunction of the n-th exited polaron state
   INTEGER :: io_lvl_plrn
   !! number of grid to skip in output of real space wavefunction
   INTEGER :: scell_mat(3,3)
@@ -411,6 +446,10 @@
   !! Spin index of local k-point (used in LSDA calculations only)
   INTEGER, ALLOCATABLE :: isk_dummy(:)
   !! Spin index on the fine grid - dummy at the moment
+  INTEGER, ALLOCATABLE :: igk_k_loc(:, :)
+  !! local igk_k
+  INTEGER, ALLOCATABLE :: ngk_loc(:)
+  !! local ngk
   !
   REAL(KIND = DP) :: tempsmin
   !! min. temperature in Eliashberg equations - deprecated as an input parameter
@@ -446,6 +485,10 @@
   !! Cut-off radius for plotting Wannier functions
   REAL(KIND = DP) :: eps_acoustic
   !! min. phonon frequency for e-p and a2f calculations
+  REAL(KIND = DP) :: acoustic_plrn
+  !! max. phonon frequency for polaron dtau
+  REAL(KIND = DP) :: dtau_max_plrn
+  !! max. polaron displacements in a physical solution
   REAL(KIND = DP) :: degaussq
   !! smearing for sum over q in e-ph coupling
   REAL(KIND = DP) :: delta_qsmear
@@ -469,6 +512,8 @@
   !! maximum memory that can be allocated per pool
   REAL(KIND = DP) :: fermi_energy
   !! fermi energy is given in the input file
+  REAL(KIND = DP) :: gap_energy
+  !! Energy within the gap for LSDA case (needed when both Conduction and Valence are wannierized)
   REAL(KIND = DP) :: wmin_specfun
   !! min frequency in electron spectral function due to e-p interaction
   REAL(KIND = DP) :: wmax_specfun
@@ -491,6 +536,8 @@
   !! Magnetic field along the z-direction
   REAL(KIND = DP) :: mob_maxfreq
   !! Maximum frequency for the spectral decomposition of mobility. Typically that freq. is the highest phonon freq.
+  REAL(KIND = DP) :: sr_crta
+  !! Input scattering rate (in THz) for constant relaxation time approximation (CRTA)
   REAL(KIND = DP) :: ii_charge
   !! charge of the ionized impurities, units of electron charge for input
   REAL(KIND = DP) :: ii_n
@@ -563,12 +610,18 @@
   !! Lower bound of AHC window for the lower Fan term.
   REAL(KIND = DP) :: ahc_win_max
   !! Upper bound of AHC window for the lower Fan term.
+  REAL(KIND = DP) :: ahc_rest_fan_broadening
+  !! Broadening (eV) for the rest-Fan inv_delta_e term to avoid divergence.
   REAL(KIND = DP) :: a_gap0
   !! This determines the shape of initial guess of gap function
   REAL(KIND = DP) :: emax_coulomb, emin_coulomb
   !! Electron Energy range for Coulomb kernel in Eliashberg calculation (used only when icoulomb > 0)
   REAL(KIND = DP) :: eps_cut_ir
   !! This is a threshold to ignore negligibly small IR coefficients.
+  REAL(KIND = DP) :: eval_hplrn
+  !! Hole polaron eigenvalue in eV, referenced to the valence band maximum
+  REAL(KIND = DP) :: eval_eplrn
+  !! Electron polaron eigenvalue in eV, referenced to the conduction band minimum
   REAL(KIND = DP), ALLOCATABLE :: xk_loc(:, :)
   !! List of local (each cores) kpoints in cartesian coordinates
   REAL(KIND = DP), ALLOCATABLE :: xk_all(:, :)
@@ -579,6 +632,78 @@
   !! Eigenenergies on the full coarse k-grid
   REAL(KIND = DP), ALLOCATABLE :: et_loc(:, :)
   !! Eigenenergies on the local (each core) coarse k-grid
+  ! ZD: For ex-plrn calculation
+  LOGICAL :: exciton
+  !! Calculate exciton-phonon coupling and optical transition
+  LOGICAL :: explrn
+  !! if .true. activates the calculation of excitonic polaron. Must go with epwread=true
+  LOGICAL :: plot_explrn_e
+  !! if .true. plot the e density of excitonic polaron. Will skip the explrn calculations
+  LOGICAL :: plot_explrn_h
+  !! if .true. plot the h density of excitonic polaron. Will skip the explrn calculations
+  LOGICAL :: only_c_explrn
+  !! if .true. only use conduction band to construct ex-ph matrix
+  LOGICAL :: only_v_explrn
+  !! if .true. only use valence band to construct ex-ph matrix
+  LOGICAL :: only_pos_modes_explrn
+  !! Whether include positive-frequency modes only 
+  INTEGER :: nbndc_explrn
+  !! Number of conduction bands for exciton calculation
+  INTEGER :: nbndv_explrn
+  !! Number of valence bands for exciton calculation
+  INTEGER :: negnv_explrn
+  ! Number of exciton states to be included in the ex-polaron calculation
+  integer :: step_k1_explrn, step_k2_explrn, step_k3_explrn
+  !! used to model smaller excitonic polaron
+  ! ZD 
+  !! ymPan: Time dependent Boltzmann Equation
+  LOGICAL :: do_tdbe
+  !! if .true. start time propagating BTE
+  REAL(KIND = DP):: dt_tdbe       
+  !! time step in fs 
+  INTEGER :: nt_tdbe
+  !! nb of time step, should be defined in epwcom
+  INTEGER :: twrite_tdbe 
+  REAL(KIND = DP) :: temp_el_tdbe
+  !! initial electronic temperature 
+  REAL(KIND = DP) :: temp_ph_tdbe
+  !! initial phononic temperature
+  CHARACTER(LEN = 75) :: init_type_tdbe
+  !! type of initial carrier distribution
+  REAL(KIND = DP) :: init_sigma_tdbe
+  !! gaussian smearing parameter for initial carrier
+  !! distribution
+  CHARACTER(LEN = 75) :: solver_tdbe
+  !! time propagation methods
+  REAL(KIND = DP) :: ef_c_tdbe
+  !! initial energy of hot electron or chemical potential
+  !! of electron
+  REAL(KIND = DP) :: ef_v_tdbe
+  !! initial energy of hot hole or chemical potential 
+  !! of hole
+  INTEGER :: carr_dyn_tdbe
+  !! if = 1, real time dynamic of electron
+  !! if = 2, real time dynamic of hole
+  !! if =3 , real time dynamic for both 
+  LOGICAL :: dg_tdbe
+  !! use two different grid for energy and e-ph matrix
+  INTEGER :: nqf1d, nqf2d, nqf3d
+  !! double grid for phonon q points
+  INTEGER :: nkf1d, nkf2d, nkf3d
+  !! double grid for electron k points
+  INTEGER :: dph_tdbe
+  !! the factor between time step for e-ph interaction and that
+  !! for ph-ph interaction
+  LOGICAL :: restart_tdbe
+  !! restart TDBE from an previous interrupted calculation 
+  LOGICAL :: phph_tdbe
+  !! include phonon-phonon scattering in TDBE simulations
+  REAL(KIND=DP) :: phwmin_tdbe
+  !! min. phonon frequency for ph-ph calculations
+  CHARACTER(LEN = 100) :: ephmat_dir ='./'
+  !! path to the e-ph matrix elements prefix.ephmat
+  LOGICAL :: lscreen_tdbe
+  !! Apply screening to e-ph matrix elements in TDBE simulations
   !
   !-----------------------------------------------------------------------
   END MODULE input

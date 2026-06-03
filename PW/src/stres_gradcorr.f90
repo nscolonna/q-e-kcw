@@ -1,5 +1,5 @@
 !
-! Copyright (C) 2001-2006 Quantum ESPRESSO group
+! Copyright (C) 2001-2025 Quantum ESPRESSO Foundation
 ! This file is distributed under the terms of the
 ! GNU General Public License. See the file `License'
 ! in the root directory of the present distribution,
@@ -7,13 +7,13 @@
 !
 !
 !----------------------------------------------------------------------------
-SUBROUTINE stres_gradcorr( rho, rhog, rho_core, rhog_core, nspin, &
-                           dfft, g, alat, omega, sigmaxc, kedtau )
+SUBROUTINE stres_gradcorr( rho, rho_core, rhog_core, nspin, domag, &
+                           dfft, g, alat, omega, sigmaxc )
   !----------------------------------------------------------------------------
   !
   USE kinds,            ONLY: DP
   USE xc_lib,           ONLY: xclib_dft_is, xclib_get_id, xc_gcx, xc_metagcx
-  USE noncollin_module, ONLY: domag
+  USE scf,              ONLY: scf_type, tau_core
   USE mp_bands,         ONLY: intra_bgrp_comm
   USE mp,               ONLY: mp_sum
   USE fft_types,        ONLY: fft_type_descriptor
@@ -23,20 +23,20 @@ SUBROUTINE stres_gradcorr( rho, rhog, rho_core, rhog_core, nspin, &
   !
   TYPE(fft_type_descriptor), INTENT(IN):: dfft
   INTEGER,  INTENT(IN) :: nspin
-  REAL(DP), INTENT(IN) :: rho(dfft%nnr,nspin), rho_core(dfft%nnr)
+  LOGICAL,  INTENT(IN) :: domag
+  TYPE(scf_type), INTENT(IN) :: rho
+  REAL(DP), INTENT(IN) :: rho_core(dfft%nnr)
   REAL(DP), INTENT(IN) :: g(3,dfft%ngm)
   REAL(DP), INTENT(IN) :: alat, omega
-  REAL(DP), INTENT(IN), OPTIONAL :: kedtau(dfft%nnr,nspin)
-  COMPLEX(DP), INTENT(IN) :: rhog(dfft%ngm,nspin)
   COMPLEX(DP), INTENT(IN) :: rhog_core(dfft%ngm)
   REAL(DP), INTENT(INOUT) :: sigmaxc(3,3)
   !
   ! ... local variables
   !
-  INTEGER :: k, l, m, ipol, ir, ig, is, nspin0, np
+  INTEGER :: k, l, m, ipol, ir, ig, is, nspin0, np, ispin
   INTEGER :: nr1, nr2, nr3, nrxx, ngm
   REAL(DP), ALLOCATABLE :: grho(:,:,:), grho2(:,:), rhoaux(:,:), &
-                           segni(:), kedtaue2(:,:)
+                           segni(:), taue2(:,:)
   COMPLEX(DP), ALLOCATABLE :: rhogaux(:,:)
   !
   REAL(DP), ALLOCATABLE :: sx(:), sc(:)
@@ -45,16 +45,15 @@ SUBROUTINE stres_gradcorr( rho, rhog, rho_core, rhog_core, nspin, &
   !
   REAL(DP), PARAMETER :: epsr = 1.0d-6, epsg = 1.0d-10, e2 = 2.d0
   REAL(DP) :: v2xc, v2xc_uu, v2xc_dd
+  REAL(DP) :: g1, g2, g3, h1, h2, h3
   REAL(DP) :: sigma_gc11, sigma_gc31, sigma_gc21, &
               sigma_gc32, sigma_gc22, sigma_gc33
   REAL(DP) :: sigma_gradcorr(3,3)
   !
   IF ( .NOT. xclib_dft_is('gradient') .AND. .NOT. xclib_dft_is('meta') ) RETURN
   !
-  IF ( xclib_dft_is('meta') .AND. nspin>1 )  CALL errore( 'stres_gradcorr', &
-       'Meta-GGA stress does not work with spin polarization', 1 )
   !
-  !$acc data present_or_copyin( rho, rho_core, rhog, rhog_core, g )
+  !$acc data present_or_copyin( rho, rho%of_r, rho%of_g, rho_core, rhog_core, g, tau_core )
   !
   np = 1
   IF ( nspin==2 .AND. xclib_dft_is('meta') ) np = 3
@@ -75,7 +74,7 @@ SUBROUTINE stres_gradcorr( rho, rhog, rho_core, rhog_core, nspin, &
   ALLOCATE( grho(3,nrxx,nspin0) )
   ALLOCATE( rhoaux(nrxx,nspin0) )
   ALLOCATE( rhogaux(ngm,nspin0) )
-  IF (xclib_dft_is('meta')) ALLOCATE( kedtaue2(dfft%nnr,nspin) )
+  IF (xclib_dft_is('meta')) ALLOCATE( taue2(dfft%nnr,nspin) )
   !$acc data create( grho, rhoaux )
   !$acc data create( rhogaux )
   !
@@ -86,11 +85,11 @@ SUBROUTINE stres_gradcorr( rho, rhog, rho_core, rhog_core, nspin, &
      !
      !$acc parallel loop
      DO k = 1, nrxx
-       rhoaux(k,1) = rho(k,1) + rho_core(k)
+       rhoaux(k,1) = rho%of_r(k,1) + rho_core(k)
      ENDDO
      !$acc parallel loop
      DO k = 1, ngm
-       rhogaux(k,1) = rhog(k,1) + rhog_core(k)
+       rhogaux(k,1) = rho%of_g(k,1) + rhog_core(k)
      ENDDO
      !
   ELSEIF ( nspin0 == 2 ) THEN
@@ -100,7 +99,7 @@ SUBROUTINE stres_gradcorr( rho, rhog, rho_core, rhog_core, nspin, &
         ALLOCATE( segni( nrxx ) )
         !
         !$acc data copyout( segni )
-        CALL compute_rho( rho, rhoaux, segni, nrxx )
+        CALL compute_rho( rho%of_r, rhoaux, segni, nrxx )
         !$acc parallel loop
         DO k = 1, nrxx
           rhoaux(k,1) = rhoaux(k,1) + rho_core(k) / 2.0_DP
@@ -111,13 +110,13 @@ SUBROUTINE stres_gradcorr( rho, rhog, rho_core, rhog_core, nspin, &
      ELSE
         !$acc parallel loop
         DO k = 1, nrxx
-          rhoaux(k,1)  = ( rho(k,1) + rho(k,2) + rho_core(k) ) / 2.0_DP
-          rhoaux(k,2)  = ( rho(k,1) - rho(k,2) + rho_core(k) ) / 2.0_DP
+          rhoaux(k,1)  = ( rho%of_r(k,1) + rho%of_r(k,2) + rho_core(k) ) / 2.0_DP
+          rhoaux(k,2)  = ( rho%of_r(k,1) - rho%of_r(k,2) + rho_core(k) ) / 2.0_DP
         ENDDO
         !$acc parallel loop
         DO k = 1, ngm
-          rhogaux(k,1)  = ( rhog(k,1) + rhog(k,2) + rhog_core(k) ) / 2.0_DP
-          rhogaux(k,2)  = ( rhog(k,1) - rhog(k,2) + rhog_core(k) ) / 2.0_DP
+          rhogaux(k,1)  = ( rho%of_g(k,1) + rho%of_g(k,2) + rhog_core(k) ) / 2.0_DP
+          rhogaux(k,2)  = ( rho%of_g(k,1) - rho%of_g(k,2) + rhog_core(k) ) / 2.0_DP
         ENDDO
      ENDIF
   ENDIF
@@ -153,12 +152,12 @@ SUBROUTINE stres_gradcorr( rho, rhog, rho_core, rhog_core, nspin, &
      ENDDO
      !
      IF ( xclib_dft_is('meta') .AND. xclib_get_id('MGGA','EXCH') /= 4 ) THEN
-        !$acc data present_or_copyin(kedtau) create( kedtaue2, v2cm, v3x, v3c )
+        !$acc data present_or_copyin(rho%kin_r) create( taue2, v2cm, v3x, v3c )
         !$acc parallel loop
         DO k = 1, nrxx
-          kedtaue2(k,1) = kedtau(k,1) / e2
+          taue2(k,1) = rho%kin_r(k,1) / e2  + tau_core(k)
         ENDDO
-        CALL xc_metagcx( nrxx, 1, np, rhoaux, grho, kedtaue2, sx, sc, &
+        CALL xc_metagcx( nrxx, 1, np, rhoaux, grho, taue2, sx, sc, &
                          v1x, v2x, v3x, v1c, v2cm, v3c, gpu_args_=.TRUE. )
         !$acc parallel loop
         DO k = 1, nrxx
@@ -181,7 +180,7 @@ SUBROUTINE stres_gradcorr( rho, rhog, rho_core, rhog_core, nspin, &
        sigma_gc33 = sigma_gc33 + grho(3,k,1)*grho(3,k,1) * v2xc
      ENDDO
      !
-  ELSEIF (nspin0 == 2) THEN
+  ELSE IF (nspin0 == 2) THEN
      !
      !    Spin-polarized case
      !
@@ -189,31 +188,51 @@ SUBROUTINE stres_gradcorr( rho, rhog, rho_core, rhog_core, nspin, &
      DO k = 1, nrxx
        grho2(k,1) = grho(1,k,1)**2 + grho(2,k,1)**2 + grho(3,k,1)**2
        grho2(k,2) = grho(1,k,2)**2 + grho(2,k,2)**2 + grho(3,k,2)**2
-     ENDDO
+     END DO
      !
      IF ( xclib_dft_is('meta') ) THEN
         !
-        !$acc data present(kedtau) create(kedtaue2, v2cm, v3x, v3c)
+        !$acc data present_or_copyin(rho%kin_r) create( taue2, v2cm, v3x, v3c )
         !$acc parallel loop
         DO k = 1, nrxx
-          kedtaue2(k,1:nspin0) = kedtau(k,1:nspin0) / e2
+           DO ispin = 1, nspin0
+              taue2(k,ispin) = rho%kin_r(k,ispin) / e2 + 0.5_DP * tau_core(k)
+           END DO
         ENDDO
-        CALL xc_metagcx( nrxx, nspin0, np, rhoaux, grho, kedtaue2, sx, sc, &
+        CALL xc_metagcx( nrxx, nspin0, np, rhoaux, grho, taue2, sx, sc, &
                          v1x, v2x, v3x, v1c, v2cm, v3c, gpu_args_=.TRUE. )
-        !$acc parallel loop
-        DO k = 1, nrxx
-          v2c(k,:) = v2cm(1,k,:)
-        ENDDO
+        !
+        ! ... sigma_gc_{alpha,beta} = sum_sigma (v2x*grad_rho(alpha,sigma)
+        ! ...   + v2cm(alpha,sigma)) * grad_rho(beta,sigma), with v2cm(alpha,sigma)
+        ! ...   = d Ec/d(grad_rho(sigma))_alpha already including the chain rule
+        ! ...   over all sigma invariants (uu, ud, dd) from xc_metagcx.
+        !
+        DO ispin = 1, nspin0
+           !$acc parallel loop reduction(+:sigma_gc11,sigma_gc21,sigma_gc22, &
+           !$acc&                          sigma_gc31,sigma_gc32,sigma_gc33) &
+           !$acc& private(g1,g2,g3,h1,h2,h3)
+           DO k = 1, nrxx
+              g1 = grho(1,k,ispin)
+              g2 = grho(2,k,ispin)
+              g3 = grho(3,k,ispin)
+              h1 = (v2x(k,ispin)*g1 + v2cm(1,k,ispin)) * e2
+              h2 = (v2x(k,ispin)*g2 + v2cm(2,k,ispin)) * e2
+              h3 = (v2x(k,ispin)*g3 + v2cm(3,k,ispin)) * e2
+              sigma_gc11 = sigma_gc11 + h1 * g1
+              sigma_gc21 = sigma_gc21 + h2 * g1
+              sigma_gc22 = sigma_gc22 + h2 * g2
+              sigma_gc31 = sigma_gc31 + h3 * g1
+              sigma_gc32 = sigma_gc32 + h3 * g2
+              sigma_gc33 = sigma_gc33 + h3 * g3
+           END DO
+        END DO
         !$acc end data
-        ! FIXME : what are we supposed to do now?
         !
      ELSE
         !
         ALLOCATE( v2c_ud(nrxx) )
         !$acc data create( v2c_ud )
-        !
         CALL xc_gcx( nrxx, nspin0, rhoaux, grho, sx, sc, v1x, v2x, v1c, v2c, v2c_ud, gpu_args_=.TRUE. )
-        !
         !$acc parallel loop reduction(+:sigma_gc11,sigma_gc21,sigma_gc22, &
         !$acc&                          sigma_gc31,sigma_gc32,sigma_gc33)
         DO k = 1, nrxx
@@ -245,14 +264,13 @@ SUBROUTINE stres_gradcorr( rho, rhog, rho_core, rhog_core, nspin, &
                                     grho(3,k,2)*grho(3,k,2) * v2xc_dd + &
                                    (grho(3,k,1)*grho(3,k,2) + &
                                     grho(3,k,2)*grho(3,k,1)) * v2c_ud(k) * e2
-        ENDDO
-        !
+        END DO
         !$acc end data
         DEALLOCATE( v2c_ud )
         !
-     ENDIF
+     END IF
      !
-  ENDIF
+  END IF
   !
   sigma_gradcorr(1,1) = sigma_gc11
   sigma_gradcorr(2,1) = sigma_gc21
@@ -268,7 +286,7 @@ SUBROUTINE stres_gradcorr( rho, rhog, rho_core, rhog_core, nspin, &
   DEALLOCATE( v1x, v2x )
   DEALLOCATE( grho, grho2  )
   DEALLOCATE( rhoaux )
-  IF (xclib_dft_is('meta')) DEALLOCATE( kedtaue2, v2cm, v3x, v3c )
+  IF (xclib_dft_is('meta')) DEALLOCATE( taue2, v2cm, v3x, v3c )
   !
   DO l = 1, 3
      DO m = 1, l - 1

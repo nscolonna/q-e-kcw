@@ -13,7 +13,8 @@ tolerance = ( (8.0e-4, 1.0e-4, 'e1'),
               (2.0e-1, None,   'band'),
               (1.0e-2, 1.0e-2, 'tf1'),
               (1.5e-1, None,   'vol'),
-              (5.0e-3, None,   'geom') )
+              (5.0e-3, None,   'geom'),
+              (5.0e-3, None,   'num_kpts'), )
 skip_program = grep
 skip_args = 'not present in this version\|libxc needed for this functional'
 
@@ -29,7 +30,7 @@ tolerance = ( (1.0e-5, 1.0e-5, 'e1'),
               (1.0e-2, 1.0e-2, 'v1d'),
               (6.0e-3, 1.0e-3, 't1') )
 skip_program = grep
-skip_args = 'not present in this version\|libxc needed for this functional\|not ported to GPU'
+skip_args = 'not present in this version\|libxc needed for this functional'
 
 [PH]
 exe = XXXXXX/test-suite/run-ph.sh
@@ -46,9 +47,9 @@ tolerance = ( (5.0e-5, 5.0e-3, 'e1'),
               (1.0e-2, 2.0e-2, 'ehl1'),
               (1.0e-2, 1.0e-2, 'tf1'),
               (5.0e-2, 5.0e-3, 'diel'),
-              (5.0e-2, 5.0e-3, 'born'),
+              (5.0e-2,   None, 'born'),
               (5.0e-4, 5.0e-4, 'dos'),
-              (5.0e-2, 1.0e-1, 'born_diff'),
+              (5.0e-2,   None, 'born_diff'),
               (1.5e-0,   None, 'lambda'),
               (1.0e-4,   None, 'dnsscf_e'),
               (1.0e-4,   None, 'dnsscf_ph'),
@@ -61,7 +62,12 @@ tolerance = ( (5.0e-5, 5.0e-3, 'e1'),
               (5.0e-1,   None, 'sum_w_pot'),
               (5.0e-4, 1.0e-2, 'postahc_selfen'),
               (1.0e-2, 1.0e-2, 'quad'),
-              (1.0e-1, 1.0e-2, 'epsil'))
+              (1.0e-1, 1.0e-2, 'epsil'),
+              (5.0e-2,   None, 'raman_au'),
+              (5.0e-2,   None, 'raman_A2'),
+              (5.0e-2, 5.0e-3, 'polariz'),
+              (2.0e+0,   None, 'raman_act'),
+              (5.0e-2,   None, 'depol'))
 
 skip_program = grep
 skip_args = 'not present in this version'
@@ -111,21 +117,27 @@ tolerance = ( (1.0e-6, 5.0e-3, 'e1'),
               (7.0e-1,   None, 'lambda_tr'),
               (1.0e-2,   None, 'gamma'),
               (1.1e-2, 5.0e-4, 'omega'),
+              (1.1e-1, 5.0e-4, 'on_shell_Omega'),
+              (1.1e-1, 5.0e-4, 'off_shell_Omega'),
               (1.0e-4, 5.0e-4, 'lam_tot'),
               (3.0e+1, 1.0e+0, 'lam_tr'),
               (2.0e-5, 6.0e-3, 'logavg'),
               (1.0e-2, 5.0e-2, 'l_a2f'),
               (1.0e-5, 1.0e-5, 'efm'),
               (5.0e-4, 5.0e-4, 'elph'),
+              (4.0e-2, 1.5e-3, 'mcmillan'),
               (4.0e-2, 1.5e-3, 'allDyn'),
               (2.0e-3, 5.0e-4, 'pi'),
               (1.0e-2, 5.0e-2, 'bcsgap'),
               (1.0e-2, 5.0e-2, 'max_eigenvalue'),
               (1.0e-4, 5.0e-4, 'mobvb'),
               (9.0e-4, 5.0e-4, 'mobcb'),
-              (3.0e+1, 1.0e-1, 'mobnewx'),
-              (3.0e+1, 1.0e-1, 'mobnewy'),
-              (3.0e+1, 1.0e-1, 'mobnewz'),
+              (3.0e+1, 1.0e-1, 'mobnewxx'),
+              (3.0e+1, 1.0e-1, 'mobnewyy'),
+              (3.0e+1, 1.0e-1, 'mobnewzz'),
+              (None, 1.0e-2, 'condnewxx'), # Conductivity specially in metals can span 4 orders of magnitude
+              (None, 1.0e-2, 'condnewyy'), # between different compounds. Absolute error is not usefull
+              (None, 1.0e-2, 'condnewzz'), # Only relative error has meaning.
               (5.0e-3, 5.0e-3, 'hall'),
               (1.0e+10,1.0e+2, 'density'),
               (1.0   , 1.0e-2, 'mobxZ'),
@@ -155,7 +167,12 @@ extract_program = XXXXXX/test-suite/extract-tddfpt.sh
 inputs_args = ('*.in', '')
 run_cmd_template = tc.program tc.args tc.input tc.output tc.error
 tolerance = ( (1.0e-6, 5.0e-3, 'e1'),
+              (1.0e-3, 1.0e-2, 'e3'),
               (3.0e+0, 5.0e-1, 'n1'),
+              (3.0e+0, 5.0e-1, 'n3'),
+              (5.0e+0, 5.0e-1, 'nb1'),
+              (5.0e+0, 5.0e-1, 'nb2'),
+              (1.0e-3, None,   'chi'),
               (1.0e-3, 1.0e-5, 'f1'),
               (1.0e-1, 1.0e-3, 'p1'),
               (1.0e-5, 1.0e-4, 'alpha'),
@@ -169,7 +186,9 @@ tolerance = ( (1.0e-6, 5.0e-3, 'e1'),
               (3.0e-3,   None, 'imepsm1'),
               (3.0e-3,   None, 'reeps'),
               (3.0e-3,   None, 'imeps'),
-              (1.0e-5, 5.0e-4, 'averageosc'))
+              (1.0e-5, 5.0e-4, 'averageosc'),
+              (1.0e-4,   None, 'epsiloninv'),
+              (1.0e-4,   None, 'chirr'),)
 
 skip_program = grep
 skip_args = 'not present in this version'
@@ -192,8 +211,8 @@ skip_program = grep
 skip_args = 'not present in this version'
 
 [QEHeat_h2o_mol_t]
-exe = XXXXXX/test-suite/run-all_currents.x
-extract_program = XXXXXX/test-suite/extract-all_currents.x
+exe = XXXXXX/test-suite/run-all_currents.sh
+extract_program = XXXXXX/test-suite/extract-all_currents.sh
 inputs_args = ('*.in', '')
 run_cmd_template = tc.program tc.input tc.output tc.error
 tolerance = ( (1.0e-1, 2.5e-5 ) )
@@ -201,8 +220,8 @@ skip_program = grep
 skip_args = 'not present in this version'
 
 [QEHeat_h2o_mol]
-exe = XXXXXX/test-suite/run-all_currents.x
-extract_program = XXXXXX/test-suite/extract-all_currents.x
+exe = XXXXXX/test-suite/run-all_currents.sh
+extract_program = XXXXXX/test-suite/extract-all_currents.sh
 inputs_args = ('*.in', '')
 run_cmd_template = tc.program tc.input tc.output tc.error
 tolerance = ( (1.0e-1, 1.0e-7 ) )
@@ -210,8 +229,8 @@ skip_program = grep
 skip_args = 'not present in this version'
 
 [QEHeat_translation]
-exe = XXXXXX/test-suite/run-all_currents.x
-extract_program = XXXXXX/test-suite/extract-all_currents.x
+exe = XXXXXX/test-suite/run-all_currents.sh
+extract_program = XXXXXX/test-suite/extract-all_currents.sh
 inputs_args = ('*.in', '')
 run_cmd_template = tc.program tc.input tc.output tc.error
 tolerance = ( (1.0e-2, 1.0e-4 ) )
@@ -235,7 +254,7 @@ tolerance = ( (5.0e-5, 5.0e-3, 'e1'),
               (5.0e-2, 5.0e-3, 'diel'),
               (5.0e-2, 5.0e-3, 'born'),
               (5.0e-4, 5.0e-4, 'dos'),
-              (5.0e-2, 1.0e-1, 'born_diff'),
+              (5.0e-2,   None, 'born_diff'),
               (1.5e-0,   None, 'lambda'),
               (3.0e-1, 5.0e-3, 'lambda2'),
               (1.0e-6, 1.0e-6, 'qpt'),

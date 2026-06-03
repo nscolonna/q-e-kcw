@@ -33,7 +33,7 @@
     USE input,         ONLY : fsthick, eps_acoustic, degaussw, nstemp, ncarrier,      &
                               assume_metal, lfast_kmesh, nqf1, nqf2, nqf3, system_2d, &
                               mob_maxfreq, mob_nfreq, ii_g, ii_scattering, ii_n,      &
-                              ii_only, gb_scattering, gb_only
+                              ii_only, gb_scattering, gb_only, restart_step, lsda
     USE pwcom,         ONLY : ef
     USE global_var,    ONLY : ibndmin, etf, nkf, vmef, wf, wqf,                       &
                               epf17, inv_tau_all, inv_tau_allcb, adapt_smearing,      &
@@ -41,15 +41,20 @@
                               nbndfst, nktotf, vkk_all, carrier_density,              &
                               inv_tau_all_mode, inv_tau_allcb_mode,                   &
                               inv_tau_all_freq, inv_tau_allcb_freq, eimpf17,          &
-                              epstf_therm, partion, eta_imp, inv_tau_gb, evbm, ecbm
+                              inv_tau_all_MPI, inv_tau_allcb_MPI,                     &
+                              inv_tau_all_mode_MPI, inv_tau_allcb_mode_MPI,           &
+                              inv_tau_all_freq_MPI, inv_tau_allcb_freq_MPI,           &
+                              epstf_therm, partion, eta_imp, inv_tau_gb, evbm, ecbm,  &
+                              startq, lastq
     USE ep_constants,  ONLY : zero, one, two, pi, ryd2mev, kelvin2eV, ryd2ev, eps4, eps8,   &
                               eps6, eps20, bohr2ang, ang2cm, hbarJ, eps160, cc2cb,          &
                               electronvolt_si
     USE io_files,      ONLY : diropn
     USE control_flags, ONLY : iverbosity
     USE mp,            ONLY : mp_barrier, mp_sum, mp_bcast
-    USE mp_global,     ONLY : world_comm, my_pool_id, npool
-    USE io_global,     ONLY : ionode_id
+    USE mp_global,     ONLY : world_comm, my_pool_id, npool, my_image_id,             &
+                              inter_image_comm, inter_pool_comm, nimage
+    USE io_global,     ONLY : ionode_id, ionode
     USE io_var,        ONLY : iunepmat, iunepmatcb, iufilibtev_sup, iunrestart, iuntau,   &
                               iunsparseq, iunsparseqcb, iuntaucb, iufilmu_q
     USE global_var,    ONLY : lrepmatw2_merge, lrepmatw5_merge, threshold
@@ -129,6 +134,8 @@
     !! Nb of Matrix elements that are non-zero
     INTEGER :: indcb(npool)
     !! Nb of Matrix elements that are non-zero in the cb
+    INTEGER :: ios
+    !! IO status for copying backup files
     INTEGER(KIND = i4b) :: sparse_q(nbndfst * nbndfst * nstemp * nkf)
     !! Index of q-points for mapping
     INTEGER(KIND = i4b) :: sparse_k(nbndfst * nbndfst * nstemp * nkf)
@@ -184,11 +191,15 @@
     !! Temporary array to store the scattering rates
     REAL(KIND = DP) :: trans_probcb(nbndfst * nbndfst * nstemp * nkf)
     !! Temporary array to store the scattering rates
+    REAL(KIND = DP) :: trans_tmp(nbndfst, nbndfst ,nkf)
+    !! Temporary array to store the scattering rates
+    REAL(KIND = DP) :: transcb_tmp(nbndfst, nbndfst ,nkf)
+    !! Temporary array to store the scattering rates
     REAL(KIND = DP) :: wkf_all(nktotf)
     !! Weights from all the cores
-    REAL(KIND = DP) :: inv_eta(nmodes, nbndfst, nktotf)
+    REAL(KIND = DP) :: inv_eta(nmodes, nbndfst, nkf)
     !! Inverse of the eta for speed purposes
-    REAL(KIND = DP) :: inv_eta_imp(nbndfst, nktotf)
+    REAL(KIND = DP) :: inv_eta_imp(nbndfst, nkf)
     !! Inverse of the eta impurity for speed purposes
     REAL(KIND = DP) :: etf_all(nbndfst, nktotf)
     !! Eigen-energies on the fine grid collected from all pools in parallel case
@@ -210,10 +221,6 @@
     !! Temporary inverse mobility
     REAL(KIND = DP) :: wqf_loc
     !! Local q-point weight
-    REAL(KIND = DP) :: inv_tau_all_MPI(nbndfst, nktotf, nstemp)
-    !! Auxiliary variables
-    REAL(KIND = DP) :: inv_tau_allcb_MPI(nbndfst, nktotf, nstemp)
-    !! Auxiliary variables
     REAL(KIND = DP) :: step
     !! Energy step in Ry for the spectral decomposition
     REAL(KIND = DP), EXTERNAL :: efermig
@@ -234,8 +241,17 @@
     !! Temporary variable
     LOGICAL :: exst
     !! Check if backup files exist
-    INTEGER :: ios
-    !! IO status for copying backup files
+    LOGICAL :: is_restart_loop
+    !! Check if this is a restart loop
+    CHARACTER(LEN = 256) :: my_image_id_ch
+    !! Image id 
+    CHARACTER(LEN = 256) :: fnm
+    !! Buffer file name
+    !
+    WRITE(my_image_id_ch, "(I0)") my_image_id
+    !
+    fnm = ''
+    IF (TRIM(lsda) == 'down') fnm = '.down'
     !
     IF (system_2d == 'no') THEN
       inv_cell = 1.0d0 / omega
@@ -254,6 +270,9 @@
     IF (iverbosity == 3) THEN
       ! Energy steps for spectral decomposition
       step = mob_maxfreq / mob_nfreq
+      IF (step < eps20) THEN
+        CALL errore('print_ibte', 'Too small energy step for spectral decomposition', 1)
+      ENDIF
     ENDIF
     !
     IF (iqq == 1 .OR. first_cycle) THEN
@@ -272,7 +291,6 @@
         WRITE(stdout, '(5x,"Detected ii_only=.true., omitting carrier-phonon scattering")')
         WRITE(stdout, '(5x,a/)') REPEAT('=',67)
       ENDIF
-      WRITE(stdout, '(5x,"Restart and restart_step inputs deactivated (restart point at every q-points).")')
       WRITE(stdout, '(5x,"No intermediate mobility will be shown.")')
       !
       IF (fsthick < 1.d3) THEN
@@ -302,9 +320,9 @@
             etf_all(ibnd, ik + lower_bnd - 1) = etf(ibndmin - 1 + ibnd, ikk)
           ENDDO
         ENDDO
-        CALL mp_sum(vkk_all, world_comm)
-        CALL mp_sum(etf_all, world_comm)
-        CALL mp_sum(wkf_all, world_comm)
+        CALL mp_sum(vkk_all, inter_pool_comm)
+        CALL mp_sum(etf_all, inter_pool_comm)
+        CALL mp_sum(wkf_all, inter_pool_comm)
         !
         IF (.NOT. assume_metal) THEN
           ALLOCATE(carrier_density(nstemp), STAT = ierr)
@@ -318,7 +336,9 @@
         ENDIF ! assume_metal
         !
         IF (my_pool_id == 0) THEN
-          OPEN(UNIT = iufilmu_q, FILE = 'mobility_nuq.fmt')
+          fnm = 'mobility_nuq.fmt'
+          IF (TRIM(lsda) == 'down') fnm = 'mobility_nuq.down.fmt'
+          OPEN(UNIT = iufilmu_q, FILE = TRIM(fnm))
           WRITE(iufilmu_q, '(a)') '# Mode-resolved contribution in limiting the carrier mobility (Vs/(cm^2))'
           WRITE(iufilmu_q, '(a)') '#     \mu(alpha,beta) = 1.0 / (sum_{\nu q} T_{\nu q}(alpha,beta))'
         ENDIF
@@ -344,15 +364,18 @@
       inv_eta(:, :, :) = zero
       inv_eta_imp(:, :) = zero
       IF (adapt_smearing) THEN
+        !$omp parallel do collapse(2) private(imode)
         DO ik = 1, nkf
           DO ibnd = 1, nbndfst
-            inv_eta_imp(ibnd, ik) = 1.0d0 / (DSQRT(2.0d0) * eta_imp(ibnd, ik))
+            IF (ii_g) inv_eta_imp(ibnd, ik) = 1.0d0 / (DSQRT(2.0d0) * eta_imp(ibnd, ik))
             DO imode = 1, nmodes
               inv_eta(imode, ibnd, ik) = 1.0d0 / (DSQRT(2d0) * eta(imode, ibnd, ik))
             ENDDO
           ENDDO
         ENDDO
+        !$omp end parallel do
       ELSE
+        !$omp parallel do collapse(2) private(imode)
         DO ik = 1, nkf
           DO ibnd = 1, nbndfst
             inv_eta_imp(ibnd, ik) = 1.0d0 / degaussw
@@ -361,10 +384,13 @@
             ENDDO
           ENDDO
         ENDDO
+        !$omp end parallel do
       ENDIF
       !
       ! Average the el-ph matrix elements on degenerate bands and phonon modes.
       ! This is important to ensure that the mobility tensor perfectly respects crystal symmetry.
+      !$omp parallel do &
+      !$omp private(ikk,ikq,nu,jbnd,ibnd,w_1,g2,n,pbnd,w_2,epf2_deg,eimpf2_deg)
       DO ik = 1, nkf
         ikk = 2 * ik - 1
         ikq = ikk + 1
@@ -372,42 +398,46 @@
         wkf_all(ik + lower_bnd - 1) = wkf(ikk)
         !
         ! Average over the k electrons
-        DO nu = 1, nmodes
-          DO jbnd = 1, nbndfst
-            DO ibnd = 1, nbndfst
-              w_1 = etf(ibndmin - 1 + ibnd, ikk)
-              g2  = zero
-              n   = 0
-              DO pbnd = 1, nbndfst
-                w_2 = etf(ibndmin - 1 + pbnd, ikk)
-                IF (ABS(w_2 - w_1) < eps6) THEN
-                  n = n + 1
-                  g2 = g2 + ABS(epf17(jbnd, pbnd, nu, ik))**two
-                ENDIF
+        epf2_deg = zero
+        DO ibnd = 1, nbndfst
+          n   = 0
+          DO pbnd = 1, nbndfst
+            w_1 = etf(ibndmin - 1 + ibnd, ikk)
+            w_2 = etf(ibndmin - 1 + pbnd, ikk)
+            IF (ABS(w_2 - w_1) < eps6) THEN
+              n = n + 1
+              DO nu = 1, nmodes
+                DO jbnd = 1, nbndfst
+                  epf2_deg(jbnd, ibnd, nu) = epf2_deg(jbnd, ibnd, nu) &
+                                + DBLE(epf17(jbnd, pbnd, nu, ik))**2 &
+                                + AIMAG(epf17(jbnd, pbnd, nu, ik))**2
+                ENDDO
               ENDDO
-              epf2_deg(jbnd, ibnd, nu) = DSQRT(g2 / FLOAT(n))
-            ENDDO
+            ENDIF
           ENDDO
+          epf2_deg(:, ibnd, :) = DSQRT(epf2_deg(:, ibnd, :) / n)
         ENDDO
         epf17(:, :, :, ik) = epf2_deg(:, :, :)
         !
         ! Average over the k+q electrons
-        DO nu = 1, nmodes
-          DO jbnd = 1, nbndfst
-            DO ibnd = 1, nbndfst
-              w_1 = etf(ibndmin - 1 + jbnd, ikq)
-              g2 = 0.d0
-              n  = 0
-              DO pbnd = 1, nbndfst
-                w_2 = etf(ibndmin - 1 + pbnd, ikq)
-                IF (ABS(w_2 - w_1) < eps6) THEN
-                  n = n + 1
-                  g2 = g2 + ABS(epf17(pbnd, ibnd, nu, ik))**two
-                ENDIF
+        epf2_deg = zero
+        DO jbnd = 1, nbndfst
+          n  = 0
+          DO pbnd = 1, nbndfst
+            w_1 = etf(ibndmin - 1 + jbnd, ikq)
+            w_2 = etf(ibndmin - 1 + pbnd, ikq)
+            IF (ABS(w_2 - w_1) < eps6) THEN
+              n = n + 1
+              DO nu = 1, nmodes
+                DO ibnd = 1, nbndfst
+                  epf2_deg(jbnd, ibnd, nu) = epf2_deg(jbnd, ibnd, nu) &
+                            + DBLE(epf17(pbnd, ibnd, nu, ik))**2 &
+                            + AIMAG(epf17(pbnd, ibnd, nu, ik))**2
+                ENDDO
               ENDDO
-              epf2_deg(jbnd, ibnd, nu) = g2 / FLOAT(n)
-            ENDDO
+            ENDIF
           ENDDO
+          epf2_deg(jbnd, :, :) = epf2_deg(jbnd, :, :) / n
         ENDDO
         !
         ! Note that we already took the square above
@@ -416,39 +446,43 @@
         ! average impurity matrix elements
         !
         IF (ii_g .AND. ii_scattering) THEN
-          DO jbnd = 1, nbndfst
-            DO ibnd = 1, nbndfst
+          eimpf2_deg = zero
+          DO ibnd = 1, nbndfst
+            n = 0
+            DO pbnd = 1, nbndfst
               w_1 = etf(ibndmin - 1 + ibnd, ikk)
-              g2  = zero
-              n   = 0
-              DO pbnd = 1, nbndfst
-                w_2 = etf(ibndmin - 1 + pbnd, ikk)
-                IF (ABS(w_2-w_1) < eps6) THEN
-                  n = n + 1
-                  g2 = g2 + ABS(eimpf17(jbnd, pbnd, ik))**two
-                ENDIF
-              ENDDO
-              eimpf2_deg(jbnd, ibnd) = DSQRT(g2 / FLOAT(n))
+              w_2 = etf(ibndmin - 1 + pbnd, ikk)
+              IF (ABS(w_2 - w_1) < eps6) THEN
+                n = n + 1
+                DO jbnd = 1, nbndfst
+                  eimpf2_deg(jbnd, ibnd) = eimpf2_deg(jbnd, ibnd) &
+                          + DBLE(eimpf17(jbnd, pbnd, ik))**2 &
+                          + AIMAG(eimpf17(jbnd, pbnd, ik))**2
+                ENDDO
+              ENDIF
             ENDDO
+            eimpf2_deg(:, ibnd) = DSQRT(eimpf2_deg(:, ibnd) / n)
           ENDDO
           !
           eimpf17(:, :, ik) = eimpf2_deg(:, :)
           !
           ! Average over the k+q electrons
+          eimpf2_deg = zero
           DO jbnd = 1, nbndfst
-            DO ibnd = 1, nbndfst
+            n = 0
+            DO pbnd = 1, nbndfst
               w_1 = etf(ibndmin - 1 + jbnd, ikq)
-              g2 = 0.d0
-              n  = 0
-              DO pbnd = 1, nbndfst
-                w_2 = etf(ibndmin - 1 + pbnd, ikq)
-                IF (ABS(w_2 - w_1) < eps6) THEN
-                  n = n + 1
-                  g2 = g2 + ABS(eimpf17(pbnd, ibnd, ik))**two
-                ENDIF
-              ENDDO
-              eimpf2_deg(jbnd, ibnd) = g2 / FLOAT(n)
+              w_2 = etf(ibndmin - 1 + pbnd, ikq)
+              IF (ABS(w_2 - w_1) < eps6) THEN
+                n = n + 1
+                DO ibnd = 1, nbndfst
+                    eimpf2_deg(jbnd, ibnd) = eimpf2_deg(jbnd, ibnd) &
+                            + DBLE(eimpf17(pbnd, ibnd, ik))**2 &
+                            + AIMAG(eimpf17(pbnd, ibnd, ik))**2
+                ENDDO
+              ENDIF
             ENDDO
+            eimpf2_deg(jbnd, :) = eimpf2_deg(jbnd, :) / n
           ENDDO
           !
           ! Note that we already took the square above
@@ -456,6 +490,7 @@
         ENDIF
         !
       ENDDO ! ik
+      !$omp end parallel do
       !
       trans_prob(:)    = zero
       sparse_q(:)      = zero
@@ -470,8 +505,8 @@
       sparsecb_j(:)    = zero
       sparsecb_t(:)    = zero
       etf_all(:, :)    = zero
-      ind(:)           = 0
-      indcb(:)         = 0
+      ind(:) = 0
+      indcb(:) = 0
       !
       ! compute impurities per unit cell
       ! impurity_density = ii_n * omega / 6.74822779181357d24
@@ -505,6 +540,12 @@
           ENDIF
         ENDDO
         !
+        trans_tmp = zero
+        transcb_tmp = zero
+        !
+        !$omp parallel do schedule(static,1) reduction(+:mobilityq) &
+        !$omp private(ikk,ikq,ibnd,ekk,fnk,dfnk,jbnd,ekq,fmkq,tmp,tmp2,tmpimp) &
+        !$omp private(w0gimp,imode,g2,w0g1,w0g2,tmpq,ifreq,i,j)
         DO ik = 1, nkf
           !
           ikk = 2 * ik - 1
@@ -580,15 +621,7 @@
                   ! The check is made on the SERTA mobility - See Eq. 44 of arXiv:1908.01733 (2019).
                   !
                   IF (ABS((tmp2+tmpimp) * dfnk) > threshold .OR. gb_only) THEN
-                    !
-                    ind(my_pool_id + 1) = ind(my_pool_id + 1) + 1
-                    trans_prob(ind(my_pool_id + 1)) = tmp + tmpimp
-                    sparse_q(ind(my_pool_id + 1)) = iq
-                    sparse_k(ind(my_pool_id + 1)) = ik + lower_bnd - 1
-                    sparse_i(ind(my_pool_id + 1)) = ibnd
-                    sparse_j(ind(my_pool_id + 1)) = jbnd
-                    sparse_t(ind(my_pool_id + 1)) = itemp
-                    !
+                    trans_tmp(jbnd, ibnd, ik) = tmp + tmpimp
                   ENDIF
                 ENDDO !jbnd
                 ! Add grain boundary scattering
@@ -620,12 +653,9 @@
                             two * pi * wqf_loc * g2 * ((fmkq + wgq(imode)) * w0g1 + (one - fmkq + wgq(imode)) * w0g2)
                       !
                       ! Spectral decomposition histogram
-                      ifreq = NINT(wq(imode) / step)
-                      IF (step > eps20) THEN
-                        ifreq = NINT(wq(imode) / step) + 1
-                      ELSE
-                        ifreq = 1
-                      ENDIF
+                      !
+                      ifreq = NINT(wq(imode) / step) + 1
+                      !
                       IF(ifreq <= mob_nfreq) THEN
                         inv_tau_all_freq(ifreq, ibnd, ik + lower_bnd - 1) = inv_tau_all_freq(ifreq, ibnd, ik + lower_bnd - 1) &
                             + two * pi * wqf_loc * g2 * ((fmkq + wgq(imode)) * w0g1 + (one - fmkq + wgq(imode)) * w0g2)
@@ -688,13 +718,7 @@
                   inv_tau_allcb(ibnd, ik + lower_bnd - 1, itemp) = inv_tau_allcb(ibnd, ik + lower_bnd - 1, itemp) + tmp2 + tmpimp
                   !
                   IF (ABS((tmp2+tmpimp) * dfnk) > threshold .OR. gb_only) THEN
-                    indcb (my_pool_id + 1) = indcb(my_pool_id + 1) + 1
-                    trans_probcb(indcb(my_pool_id + 1)) = tmp + tmpimp
-                    sparsecb_q(indcb(my_pool_id + 1)) = iq
-                    sparsecb_k(indcb(my_pool_id + 1)) = ik + lower_bnd - 1
-                    sparsecb_i(indcb(my_pool_id + 1)) = ibnd
-                    sparsecb_j(indcb(my_pool_id + 1)) = jbnd
-                    sparsecb_t(indcb(my_pool_id + 1)) = itemp
+                    transcb_tmp(jbnd, ibnd, ik) = tmp + tmpimp
                   ENDIF
                 ENDDO !jbnd
                 ! Add grain boundary scattering
@@ -725,14 +749,13 @@
                             two * pi * wqf_loc * g2 * ((fmkq + wgq(imode)) * w0g1 + (one - fmkq + wgq(imode)) * w0g2)
                       !
                       ! Spectral decomposition histogram
-                      ifreq = NINT(wq(imode) / step)
-                      IF (step > eps20) THEN
-                        ifreq = NINT(wq(imode) / step) + 1
-                      ELSE
-                        ifreq = 1
-                      ENDIF
-                      inv_tau_allcb_freq(ifreq, ibnd, ik + lower_bnd - 1) = inv_tau_allcb_freq(ifreq, ibnd, ik + lower_bnd - 1) &
+                      !
+                      ifreq = NINT(wq(imode) / step) + 1
+                      !
+                      IF(ifreq <= mob_nfreq) THEN
+                        inv_tau_allcb_freq(ifreq, ibnd, ik + lower_bnd - 1) = inv_tau_allcb_freq(ifreq, ibnd, ik + lower_bnd - 1) &
                           + two * pi * wqf_loc * g2 * ((fmkq + wgq(imode)) * w0g1 + (one - fmkq + wgq(imode)) * w0g2)
+                      ENDIF
                     ENDDO !imode
                   ENDDO ! jbnd
                   DO j = 1, 3
@@ -751,13 +774,73 @@
             ENDIF ! ctype
           ENDIF ! endif fsthick
         ENDDO ! end loop on k
+        !$omp end parallel do
+
+        DO ik = 1, nkf
+          !
+          ikk = 2 * ik - 1
+          ikq = ikk + 1
+          !
+          IF ((MINVAL(ABS(etf(:, ikk) - ef)) < fsthick) .AND. (MINVAL(ABS(etf(:, ikq) - ef)) < fsthick)) THEN
+            IF (ctype == 0 .OR. ctype == -1) THEN ! hole
+              DO ibnd = 1, nbndfst
+                ! Energy at k (relative to Ef)
+                ekk = etf(ibndmin - 1 + ibnd, ikk) - ef0(itemp)
+                !
+                ! This is to know if we need to store the data
+                ! derivative Fermi distribution -df_nk/dE_nk = (f_nk)*(1-f_nk)/ (k_B T)
+                dfnk = w0gauss(ekk * inv_etemp, -99) * inv_etemp
+                !
+                DO jbnd = 1, nbndfst
+                  IF (ABS((trans_tmp(jbnd, ibnd, ik)) * dfnk) > threshold .OR. gb_only) THEN
+                    ind(my_pool_id + 1) = ind(my_pool_id + 1) + 1
+                    trans_prob(ind(my_pool_id + 1)) = trans_tmp(jbnd, ibnd, ik)
+                    sparse_q(ind(my_pool_id + 1)) = iq
+                    sparse_k(ind(my_pool_id + 1)) = ik + lower_bnd - 1
+                    sparse_i(ind(my_pool_id + 1)) = ibnd
+                    sparse_j(ind(my_pool_id + 1)) = jbnd
+                    sparse_t(ind(my_pool_id + 1)) = itemp
+                  ENDIF
+                ENDDO
+              ENDDO
+            ENDIF
+
+            IF (ctype == 0 .OR. ctype == 1) THEN
+              DO ibnd = 1, nbndfst
+                ! Energy at k (relative to Ef)
+                ekk = etf(ibndmin - 1 + ibnd, ikk) - efcb(itemp)
+                !
+                ! This is to know if we need to store the data
+                ! Derivative Fermi distribution (-df_nk/dE_nk) = (f_nk)*(1-f_nk)/ (k_B T)
+                dfnk = w0gauss(ekk * inv_etemp, -99) * inv_etemp
+                !
+                DO jbnd = 1, nbndfst
+                  IF (ABS((transcb_tmp(jbnd, ibnd, ik)) * dfnk) > threshold .OR. gb_only) THEN
+                    indcb (my_pool_id + 1) = indcb(my_pool_id + 1) + 1
+                    trans_probcb(indcb(my_pool_id + 1)) = transcb_tmp(jbnd, ibnd, ik)
+                    sparsecb_q(indcb(my_pool_id + 1)) = iq
+                    sparsecb_k(indcb(my_pool_id + 1)) = ik + lower_bnd - 1
+                    sparsecb_i(indcb(my_pool_id + 1)) = ibnd
+                    sparsecb_j(indcb(my_pool_id + 1)) = jbnd
+                    sparsecb_t(indcb(my_pool_id + 1)) = itemp
+                  ENDIF
+                ENDDO
+              ENDDO
+            ENDIF
+          ENDIF
+        ENDDO
       ENDDO ! itemp
       ! If the q-point is taken, write on file
-      CALL mp_sum(ind, world_comm)
-      CALL mp_sum(indcb, world_comm)
+      CALL mp_sum(ind, inter_pool_comm)
+      CALL mp_sum(indcb, inter_pool_comm)
       !
-      IF (iverbosity == 3) THEN
-        CALL mp_sum(mobilityq, world_comm)
+      IF (assume_metal .AND. iverbosity == 3 .AND. iqq == totq) THEN 
+        DEALLOCATE(vkk_all, STAT = ierr)
+        IF (ierr /= 0) CALL errore('print_ibte', 'Error deallocating vkk_all', 1)
+      ENDIF
+      !
+      IF (iverbosity == 3 .AND. .NOT. assume_metal) THEN
+        CALL mp_sum(mobilityq, inter_pool_comm)
         IF (my_pool_id == 0) THEN
           WRITE(iufilmu_q, '(a, 3f12.8)') '# q-point (crystal)', xxq(:)
           WRITE(iufilmu_q, '(a)') &
@@ -786,9 +869,9 @@
       ! SP - IBTE only with if EPW compiled with MPI
       IF (SUM(ind) > 0) THEN
         !
-        IF (my_pool_id == 0) ind_tot = ind_tot + SUM(ind)
+        IF (ionode) ind_tot = ind_tot + SUM(ind)
 #if defined(__MPI)
-        CALL MPI_BCAST(ind_tot, 1, MPI_OFFSET, ionode_id, world_comm, ierr)
+        CALL MPI_BCAST(ind_tot, 1, MPI_OFFSET, ionode_id, inter_pool_comm, ierr)
 #endif
 !       WRITE(stdout,'(a,i9,E22.8)') '     Total number of element written ',ind_tot
         IF (ind(my_pool_id + 1) > 0) THEN
@@ -810,9 +893,9 @@
       ENDIF
       IF (SUM(indcb) > 0) THEN
         !
-        IF (my_pool_id == 0 ) ind_totcb = ind_totcb + SUM(indcb)
+        IF (ionode) ind_totcb = ind_totcb + SUM(indcb)
 #if defined(__MPI)
-        CALL MPI_BCAST(ind_totcb, 1, MPI_OFFSET, ionode_id, world_comm, ierr)
+        CALL MPI_BCAST(ind_totcb, 1, MPI_OFFSET, ionode_id, inter_pool_comm, ierr)
 #endif
         !
         IF (indcb(my_pool_id + 1) > 0) THEN
@@ -833,54 +916,95 @@
         !
       ENDIF ! indcb
       !
-      ! Save to file restart information in formatted way for possible restart
-      lrepmatw2_restart(:) = 0
-      lrepmatw5_restart(:) = 0
-      lrepmatw2_restart(my_pool_id + 1) = lrepmatw2_merge
-      lrepmatw5_restart(my_pool_id + 1) = lrepmatw5_merge
-      CALL mp_sum(lrepmatw2_restart, world_comm)
-      CALL mp_sum(lrepmatw5_restart, world_comm)
+      is_restart_loop = (MOD(iqq, restart_step) == 0)  .OR. (iqq == totq)
       !
-      inv_tau_all_MPI = inv_tau_all
-      inv_tau_allcb_MPI = inv_tau_allcb
-      CALL mp_sum(inv_tau_all_MPI, world_comm)
-      CALL mp_sum(inv_tau_allcb_MPI, world_comm)
-      !
-      IF (my_pool_id == 0) THEN
-        INQUIRE(FILE = 'restart.fmt', EXIST = exst)
-        IF (exst) ios = f_copy('restart.fmt', 'restart.fmt.bak')
+      IF (is_restart_loop) THEN
+        ! Save to file restart information in formatted way for possible restart
+        lrepmatw2_restart(:) = 0
+        lrepmatw5_restart(:) = 0
+        lrepmatw2_restart(my_pool_id + 1) = lrepmatw2_merge
+        lrepmatw5_restart(my_pool_id + 1) = lrepmatw5_merge
+        CALL mp_sum(lrepmatw2_restart, inter_pool_comm)
+        CALL mp_sum(lrepmatw5_restart, inter_pool_comm)
         !
-        INQUIRE(FILE = 'inv_tau_tmp', EXIST = exst)
-        IF (exst) ios = f_copy('inv_tau_tmp', 'inv_tau_tmp.bak')
+        ! Scattering rates
+        inv_tau_all_MPI = inv_tau_all
+        inv_tau_allcb_MPI = inv_tau_allcb
+        CALL mp_sum(inv_tau_all_MPI, inter_pool_comm)
+        CALL mp_sum(inv_tau_allcb_MPI, inter_pool_comm)
+        IF (iverbosity == 3) THEN
+          ! Scattering rates (modes)
+          inv_tau_all_mode_MPI = inv_tau_all_mode
+          inv_tau_allcb_mode_MPI = inv_tau_allcb_mode
+          CALL mp_sum(inv_tau_all_mode_MPI, inter_pool_comm)
+          CALL mp_sum(inv_tau_allcb_mode_MPI, inter_pool_comm)
+          ! Scattering rates (freq)
+          inv_tau_all_freq_MPI = inv_tau_all_freq
+          inv_tau_allcb_freq_MPI = inv_tau_allcb_freq
+          CALL mp_sum(inv_tau_all_freq_MPI, inter_pool_comm)
+          CALL mp_sum(inv_tau_allcb_freq_MPI, inter_pool_comm)
+        ENDIF ! iverbosity
         !
-        INQUIRE(FILE = 'inv_taucb_tmp', EXIST = exst)
-        IF (exst) ios = f_copy('inv_taucb_tmp', 'inv_taucb_tmp.bak')
+        IF (ionode) THEN
+          INQUIRE(FILE = 'restart' // TRIM(fnm) // '_' // TRIM(my_image_id_ch) //'.fmt', EXIST = exst)
+          IF (exst) ios = f_copy('restart' // TRIM(fnm) // '_' // TRIM(my_image_id_ch) // '.fmt', &
+            'restart' // TRIM(fnm) // '_' // TRIM(my_image_id_ch) // '.fmt.bak')
+          !
+          INQUIRE(FILE = 'inv_tau_tmp' // TRIM(fnm) // '_' // TRIM(my_image_id_ch), EXIST = exst)
+          IF (exst) ios = f_copy('inv_tau_tmp' // TRIM(fnm) // '_' // TRIM(my_image_id_ch), &
+            'inv_tau_tmp' // TRIM(fnm) // '_' // TRIM(my_image_id_ch) // '.bak')
+          !
+          INQUIRE(FILE = 'inv_taucb_tmp' // TRIM(fnm) // '_' // TRIM(my_image_id_ch), EXIST = exst)
+          IF (exst) ios = f_copy('inv_taucb_tmp'// TRIM(fnm) // '_' // TRIM(my_image_id_ch), &
+            'inv_taucb_tmp' // TRIM(fnm) // '_' // TRIM(my_image_id_ch) // '.bak')
+          !
+          OPEN(UNIT = iunrestart, FILE = 'restart' // TRIM(fnm) // '_' // TRIM(my_image_id_ch) // '.fmt')
+          WRITE(iunrestart, *) iqq
+          WRITE(iunrestart, *) ind_tot
+          WRITE(iunrestart, *) ind_totcb
+          WRITE(iunrestart, *) npool
+          WRITE(iunrestart, *) nimage
+          DO ipool = 1, npool
+            WRITE(iunrestart, *) lrepmatw2_restart(ipool)
+          ENDDO
+          DO ipool = 1, npool
+            WRITE(iunrestart, *) lrepmatw5_restart(ipool)
+          ENDDO
+          CLOSE(iunrestart)
+          !
+          ! Scattering rates
+          OPEN(UNIT = iuntau, FORM = 'unformatted', FILE = 'inv_tau_tmp' // TRIM(fnm) // '_' // TRIM(my_image_id_ch))
+          WRITE(iuntau) inv_tau_all_MPI
+          CLOSE(iuntau)
+          !
+          OPEN(UNIT = iuntaucb, FORM = 'unformatted', FILE = 'inv_taucb_tmp' // TRIM(fnm) // '_' // TRIM(my_image_id_ch))
+          WRITE(iuntaucb) inv_tau_allcb_MPI
+          CLOSE(iuntaucb)
+          IF (iverbosity == 3) THEN
+            ! Scattering rates (modes)
+            OPEN(UNIT = iuntau, FORM = 'unformatted', FILE = 'inv_tau_mode_tmp' // TRIM(fnm) // '_' // TRIM(my_image_id_ch))
+            WRITE(iuntau) inv_tau_all_mode_MPI
+            CLOSE(iuntau)
+            !
+            OPEN(UNIT = iuntaucb, FORM = 'unformatted', FILE = 'inv_taucb_mode_tmp' // TRIM(fnm) // '_' // TRIM(my_image_id_ch))
+            WRITE(iuntaucb) inv_tau_allcb_mode_MPI
+            CLOSE(iuntaucb)
+            ! Scattering rates (freq)
+            OPEN(UNIT = iuntau, FORM = 'unformatted', FILE = 'inv_tau_freq_tmp' // TRIM(fnm) // '_' // TRIM(my_image_id_ch))
+            WRITE(iuntau) inv_tau_all_freq_MPI
+            CLOSE(iuntau)
+            !
+            OPEN(UNIT = iuntaucb, FORM = 'unformatted', FILE = 'inv_taucb_freq_tmp' // TRIM(fnm) // '_' // TRIM(my_image_id_ch))
+            WRITE(iuntaucb) inv_tau_allcb_freq_MPI
+            CLOSE(iuntaucb)
+          ENDIF ! iverbosity
+        ENDIF ! ionode
         !
-        OPEN(UNIT = iunrestart, FILE = 'restart.fmt')
-        WRITE(iunrestart, *) iqq
-        WRITE(iunrestart, *) ind_tot
-        WRITE(iunrestart, *) ind_totcb
-        WRITE(iunrestart, *) npool
-        DO ipool = 1, npool
-          WRITE(iunrestart, *) lrepmatw2_restart(ipool)
-        ENDDO
-        DO ipool = 1, npool
-          WRITE(iunrestart, *) lrepmatw5_restart(ipool)
-        ENDDO
-        CLOSE(iunrestart)
-        !
-        OPEN(UNIT = iuntau, FORM = 'unformatted', FILE = 'inv_tau_tmp')
-        WRITE(iuntau) inv_tau_all_MPI
-        CLOSE(iuntau)
-        !
-        OPEN(UNIT = iuntaucb, FORM = 'unformatted', FILE = 'inv_taucb_tmp')
-        WRITE(iuntaucb) inv_tau_allcb_MPI
-        CLOSE(iuntaucb)
-      ENDIF
-      !
+      ENDIF ! is_restart_loop
     ENDIF ! first_cycle
     !
     IF (iqq == totq) THEN
+      !print *,'iqq',iqq,totq,my_image_id
       IF (gb_scattering) THEN
         DEALLOCATE(inv_tau_gb, STAT = ierr)
         IF (ierr /= 0) CALL errore('print_ibte', 'Error deallocating vkk_all', 1)
@@ -894,6 +1018,7 @@
       !
       vkk_all(:, :, :) = zero
       wkf_all(:) = zero
+      etf_all(:, :) = zero
       ! Computes the k-velocity
       DO ik = 1, nkf
         !
@@ -906,21 +1031,29 @@
           etf_all(ibnd, ik + lower_bnd - 1) = etf(ibndmin - 1 + ibnd, ikk)
         ENDDO
       ENDDO
-      CALL mp_sum(vkk_all, world_comm)
-      CALL mp_sum(etf_all, world_comm)
-      CALL mp_sum(wkf_all, world_comm)
-      CALL mp_sum(inv_tau_all, world_comm)
-      CALL mp_sum(inv_tau_allcb, world_comm)
+      CALL mp_sum(vkk_all, inter_pool_comm)
+      CALL mp_sum(etf_all, inter_pool_comm)
+      CALL mp_sum(wkf_all, inter_pool_comm)
+      CALL mp_sum(inv_tau_all, inter_pool_comm)
+      CALL mp_sum(inv_tau_allcb, inter_pool_comm)
+      ! Image sum after pool sum
+      CALL mp_sum(inv_tau_all, inter_image_comm)
+      CALL mp_sum(inv_tau_allcb, inter_image_comm)
       IF (iverbosity == 3) THEN
-        CALL mp_sum(inv_tau_all_mode, world_comm)
-        CALL mp_sum(inv_tau_allcb_mode, world_comm)
-        CALL mp_sum(inv_tau_all_freq, world_comm)
-        CALL mp_sum(inv_tau_allcb_freq, world_comm)
+        CALL mp_sum(inv_tau_all_mode, inter_pool_comm)
+        CALL mp_sum(inv_tau_allcb_mode, inter_pool_comm)
+        CALL mp_sum(inv_tau_all_freq, inter_pool_comm)
+        CALL mp_sum(inv_tau_allcb_freq, inter_pool_comm)
+        ! Image sum after pool sum
+        CALL mp_sum(inv_tau_all_mode, inter_image_comm)
+        CALL mp_sum(inv_tau_allcb_mode, inter_image_comm)
+        CALL mp_sum(inv_tau_all_freq, inter_image_comm)
+        CALL mp_sum(inv_tau_allcb_freq, inter_image_comm)
       ENDIF
-      !
-      IF (my_pool_id == 0) THEN
+      ! Now write total number of q-point inside and k-velocity
+      IF (ionode) THEN
         ! Now write total number of q-point inside and k-velocity
-        OPEN(iufilibtev_sup, FILE = 'IBTEvel_sup.fmt', FORM = 'formatted')
+        OPEN(iufilibtev_sup, FILE = 'IBTEvel_sup' // TRIM(fnm) // '_' // TRIM(my_image_id_ch) // '.fmt', FORM = 'formatted')
         WRITE(iufilibtev_sup, '(a)') '# Number of elements in hole and electrons'
         WRITE(iufilibtev_sup, '(2i16)') ind_tot, ind_totcb
         WRITE(iufilibtev_sup, '(a)') '# evbm     ecbm'
@@ -943,7 +1076,7 @@
         CLOSE(iufilibtev_sup)
         !
         ! Save the inv_tau and inv_tau_all on file (formatted)
-        OPEN(iufilibtev_sup, FILE = 'inv_tau.fmt', FORM = 'formatted')
+        OPEN(iufilibtev_sup, FILE = 'inv_tau' // TRIM(fnm) // '_' // TRIM(my_image_id_ch) // '.fmt', FORM = 'formatted')
         WRITE(iufilibtev_sup, '(a)') '# Hole relaxation time [Multiply the relaxation time by 20670.6944033 to get 1/ps]'
         WRITE(iufilibtev_sup, '(a)') '# itemp    kpt      ibnd    energy [Ry]   relaxation time [Ry]'
         DO itemp = 1, nstemp
@@ -957,7 +1090,11 @@
         !
         ! Save the mode resolvedinv_tau and inv_tau_all_mode on file (formatted)
         IF (iverbosity == 3) THEN
-          OPEN(iufilibtev_sup, FILE = 'inv_tau_mode.fmt', FORM = 'formatted')
+          WRITE(stdout,'(5x," ")')
+          WRITE(stdout, '(5x,a,f10.6,a)') "NOTE: Spectral decomposition of scattering rates will be computed only up to " &
+              , mob_maxfreq * ryd2mev, ' meV'
+          WRITE(stdout,'(5x," ")')
+          OPEN(iufilibtev_sup, FILE = 'inv_tau_mode' // TRIM(fnm) // '_' // TRIM(my_image_id_ch) // '.fmt', FORM = 'formatted')
           WRITE(iufilibtev_sup, '(a)') '# Hole relaxation time [Multiply the relaxation time by 20670.6944033 to get 1/ps]'
           WRITE(iufilibtev_sup, '(a)') '# itemp    kpt      ibnd     imode   energy [Ry]   relaxation time [Ry]'
           DO itemp = 1, nstemp
@@ -974,7 +1111,7 @@
         ENDIF
         !
         ! Save the inv_tau and inv_tau_all on file (formatted)
-        OPEN(iufilibtev_sup, FILE = 'inv_taucb.fmt', FORM = 'formatted')
+        OPEN(iufilibtev_sup, FILE = 'inv_taucb' // TRIM(fnm) // '_' // TRIM(my_image_id_ch) // '.fmt', FORM = 'formatted')
         WRITE(iufilibtev_sup, '(a)') '# Electron relaxation time [Multiply the relaxation time by 20670.6944033 to get 1/ps]'
         WRITE(iufilibtev_sup, '(a)') '# itemp    kpt      ibnd    energy [Ry]   relaxation time [Ry]'
         DO itemp = 1, nstemp
@@ -987,7 +1124,7 @@
         CLOSE(iufilibtev_sup)
         !
         IF (iverbosity == 3) THEN
-          OPEN(iufilibtev_sup, FILE = 'inv_taucb_mode.fmt', FORM = 'formatted')
+          OPEN(iufilibtev_sup, FILE = 'inv_taucb_mode' // TRIM(fnm) // '_' // TRIM(my_image_id_ch) // '.fmt', FORM = 'formatted')
           WRITE(iufilibtev_sup, '(a)') '# Electron relaxation time [Multiply the relaxation time by 20670.6944033 to get 1/ps]'
           WRITE(iufilibtev_sup, '(a)') '# itemp    kpt      ibnd    imode    energy [Ry]   relaxation time [Ry]'
           DO itemp = 1, nstemp
@@ -1003,7 +1140,7 @@
           CLOSE(iufilibtev_sup)
           !
           ! Compute and save spectral decomposition
-          OPEN(iufilibtev_sup, FILE = 'inv_tau_freq.fmt', FORM = 'formatted')
+          OPEN(iufilibtev_sup, FILE = 'inv_tau_freq' // TRIM(fnm) // '_' // TRIM(my_image_id_ch) // '.fmt', FORM = 'formatted')
           WRITE(iufilibtev_sup, '(a)') '# Electron relaxation time [Multiply the relaxation time by 20670.6944033 to get 1/ps]'
           WRITE(iufilibtev_sup, '(a)') '#  kpt      ibnd    energy [Ry]  freq (meV)    relaxation time [Ry]'
           DO ik = 1, nktotf
@@ -1017,7 +1154,7 @@
             ENDDO ! ibnd
           ENDDO ! ik
           CLOSE(iufilibtev_sup)
-          OPEN(iufilibtev_sup, FILE = 'inv_taucb_freq.fmt', FORM = 'formatted')
+          OPEN(iufilibtev_sup, FILE = 'inv_taucb_freq' // TRIM(fnm) // '_' // TRIM(my_image_id_ch) // '.fmt', FORM = 'formatted')
           WRITE(iufilibtev_sup, '(a)') '# Electron relaxation time [Multiply the relaxation time by 20670.6944033 to get 1/ps]'
           WRITE(iufilibtev_sup, '(a)') '#  kpt      ibnd    energy [Ry]  freq (meV)    relaxation time [Ry]'
           DO ik = 1, nktotf
@@ -1086,7 +1223,7 @@
     USE global_var,    ONLY : nbndfst, gtemp, nktotf, lower_bnd, nkf, evbm, ecbm
     USE ep_constants,  ONLY : eps10
     USE mp,            ONLY : mp_sum
-    USE mp_global,     ONLY : world_comm
+    USE mp_global,     ONLY : world_comm, inter_pool_comm
     !
     IMPLICIT NONE
     !
@@ -1146,7 +1283,7 @@
         ENDDO
       ENDIF ! ncarrier
     ENDDO
-    CALL mp_sum(carrier_density, world_comm)
+    CALL mp_sum(carrier_density, inter_pool_comm)
     !
     !-----------------------------------------------------------------------
     END SUBROUTINE carr_density
@@ -1161,7 +1298,7 @@
     USE kinds,         ONLY : DP
     USE io_var,        ONLY : iufilFi_all
     USE io_files,      ONLY : diropn
-    USE input,         ONLY : nstemp
+    USE input,         ONLY : nstemp, lsda
     USE mp,            ONLY : mp_barrier
     USE mp_world,      ONLY : mpime
     USE io_global,     ONLY : ionode_id
@@ -1196,7 +1333,11 @@
     !! Temperature index
     REAL(KIND = DP) :: aux(3 * nbndfst * nktotf * nstemp + nstemp + 1)
     !! Vector to store the array
+    CHARACTER(LEN = 256) :: fnm
+    !! Buffer file name
     !
+    fnm = ''
+    IF (TRIM(lsda) == 'down') fnm = 'down.'
     exst = .FALSE.
     aux(:) = zero
     IF (mpime == ionode_id) THEN
@@ -1226,10 +1367,10 @@
       !
       ! Electron mobility
       IF (elec) THEN
-        CALL diropn(iufilFi_all, 'Fin_restartcb', lfi_all, exst)
+        CALL diropn(iufilFi_all, TRIM(fnm) // 'Fin_restartcb', lfi_all, exst)
         CALL davcio(aux, lfi_all, iufilFi_all, 1, +1)
       ELSE
-        CALL diropn(iufilFi_all, 'Fin_restart', lfi_all, exst)
+        CALL diropn(iufilFi_all, TRIM(fnm) // 'Fin_restart', lfi_all, exst)
         CALL davcio( aux, lfi_all, iufilFi_all, 1, +1)
       ENDIF
       CLOSE(iufilFi_all)
@@ -1246,7 +1387,7 @@
     USE kinds,     ONLY : DP
     USE io_global, ONLY : stdout
     USE io_var,    ONLY : iufilFi_all
-    USE input,     ONLY : nstemp
+    USE input,     ONLY : nstemp, lsda
     USE ep_constants,      ONLY : zero
     USE io_files,  ONLY : prefix, tmp_dir, diropn
     USE mp,        ONLY : mp_barrier, mp_bcast
@@ -1268,6 +1409,10 @@
     ! Local variable
     CHARACTER(LEN = 256) :: name1
     !! Variable name
+    CHARACTER(LEN = 256) :: fnm1
+    !! Buffer file name
+    CHARACTER(LEN = 256) :: fnm2
+    !! Buffer file name
     LOGICAL :: exst
     !! Does the file exist
     INTEGER :: i
@@ -1285,21 +1430,25 @@
     REAL(KIND = DP) :: aux(3 * nbndfst * nktotf * nstemp + nstemp + 1)
     !! Vector to store the array
     !
+    fnm1 = ''
+    IF (TRIM(lsda) == 'down') fnm1 = '.down'
+    fnm2 = ''
+    IF (TRIM(lsda) == 'down') fnm2 = 'down.'
     IF (mpime == ionode_id) THEN
       !
       ! First inquire if the file exists
       IF (elec) THEN
 #if defined(__MPI)
-        name1 = TRIM(tmp_dir) // TRIM(prefix) // '.Fin_restartcb1'
+        name1 = TRIM(tmp_dir) // TRIM(prefix) // TRIM(fnm1) // '.Fin_restartcb1'
 #else
-        name1 = TRIM(tmp_dir) // TRIM(prefix) // '.Fin_restartcb'
+        name1 = TRIM(tmp_dir) // TRIM(prefix) // TRIM(fnm1) // '.Fin_restartcb'
 #endif
         INQUIRE(FILE = name1, EXIST = exst)
         !
         IF (exst) THEN ! read the file
           !
           lfi_all = 3 * nbndfst * nktotf * nstemp + nstemp + 1
-          CALL diropn(iufilFi_all, 'Fin_restartcb', lfi_all, exst)
+          CALL diropn(iufilFi_all, TRIM(fnm2) // 'Fin_restartcb', lfi_all, exst)
           CALL davcio(aux, lfi_all, iufilFi_all, 1, -1)
           !
           ! First element is the iteration number
@@ -1327,16 +1476,16 @@
         ENDIF
       ELSE ! hole
 #if defined(__MPI)
-        name1 = TRIM(tmp_dir) // TRIM(prefix) // '.Fin_restart1'
+        name1 = TRIM(tmp_dir) // TRIM(prefix) // TRIM(fnm1) // '.Fin_restart1'
 #else
-        name1 = TRIM(tmp_dir) // TRIM(prefix) // '.Fin_restart'
+        name1 = TRIM(tmp_dir) // TRIM(prefix) // TRIM(fnm1) // '.Fin_restart'
 #endif
         INQUIRE(FILE = name1, EXIST = exst)
         !
         IF (exst) THEN ! read the file
           !
           lfi_all = 3 * nbndfst * nktotf * nstemp + nstemp + 1
-          CALL diropn(iufilFi_all, 'Fin_restart', lfi_all, exst)
+          CALL diropn(iufilFi_all, TRIM(fnm2) // 'Fin_restart', lfi_all, exst)
           CALL davcio(aux, lfi_all, iufilFi_all, 1, -1)
           !
           ! First element is the iteration number
@@ -1387,11 +1536,11 @@
                                  iunsparsej_merge,iunsparset_merge, iunepmatcb_merge,     &
                                  iunsparseqcb_merge, iunsparsekcb_merge, iunsparsei_merge,&
                                  iunsparseicb_merge, iunsparsejcb_merge, iunsparsetcb_merge
-    USE mp_global,        ONLY : my_pool_id, npool, world_comm
+    USE mp_global,        ONLY : my_pool_id, npool, world_comm, my_image_id, inter_pool_comm
     USE io_files,         ONLY : tmp_dir, prefix
     USE mp,               ONLY : mp_sum, mp_barrier
-    USE global_var,       ONLY : lrepmatw2_merge, lrepmatw5_merge
-    USE input,            ONLY : int_mob, carrier, ncarrier, assume_metal
+    USE global_var,       ONLY : lrepmatw2_merge, lrepmatw5_merge, ctype
+    USE input,            ONLY : int_mob, carrier, ncarrier, assume_metal, lsda
 #if defined(__MPI)
     USE parallel_include, ONLY : MPI_MODE_WRONLY, MPI_MODE_CREATE,MPI_INFO_NULL, &
                                  MPI_OFFSET_KIND, MPI_DOUBLE_PRECISION,          &
@@ -1412,6 +1561,10 @@
     !! Name of the files to merge files
     CHARACTER(LEN = 256) :: path_to_files(2)
     !! Name of the path to files
+    CHARACTER(LEN = 256) :: my_image_id_ch
+    !! image id for writing 
+    CHARACTER(LEN = 256) :: fnm
+    !! Buffer file name
     INTEGER :: i2
     !! Indexes to loop over file sizes
     INTEGER :: lrepmatw2_tot(npool)
@@ -1450,8 +1603,12 @@
     REAL(KIND = DP), ALLOCATABLE :: trans_probcb(:)
     !! Variable for reading and writing trans_prob
     !
+    WRITE(my_image_id_ch, "(I0)") my_image_id
+    !
+    fnm = ''
+    IF (TRIM(lsda) == 'down') fnm = '.down'
     ! for metals merge like it's for holes
-    IF ((int_mob .AND. carrier) .OR. ((.NOT. int_mob .AND. carrier) .AND. (ncarrier < 0.0)) .OR. assume_metal) THEN
+    IF (ctype == 0 .OR. ctype == -1) THEN
       !
       ALLOCATE(trans_prob(lrepmatw2_merge), STAT = ierr)
       IF (ierr /= 0) CALL errore('iter_merge', 'Error allocating trans_prob', 1)
@@ -1465,25 +1622,25 @@
       io_u(5) = iunsparsej_merge
       io_u(6) = iunsparset_merge
       !
-      dirname(1) = 'Fepmatkq1'
-      dirname(2) = 'Fsparse'
+      dirname(1) = 'Fepmatkq1' // TRIM(fnm) // '_' // TRIM(my_image_id_ch)
+      dirname(2) = 'Fsparse' // TRIM(fnm) // '_' // TRIM(my_image_id_ch)
       !
-      filename(1) = TRIM(tmp_dir) // TRIM(prefix) // '.epmatkq1'
-      filename(2) = 'sparseq'
-      filename(3) = 'sparsek'
-      filename(4) = 'sparsei'
-      filename(5) = 'sparsej'
-      filename(6) = 'sparset'
+      filename(1) = TRIM(tmp_dir) // TRIM(prefix) // TRIM(fnm) // '.epmatkq1' // '_' // TRIM(my_image_id_ch)
+      filename(2) = 'sparseq' // TRIM(fnm) // '_' // TRIM(my_image_id_ch)
+      filename(3) = 'sparsek' // TRIM(fnm) // '_' // TRIM(my_image_id_ch)
+      filename(4) = 'sparsei' // TRIM(fnm) // '_' // TRIM(my_image_id_ch)
+      filename(5) = 'sparsej' // TRIM(fnm) // '_' // TRIM(my_image_id_ch)
+      filename(6) = 'sparset' // TRIM(fnm) // '_' // TRIM(my_image_id_ch)
       !
-      path_to_files(1) = './' // ADJUSTL(TRIM(dirname(1))) // '/' // TRIM(prefix) // '.epmatkq1' // '_'
-      path_to_files(2) = './' // ADJUSTL(TRIM(dirname(2))) // '/' // 'sparse' // '_'
+      path_to_files(1) = './' // ADJUSTL(TRIM(dirname(1))) // '/' // TRIM(prefix) // TRIM(fnm) // '.epmatkq1' // '_'
+      path_to_files(2) = './' // ADJUSTL(TRIM(dirname(2))) // '/' // 'sparse' // TRIM(fnm) // '_'
       !
       lrepmatw2_tot = 0
       lrepmatw2_tot(my_pool_id + 1) = lrepmatw2_merge
-      CALL mp_sum(lrepmatw2_tot, world_comm)
+      CALL mp_sum(lrepmatw2_tot, inter_pool_comm)
 #if defined(__MPI)
       DO ich = 1, 6
-        CALL MPI_FILE_OPEN(world_comm, filename(ich), MPI_MODE_WRONLY + MPI_MODE_CREATE, MPI_INFO_NULL, io_u(ich), ierr)
+        CALL MPI_FILE_OPEN(inter_pool_comm, filename(ich), MPI_MODE_WRONLY + MPI_MODE_CREATE, MPI_INFO_NULL, io_u(ich), ierr)
       ENDDO
 #else
       OPEN(UNIT = io_u(1), FILE = filename(1), IOSTAT = ierr, FORM = 'unformatted', &
@@ -1558,7 +1715,7 @@
       IF (ierr /= 0) CALL errore('iter_merge', 'Error deallocating sparse', 1)
       !
     ENDIF
-    IF ((int_mob .AND. carrier) .OR. ((.NOT. int_mob .AND. carrier) .AND. (ncarrier > 0.0)) .AND. .NOT. assume_metal) THEN
+    IF (ctype == 0 .OR. ctype == 1) THEN
       !
       ALLOCATE(trans_probcb(lrepmatw5_merge), STAT = ierr)
       IF (ierr /= 0) CALL errore('iter_merge', 'Error allocating trans_probcb', 1)
@@ -1572,25 +1729,25 @@
       io_u(5) = iunsparsejcb_merge
       io_u(6) = iunsparsetcb_merge
       !
-      dirname(1) = 'Fepmatkqcb1'
-      dirname(2) = 'Fsparsecb'
+      dirname(1) = 'Fepmatkqcb1' // TRIM(fnm) // '_' // TRIM(my_image_id_ch)
+      dirname(2) = 'Fsparsecb' // TRIM(fnm) // '_' // TRIM(my_image_id_ch)
       !
-      filename(1) = TRIM(tmp_dir) // TRIM(prefix) // '.epmatkqcb1'
-      filename(2) = 'sparseqcb'
-      filename(3) = 'sparsekcb'
-      filename(4) = 'sparseicb'
-      filename(5) = 'sparsejcb'
-      filename(6) = 'sparsetcb'
+      filename(1) = TRIM(tmp_dir) // TRIM(prefix) // TRIM(fnm) // '.epmatkqcb1' // '_' // TRIM(my_image_id_ch)
+      filename(2) = 'sparseqcb' // TRIM(fnm) // '_' // TRIM(my_image_id_ch)
+      filename(3) = 'sparsekcb' // TRIM(fnm) // '_' // TRIM(my_image_id_ch)
+      filename(4) = 'sparseicb' // TRIM(fnm) // '_' // TRIM(my_image_id_ch)
+      filename(5) = 'sparsejcb' // TRIM(fnm) // '_' // TRIM(my_image_id_ch)
+      filename(6) = 'sparsetcb' // TRIM(fnm) // '_' // TRIM(my_image_id_ch)
       !
-      path_to_files(1) = './' // ADJUSTL(TRIM(dirname(1))) // '/' // TRIM(prefix) // '.epmatkqcb1' // '_'
-      path_to_files(2) = './' // ADJUSTL(TRIM(dirname(2))) // '/' // 'sparsecb' // '_'
+      path_to_files(1) = './' // ADJUSTL(TRIM(dirname(1))) // '/' // TRIM(prefix) // TRIM(fnm) // '.epmatkqcb1' // '_'
+      path_to_files(2) = './' // ADJUSTL(TRIM(dirname(2))) // '/' // 'sparsecb' // TRIM(fnm) // '_'
       !
       lrepmatw5_tot = 0
       lrepmatw5_tot(my_pool_id + 1) = lrepmatw5_merge
-      CALL mp_sum(lrepmatw5_tot, world_comm)
+      CALL mp_sum(lrepmatw5_tot, inter_pool_comm)
 #if defined(__MPI)
       DO ich = 1, 6
-        CALL MPI_FILE_OPEN(world_comm, filename(ich), MPI_MODE_WRONLY + MPI_MODE_CREATE, MPI_INFO_NULL, io_u(ich), ierr)
+        CALL MPI_FILE_OPEN(inter_pool_comm, filename(ich), MPI_MODE_WRONLY + MPI_MODE_CREATE, MPI_INFO_NULL, io_u(ich), ierr)
       ENDDO
 #else
       OPEN(UNIT = io_u(1), FILE = filename(1), IOSTAT = ierr, FORM = 'unformatted', &
@@ -1678,15 +1835,17 @@
     USE io_files,         ONLY : prefix, create_directory, delete_if_present
     USE io_var,           ONLY : iunepmat, iunsparseq,              &
                                  iunsparseqcb, iunepmatcb, iunrestart
-    USE mp_global,        ONLY : world_comm, my_pool_id, npool
+    USE mp_global,        ONLY : world_comm, my_pool_id, npool, inter_pool_comm
+    USE mp_images,        ONLY : my_image_id
     USE mp,               ONLY : mp_barrier, mp_bcast
-    USE global_var,       ONLY : lrepmatw2_merge, lrepmatw5_merge
-    USE input,            ONLY : int_mob, carrier, ncarrier, assume_metal
-    USE io_global,        ONLY : ionode_id
+    USE global_var,       ONLY : lrepmatw2_merge, lrepmatw5_merge, ctype
+    USE input,            ONLY : int_mob, carrier, ncarrier, assume_metal, lsda
+    USE io_global,        ONLY : ionode_id, ionode
 #if defined(__MPI)
     USE parallel_include, ONLY : MPI_MODE_WRONLY, MPI_MODE_CREATE, MPI_INFO_NULL, &
                                  MPI_OFFSET_KIND
 #endif
+    USE input,            ONLY : lsda
     !
     IMPLICIT NONE
     !
@@ -1714,6 +1873,10 @@
     !! my_pool_id in character type
     CHARACTER(LEN = 256) :: dirname(2), dirnamecb(2)
     !! Name of the directory to hold files
+    CHARACTER(LEN = 256) :: my_image_id_ch
+    !! Image id
+    CHARACTER(LEN = 256) :: fnm
+    !! Buffer file name
     LOGICAL :: exst
     !! Logical for existence of files
     LOGICAL :: exst2
@@ -1727,18 +1890,24 @@
     REAL(KIND = DP) :: dummy_real
     !! Dummy variable for reading
     !
+    fnm = ''
+    IF (TRIM(lsda) == 'down') fnm = '.down'
+    !
     WRITE(my_pool_id_ch, "(I0)") my_pool_id
     !
-    dirname(1)   = 'Fepmatkq1'
-    dirname(2)   = 'Fsparse'
-    dirnamecb(1) = 'Fepmatkqcb1'
-    dirnamecb(2) = 'Fsparsecb'
+    WRITE(my_image_id_ch, "(I0)") my_image_id
     !
-    INQUIRE(FILE = 'restart.fmt', EXIST = exst)
+    dirname(1)   = 'Fepmatkq1' // TRIM(fnm) // '_' // TRIM(my_image_id_ch)
+    dirname(2)   = 'Fsparse' // TRIM(fnm) // '_' // TRIM(my_image_id_ch)
+    dirnamecb(1) = 'Fepmatkqcb1' // TRIM(fnm) // '_' // TRIM(my_image_id_ch)
+    dirnamecb(2) = 'Fsparsecb' // TRIM(fnm) // '_' // TRIM(my_image_id_ch)
     !
-    IF (my_pool_id == ionode_id) THEN
+    INQUIRE(FILE = 'restart' // TRIM(fnm) // '_' // TRIM(my_image_id_ch) // '.fmt', EXIST = exst)
+    !
+    IF (ionode) THEN
       IF (exst) THEN
-        OPEN(UNIT = iunrestart, FILE = 'restart.fmt', STATUS = 'old')
+        OPEN(UNIT = iunrestart, FILE = 'restart' // TRIM(fnm) // '_' // TRIM(my_image_id_ch) // '.fmt', STATUS = 'old')
+        READ(iunrestart, *)
         READ(iunrestart, *)
         READ(iunrestart, *)
         READ(iunrestart, *)
@@ -1752,17 +1921,18 @@
         CLOSE(iunrestart)
       ENDIF
     ENDIF
-    CALL mp_bcast(exst, ionode_id, world_comm )
-    CALL mp_bcast(lrepmatw2_restart, ionode_id, world_comm )
-    CALL mp_bcast(lrepmatw5_restart, ionode_id, world_comm )
+    CALL mp_bcast(exst, ionode_id, inter_pool_comm )
+    CALL mp_bcast(lrepmatw2_restart, ionode_id, inter_pool_comm )
+    CALL mp_bcast(lrepmatw5_restart, ionode_id, inter_pool_comm )
     !
     ! The restart.fmt exist - we try to restart
     IF (exst) THEN
       ! Hole (or metals)
-      IF ((int_mob .AND. carrier) .OR. ((.NOT. int_mob .AND. carrier) .AND. (ncarrier < 1E5)) &
-           .OR. assume_metal) THEN
+      IF (ctype == 0 .OR. ctype == -1) THEN
         !
-        filint = './' // ADJUSTL(TRIM(dirname(1))) // '/'//TRIM(prefix) // '.epmatkq1' // '_' // TRIM(my_pool_id_ch)
+        filint = './' // ADJUSTL(TRIM(dirname(1))) // '/'//TRIM(prefix) // TRIM(fnm) &
+                     // '.epmatkq1' // '_' // TRIM(my_pool_id_ch)
+        !
         INQUIRE(FILE = filint, EXIST = exst2)
         !
         IF (exst2) THEN
@@ -1777,7 +1947,7 @@
           CALL errore('iter_open', 'A restart.fmt is present but not the Fepmatkq1 folder', 1)
         ENDIF
         !
-        filint = './' // ADJUSTL(TRIM(dirname(2))) // '/' // 'sparse' // '_' // TRIM(my_pool_id_ch)
+        filint = './' // ADJUSTL(TRIM(dirname(2))) // '/' // 'sparse'// TRIM(fnm) // '_' // TRIM(my_pool_id_ch)
         INQUIRE(FILE = filint, EXIST = exst2)
         !
         IF (exst2) THEN
@@ -1793,9 +1963,10 @@
         !
       ENDIF ! Hole
       ! Electron
-      IF ((int_mob .AND. carrier) .OR. ((.NOT. int_mob .AND. carrier) .AND. (ncarrier > 1E5))) THEN
+      IF (ctype == 0 .OR. ctype == 1) THEN
         !
-        filint = './' // ADJUSTL(TRIM(dirnamecb(1))) // '/' // TRIM(prefix) // '.epmatkqcb1'//'_' // TRIM(my_pool_id_ch)
+        filint = './' // ADJUSTL(TRIM(dirnamecb(1))) // '/' // TRIM(prefix) // TRIM(fnm) &
+                  // '.epmatkqcb1'//'_' // TRIM(my_pool_id_ch)
         INQUIRE(FILE = filint, EXIST = exst2)
         !
         IF (exst2) THEN
@@ -1810,7 +1981,7 @@
           CALL errore('iter_open', 'A restart.fmt is present but not the Fepmatkqcb1 folder', 1)
         ENDIF
         !
-        filint = './' // ADJUSTL(TRIM(dirnamecb(2))) // '/' // 'sparsecb' // '_' // TRIM(my_pool_id_ch)
+        filint = './' // ADJUSTL(TRIM(dirnamecb(2))) // '/' // 'sparsecb' // TRIM(fnm) // '_' // TRIM(my_pool_id_ch)
         INQUIRE(FILE = filint, EXIST = exst2)
         !
         IF (exst2) THEN
@@ -1830,13 +2001,12 @@
       !
     ELSE ! no restart file present
       ! Hole or metals
-      IF ((int_mob .AND. carrier) .OR. ((.NOT. int_mob .AND. carrier) .AND. (ncarrier < 1E5)) &
-              .OR. assume_metal) THEN
+      IF (ctype == 0 .OR. ctype == -1) THEN
         !
         CALL create_directory(ADJUSTL(TRIM(dirname(1))))
         CALL create_directory(ADJUSTL(TRIM(dirname(2))))
         !
-        filint = './' // ADJUSTL(TRIM(dirname(1))) // '/' // TRIM(prefix) // '.epmatkq1' // '_' // TRIM(my_pool_id_ch)
+        filint = './' // ADJUSTL(TRIM(dirname(1))) // '/' // TRIM(prefix) // TRIM(fnm) // '.epmatkq1' // '_' // TRIM(my_pool_id_ch)
         INQUIRE(FILE = filint, EXIST = exst2)
         !
         IF (exst2) THEN
@@ -1849,7 +2019,7 @@
                ACCESS = 'stream', POSITION = 'append', ACTION = 'write')
         ENDIF
         !
-        filint = './' // ADJUSTL(TRIM(dirname(2))) // '/' // 'sparse' // '_' // TRIM(my_pool_id_ch)
+        filint = './' // ADJUSTL(TRIM(dirname(2))) // '/' // 'sparse' // TRIM(fnm) // '_' // TRIM(my_pool_id_ch)
         INQUIRE(FILE = filint, EXIST = exst2)
         !
         IF (exst2) THEN
@@ -1864,12 +2034,13 @@
         !
       ENDIF ! Hole
       ! Electron
-      IF ((int_mob .AND. carrier) .OR. ((.NOT. int_mob .AND. carrier) .AND. (ncarrier > 1E5))) THEN
+      IF (ctype == 0 .OR. ctype == 1) THEN
         !
         CALL create_directory(ADJUSTL(TRIM(dirnamecb(1))))
         CALL create_directory(ADJUSTL(TRIM(dirnamecb(2))))
         !
-        filint = './' // ADJUSTL(TRIM(dirnamecb(1))) // '/' // TRIM(prefix) // '.epmatkqcb1' // '_' // TRIM(my_pool_id_ch)
+        filint = './' // ADJUSTL(TRIM(dirnamecb(1))) // '/' // TRIM(prefix) // TRIM(fnm) &
+                  // '.epmatkqcb1' // '_' // TRIM(my_pool_id_ch)
         INQUIRE(FILE = filint, EXIST = exst2)
         !
         IF (exst2) THEN
@@ -1882,7 +2053,7 @@
                ACCESS = 'stream', POSITION = 'append', ACTION = 'write')
         ENDIF
         !
-        filint = './' // ADJUSTL(TRIM(dirnamecb(2))) // '/' // 'sparsecb' // '_' // TRIM(my_pool_id_ch)
+        filint = './' // ADJUSTL(TRIM(dirnamecb(2))) // '/' // 'sparsecb' // TRIM(fnm) // '_' // TRIM(my_pool_id_ch)
         INQUIRE(FILE = filint, EXIST = exst2)
         !
         IF (exst2) THEN
@@ -1920,7 +2091,7 @@
     USE io_global, ONLY : stdout
     USE io_var,    ONLY : iufilscatt_rate
     USE global_var,ONLY : ibndmin, nkqtotf, inv_tau_all, nbndfst, nktotf
-    USE input,     ONLY : nbndsub, nstemp
+    USE input,     ONLY : nbndsub, nstemp, lsda
     USE ep_constants,      ONLY : ryd2mev, kelvin2eV, ryd2ev, &
                               meV2invps, eps4
     USE mp,        ONLY : mp_barrier
@@ -1941,6 +2112,8 @@
     ! Local variables
     CHARACTER(LEN = 256) :: name1
     !! Name used to write scattering rates to file.
+    CHARACTER(LEN = 256) :: fnm
+    !! file name
     INTEGER :: ik
     !! K-point index
     INTEGER :: ikk
@@ -1967,7 +2140,9 @@
       ELSEIF (temp >= 100.d0 -eps4) THEN
         WRITE(name1,'(a16,f6.2)') 'scattering_rate_', temp
       ENDIF
-      OPEN(iufilscatt_rate, FILE = name1, FORM = 'formatted')
+      fnm = ''
+      IF (TRIM(lsda) == 'down') fnm = '.down'
+      OPEN(iufilscatt_rate, FILE = name1 // TRIM(fnm), FORM = 'formatted')
       WRITE(iufilscatt_rate, '(a)') '# Inverse scattering time (ps)'
       WRITE(iufilscatt_rate, '(a)') '#      ik       ibnd                 E(ibnd)    scattering rate(1/ps)'
       !
@@ -2008,7 +2183,7 @@
     USE io_global, ONLY : stdout
     USE io_var,    ONLY : iufilscatt_rate
     USE global_var,ONLY : ibndmin, nktotf, nbndfst
-    USE input,     ONLY : nbndsub, nstemp
+    USE input,     ONLY : nbndsub, nstemp, lsda
     USE ep_constants,      ONLY : ryd2mev, kelvin2eV, ryd2ev, &
                               meV2invps, eps4
     USE mp,        ONLY : mp_barrier, mp_bcast
@@ -2031,6 +2206,8 @@
     !! Name used to write scattering rates to file.
     CHARACTER(LEN = 256) :: dummy1
     !! Dummy variable to store the text of the scattering_rate file
+    CHARACTER(LEN = 256) :: fnm
+    !! file name
     INTEGER :: ik
     !! K-point index
     INTEGER :: ik_tmp
@@ -2056,7 +2233,9 @@
       ELSEIF (temp >= 100.d0 -eps4) THEN
         WRITE(name1, '(a16,f6.2)') 'scattering_rate_', temp
       ENDIF
-      OPEN(iufilscatt_rate, FILE = name1, STATUS = 'old', IOSTAT = ios)
+      fnm = ''
+      IF (TRIM(lsda) == 'down') fnm = '.down'
+      OPEN(iufilscatt_rate, FILE = name1 // TRIM(fnm), STATUS = 'old', IOSTAT = ios)
       WRITE(stdout,'(a16,a22)') '     Open file: ',name1
       ! There are two comment line at the beginning of the file
       READ(iufilscatt_rate, *) dummy1
@@ -2098,7 +2277,7 @@
     SUBROUTINE tau_write(iqq, totq, nktotf, second)
     !----------------------------------------------------------------------------
     USE kinds,     ONLY : DP
-    USE input,     ONLY : nstemp
+    USE input,     ONLY : nstemp, lsda
     USE io_global, ONLY : meta_ionode_id
     USE global_var,ONLY : inv_tau_all, inv_tau_allcb, zi_allvb, zi_allcb, &
                           lower_bnd, upper_bnd, nbndfst
@@ -2136,7 +2315,11 @@
     !! band index
     REAL(KIND = DP) :: aux(2 * nstemp * nbndfst * nktotf + 2)
     !! Vector to store the array inv_tau_all and zi_all
+    CHARACTER(LEN = 256) :: fnm
+    !! Buffer file name
     !
+    fnm = ''
+    IF (TRIM(lsda) == 'down') fnm = 'down.'
     IF (mpime == meta_ionode_id) THEN
       !
       ltau_all = 2 * nstemp * (nbndfst) * nktotf + 2
@@ -2162,7 +2345,7 @@
           ENDDO
         ENDDO
       ENDDO
-      CALL diropn(iufiltau_all, 'tau_restart', ltau_all, exst)
+      CALL diropn(iufiltau_all, TRIM(fnm) // 'tau_restart', ltau_all, exst)
       CALL davcio(aux, ltau_all, iufiltau_all, 1, +1 )
       CLOSE(iufiltau_all)
       !
@@ -2189,7 +2372,7 @@
           ENDDO
         ENDDO
         !
-        CALL diropn(iufiltau_all, 'tau_restart_CB', ltau_all, exst)
+        CALL diropn(iufiltau_all, TRIM(fnm) // 'tau_restart_CB', ltau_all, exst)
         CALL davcio(aux, ltau_all, iufiltau_all, 1, +1)
         CLOSE(iufiltau_all)
       ENDIF
@@ -2227,7 +2410,7 @@
                           lower_bnd, upper_bnd, nbndfst
     USE io_var,    ONLY : iufiltau_all
     USE io_files,  ONLY : prefix, tmp_dir, diropn
-    USE input,     ONLY : nstemp
+    USE input,     ONLY : nstemp, lsda
     USE ep_constants,      ONLY : zero
     USE mp,        ONLY : mp_barrier, mp_bcast
     USE mp_global, ONLY : world_comm
@@ -2249,6 +2432,10 @@
     !! Does the file exist
     CHARACTER(LEN = 256) :: name1
     !! Name of the file
+    CHARACTER(LEN = 256) :: fnm1
+    !! Buffer file name
+    CHARACTER(LEN = 256) :: fnm2
+    !! Buffer file name
     INTEGER :: i
     !! Iterative index
     INTEGER :: itemp
@@ -2264,20 +2451,24 @@
     REAL(KIND = DP) :: aux(2 * nstemp * nbndfst * nktotf + 2)
     !! Vector to store the array
     !
+    fnm1 = ''
+    IF (TRIM(lsda) == 'down')  fnm1 = '.down'
+    fnm2 = ''
+    IF (TRIM(lsda) == 'down')  fnm2 = 'down.'
     IF (mpime == meta_ionode_id) THEN
       !
       ! First inquire if the file exists
 #if defined(__MPI)
-      name1 = TRIM(tmp_dir) // TRIM(prefix) // '.tau_restart1'
+      name1 = TRIM(tmp_dir) // TRIM(prefix) // TRIM(fnm1) // '.tau_restart1'
 #else
-      name1 = TRIM(tmp_dir) // TRIM(prefix) // '.tau_restart'
+      name1 = TRIM(tmp_dir) // TRIM(prefix) // TRIM(fnm1) // '.tau_restart'
 #endif
       INQUIRE(FILE = name1, EXIST = exst)
       !
       IF (exst) THEN ! read the file
         !
         ltau_all = 2 * nstemp * nbndfst * nktotf + 2
-        CALL diropn(iufiltau_all, 'tau_restart', ltau_all, exst)
+        CALL diropn(iufiltau_all, TRIM(fnm2) // 'tau_restart', ltau_all, exst)
         CALL davcio(aux, ltau_all, iufiltau_all, 1, -1)
         !
         ! First element is the iteration number
@@ -2311,16 +2502,16 @@
       IF (second) THEN
         ! First inquire if the file exists
 #if defined(__MPI)
-        name1 = TRIM(tmp_dir) // TRIM(prefix) // '.tau_restart_CB1'
+        name1 = TRIM(tmp_dir) // TRIM(prefix) // TRIM(fnm1) // '.tau_restart_CB1'
 #else
-        name1 = TRIM(tmp_dir) // TRIM(prefix) // '.tau_restart_CB'
+        name1 = TRIM(tmp_dir) // TRIM(prefix) // TRIM(fnm1) // '.tau_restart_CB'
 #endif
         INQUIRE(FILE = name1, EXIST = exst)
         !
         IF (exst) THEN ! read the file
           !
           ltau_all = nstemp * nbndfst * nktotf + 2
-          CALL diropn(iufiltau_all, 'tau_restart_CB', ltau_all, exst)
+          CALL diropn(iufiltau_all, TRIM(fnm2) // 'tau_restart_CB', ltau_all, exst)
           CALL davcio(aux, ltau_all, iufiltau_all, 1, -1)
           !
           ! First element is the iteration number
@@ -2492,7 +2683,7 @@
     USE ep_constants,  ONLY : zero, bohr2nm
     USE control_flags, ONLY : iverbosity
     USE mp,            ONLY : mp_sum
-    USE mp_global,     ONLY : world_comm
+    USE mp_global,     ONLY : world_comm, inter_pool_comm
     USE io_global,     ONLY : stdout
     !
     IMPLICIT NONE
@@ -2532,7 +2723,7 @@
           vkk_all(:, ibnd, ik + lower_bnd - 1) = REAL(vmef(:, ibndmin - 1 + ibnd, ibndmin - 1 + ibnd, ikk))
         ENDDO
       ENDDO
-      CALL mp_sum(vkk_all, world_comm)
+      CALL mp_sum(vkk_all, inter_pool_comm)
     ENDIF
     ! grain boundary scattering rate in Ry/hbar (hbar=1 in Atomic Rydberg Units)
     inv_tau_gb(:, :) = zero
@@ -2541,13 +2732,200 @@
         inv_tau_gb(ibnd, ik + lower_bnd - 1) = SQRT(SUM(vkk_all(:, ibnd, ik + lower_bnd - 1)**2)) / gb_size
       ENDDO
     ENDDO
-    CALL mp_sum(inv_tau_gb, world_comm)
+    CALL mp_sum(inv_tau_gb, inter_pool_comm)
     !
     RETURN
     !----------------------------------------------------------------------------
     END SUBROUTINE grain_boundary_scatt
     !----------------------------------------------------------------------------
     !
+    !----------------------------------------------------------------------------
+    SUBROUTINE transport_read(iq_restart, totq, lrepmatw2_restart, lrepmatw5_restart, ind_tot, &
+                              ind_totcb, first_cycle)
+    !----------------------------------------------------------------------------
+    !
+    USE control_flags,    ONLY : iverbosity    
+    USE mp_global,        ONLY : inter_pool_comm, npool, my_pool_id, my_image_id, nimage
+    USE mp,               ONLY : mp_bcast, mp_sum, mp_barrier
+    USE io_global,        ONLY : ionode_id, stdout, ionode
+    USE io_var,           ONLY : iuntaucb, iunrestart, iuntau
+    USE global_var,       ONLY : nktotf, inv_tau_all, inv_tau_all_mode, inv_tau_allcb_mode, &
+                                 inv_tau_all_freq, inv_tau_allcb_freq, inv_tau_allcb,       &
+                                 lower_bnd, upper_bnd
+#if defined(__MPI)
+    USE parallel_include, ONLY : MPI_OFFSET_KIND, MPI_OFFSET
+#endif
+    USE input,            ONLY : lsda
+    !
+    IMPLICIT NONE
+    !
+    INTEGER, INTENT(out) :: iq_restart
+    !! Current position inside the file during writing
+    INTEGER, INTENT(in) ::  totq                  
+    !! total number of q-points within the fsthick window.
+    INTEGER, INTENT(inout) :: lrepmatw2_restart(npool)
+    !! Current position inside the file during writing
+    INTEGER, INTENT(inout) :: lrepmatw5_restart(npool)
+    !! Current position inside the file during writing (electron)
+#if defined(__MPI)
+    INTEGER(KIND = MPI_OFFSET_KIND), INTENT(out) :: ind_tot
+    !! Total number of points store on file
+    INTEGER(KIND = MPI_OFFSET_KIND), INTENT(out) :: ind_totcb
+    !! Total number of points store on file (CB)
+#else
+    INTEGER(KIND = 8), INTENT(inout) :: ind_tot
+    !! Total number of element written to file
+    INTEGER(KIND = 8), INTENT(inout) :: ind_totcb
+    !! Total number of element written to file
+#endif
+    CHARACTER(LEN = 256) :: my_image_id_ch
+    !! image id
+    CHARACTER(LEN = 256) :: fnm
+    !! Buffer file name
+    LOGICAL :: exst
+    !! If the file exist
+    INTEGER :: ipool
+    !! Pool index
+    INTEGER :: npool_tmp
+    !! Temporary number of pools
+    INTEGER :: nimage_tmp
+    !! Temporary number of images
+    LOGICAL :: first_cycle
+    !! Check wheter this is the first cycle after a restart.
+    INTEGER :: ierr
+    !! Error status
+    INTEGER :: ios
+    !! Status of reading file
+    !
+    fnm = ''
+    IF (TRIM(lsda) == 'down') fnm = '.down'
+    WRITE(my_image_id_ch, "(I0)") my_image_id
+    IF (ionode) THEN
+      INQUIRE(FILE = 'restart' // TRIM(fnm) // '_' // TRIM(my_image_id_ch) // '.fmt', EXIST = exst)
+    ENDIF
+    CALL mp_bcast(exst, ionode_id, inter_pool_comm)
+    !
+    IF (exst) THEN
+      IF (ionode) THEN
+        OPEN(UNIT = iunrestart, FILE = 'restart' // TRIM(fnm) &
+           // '_' // TRIM(my_image_id_ch) // '.fmt', STATUS = 'old', IOSTAT = ios)
+        READ(iunrestart, *) iq_restart
+        READ(iunrestart, *) ind_tot
+        READ(iunrestart, *) ind_totcb
+        READ(iunrestart, *) npool_tmp
+        READ(iunrestart, *) nimage_tmp
+        DO ipool = 1, npool
+          READ(iunrestart, *) lrepmatw2_restart(ipool)
+        ENDDO
+        DO ipool = 1, npool
+          READ(iunrestart, *) lrepmatw5_restart(ipool)
+        ENDDO
+        CLOSE(iunrestart)
+      ENDIF
+      CALL mp_bcast(iq_restart, ionode_id, inter_pool_comm)
+      CALL mp_bcast(npool_tmp, ionode_id, inter_pool_comm)
+      CALL mp_bcast(nimage_tmp, ionode_id, inter_pool_comm)
+      CALL mp_bcast(lrepmatw2_restart, ionode_id, inter_pool_comm)
+      CALL mp_bcast(lrepmatw5_restart, ionode_id, inter_pool_comm)
+      IF (npool /= npool_tmp) CALL errore('transport_read','Number of pools is different',1)
+      IF (nimage /= nimage_tmp) CALL errore('transport_read','Number of nimages is different',1)
+      !
+      IF (ionode) THEN
+        ! scattering rate
+        OPEN(UNIT = iuntau, FORM = 'unformatted', &
+                            FILE = 'inv_tau_tmp' // TRIM(fnm) // '_' // TRIM(my_image_id_ch), STATUS = 'old')
+        READ(iuntau) inv_tau_all
+        CLOSE(iuntau)
+        !
+        OPEN(UNIT = iuntaucb, FORM = 'unformatted', &
+                              FILE = 'inv_taucb_tmp' // TRIM(fnm) // '_' // TRIM(my_image_id_ch), STATUS = 'old')
+        READ(iuntaucb) inv_tau_allcb
+        CLOSE(iuntaucb)
+        !
+        IF (iverbosity == 3) THEN
+          ! mode
+          OPEN(UNIT = iuntau, FORM = 'unformatted', &
+                              FILE = 'inv_tau_mode_tmp' // TRIM(fnm) // '_' // TRIM(my_image_id_ch), STATUS = 'old')
+          READ(iuntau) inv_tau_all_mode
+          CLOSE(iuntau)
+          !
+          OPEN(UNIT = iuntaucb, FORM = 'unformatted', &
+                                FILE = 'inv_taucb_mode_tmp' // TRIM(fnm) // '_' // TRIM(my_image_id_ch), STATUS = 'old')
+          READ(iuntaucb) inv_tau_allcb_mode
+          CLOSE(iuntaucb)
+          ! freq
+          OPEN(UNIT = iuntau, FORM = 'unformatted', &
+                              FILE = 'inv_tau_freq_tmp' // TRIM(fnm) // '_' // TRIM(my_image_id_ch), STATUS = 'old')
+          READ(iuntau) inv_tau_all_freq
+          CLOSE(iuntau)
+          !
+          OPEN(UNIT = iuntaucb, FORM = 'unformatted', &
+                                FILE = 'inv_taucb_freq_tmp' // TRIM(fnm) // '_' // TRIM(my_image_id_ch), STATUS = 'old')
+          READ(iuntaucb) inv_tau_allcb_freq
+          CLOSE(iuntaucb)
+        ENDIF ! iverbosity
+      ENDIF
+      !
+      ! scattering rate
+      CALL mp_bcast(inv_tau_all, ionode_id, inter_pool_comm)
+      CALL mp_bcast(inv_tau_allcb, ionode_id, inter_pool_comm)
+      IF (lower_bnd - 1 >= 1) THEN
+        inv_tau_all(:, 1:lower_bnd - 1, :) = 0d0
+        inv_tau_allcb(:, 1:lower_bnd - 1, :) = 0d0
+      ENDIF
+      IF (upper_bnd + 1 <= nktotf) THEN
+        inv_tau_all(:, upper_bnd + 1:nktotf, :) = 0d0
+        inv_tau_allcb(:, upper_bnd + 1:nktotf, :) = 0d0
+      ENDIF
+      !
+      IF (iverbosity == 3) THEN
+        ! scattering rate (mode)
+        CALL mp_bcast(inv_tau_all_mode, ionode_id, inter_pool_comm)
+        CALL mp_bcast(inv_tau_allcb_mode, ionode_id, inter_pool_comm)
+        IF (lower_bnd - 1 >= 1) THEN
+          inv_tau_all_mode(:, :, 1:lower_bnd - 1, :) = 0d0
+          inv_tau_allcb_mode(:, :, 1:lower_bnd - 1, :) = 0d0
+        ENDIF
+        IF (upper_bnd + 1 <= nktotf) THEN
+          inv_tau_all_mode(:, :, upper_bnd + 1:nktotf, :) = 0d0
+          inv_tau_allcb_mode(:, :, upper_bnd + 1:nktotf, :) = 0d0
+        ENDIF
+        ! scattering rate (freq)
+        CALL mp_bcast(inv_tau_all_freq, ionode_id, inter_pool_comm)
+        CALL mp_bcast(inv_tau_allcb_freq, ionode_id, inter_pool_comm)
+        IF (lower_bnd - 1 >= 1) THEN
+          inv_tau_all_freq(:, :, 1:lower_bnd - 1) = 0d0
+          inv_tau_allcb_freq(:, :, 1:lower_bnd - 1) = 0d0
+        ENDIF
+        IF (upper_bnd + 1 <= nktotf) THEN
+          inv_tau_all_freq(:, :, upper_bnd + 1:nktotf) = 0d0
+          inv_tau_allcb_freq(:, :, upper_bnd + 1:nktotf) = 0d0
+        ENDIF
+      ENDIF ! iverbosity
+      !
+#if defined(__MPI)
+      CALL MPI_BCAST(ind_tot,   1, MPI_OFFSET, ionode_id, inter_pool_comm, ierr)
+      CALL MPI_BCAST(ind_totcb, 1, MPI_OFFSET, ionode_id, inter_pool_comm, ierr)
+#endif
+      IF (ierr /= 0) CALL errore('use_wannier', 'error in MPI_BCAST', 1)
+      !
+      IF(iq_restart > 1) first_cycle = .TRUE.
+      !
+      ! Now, the iq_restart point has been done, so we need to do the next
+      iq_restart = iq_restart + 1
+      !
+      IF (iq_restart <= totq) THEN
+        WRITE(stdout, '(5x,a,i8,a)')'We restart from ', iq_restart, ' q-points'
+      ELSE
+        WRITE(stdout, '(5x,a)') 'All q-points are done, no need to restart!!'
+        WRITE(stdout, '(5x,a)') 'Consider use epmatkqread = .TRUE. to restart from iteration !!'
+      ENDIF
+      !
+    ENDIF ! exst
+    !
+    !----------------------------------------------------------------------------
+    END SUBROUTINE transport_read
+    !----------------------------------------------------------------------------
   !------------------------------------------------------------------------------
   END MODULE io_transport
   !------------------------------------------------------------------------------

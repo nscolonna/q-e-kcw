@@ -167,7 +167,10 @@ subroutine solve_e_fpol( iw )
         !
         ! read unperturbed wavefunctions psi_k in G_space, for all bands
         !
-        if (nksq.gt.1) call get_buffer(evc, lrwfc, iuwfc, ik)
+        if (nksq.gt.1) then 
+           call get_buffer(evc, lrwfc, iuwfc, ik)
+           !$acc update device(evc)
+        endif
         !
         ! compute beta functions and kinetic energy for k-point ik
         ! needed by h_psi, called by cch_psi_all, called by gmressolve_all
@@ -307,13 +310,13 @@ subroutine solve_e_fpol( iw )
         enddo
      endif
 
-     call addusddense (dvscfout, dbecsum)
+     call lr_addusddens (3, dbecsum, dvscfout)
      !
      !   dvscfout contains the (unsymmetrized) linear charge response
      !   for the three polarizations - symmetrize it
      !
      call mp_sum ( dvscfout, inter_pool_comm )
-     call psymdvscf(dvscfout)
+     call psymdvscf(dvscfout, dfftp)
      !
      !   save the symmetrized linear charge response to file
      !   calculate the corresponding linear potential response

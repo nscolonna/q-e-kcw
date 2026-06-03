@@ -119,12 +119,14 @@
   !! frequency on real-axis, wsph(nqstep)
   REAL(KIND = DP), ALLOCATABLE :: wsi(:)
   !! frequency on imag-axis at iw, wi(nsiw(nstemp))
+  REAL(KIND = DP), ALLOCATABLE :: dwsi(:)
+  !! frequency weight for sparse sampling, counts # of uniform indices represented, dwsi(nsiw(nstemp))
   REAL(KIND = DP), ALLOCATABLE :: en(:)
   !! Energy grid over Fermi window
   REAL(KIND = DP), ALLOCATABLE :: dosen(:)
   !! DOS (state/spin/eV/u.c.) over Fermi window
-  REAL(KIND = DP), ALLOCATABLE :: a2f_iso(:)
-  !! isotropic Eliashberg spectral function a2f_iso(nqstep)
+  REAL(KIND = DP), ALLOCATABLE :: a2f_tmp(:)
+  !! Temporary isotropic Eliashberg spectral function a2f_tmp(nqstep)
   REAL(KIND = DP), ALLOCATABLE :: fdwp(:)
   !! Fermi-Dirac distribution at frequency wp, fdwp(nsw)
   REAL(KIND = DP), ALLOCATABLE :: bewph(:)

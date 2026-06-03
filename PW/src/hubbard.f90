@@ -100,7 +100,7 @@ SUBROUTINE hub_summary()
                   !
                   ldim = 2*Hubbard_l(nt)+1
                   DO is = 1, nspin
-                     WRITE( stdout,'(5x,"spin-channel ",i2,": ", 8f8.4)'), &
+                     WRITE( stdout,'(5x,"spin-channel ",i2,": ", 8f8.4)') &
                               is,(Hubbard_Um(m1,is,nt)*rytoev, m1=1, ldim)
                   ENDDO
                ENDIF
@@ -111,7 +111,7 @@ SUBROUTINE hub_summary()
                      l_to_spdf(Hubbard_l(nt),.FALSE.) // ')'
                   !
                   DO is = 1, nspin
-                     WRITE( stdout,'(5x,"spin-channel ",i2,": ", 8f8.4)'), &
+                     WRITE( stdout,'(5x,"spin-channel ",i2,": ", 8f8.4)') &
                               is,(Hubbard_alpha_m(m1,is,nt)*rytoev, m1=1, ldim)
                   ENDDO
                ENDIF
@@ -122,7 +122,7 @@ SUBROUTINE hub_summary()
                      l_to_spdf(Hubbard_l(nt),.FALSE.) // ')'
                   !
                   ldim = 2*Hubbard_l(nt)+1
-                  WRITE( stdout,'(5x,15f8.4)'), &
+                  WRITE( stdout,'(5x,15f8.4)') &
                            (Hubbard_Um_nc(m1,nt)*rytoev, m1=1, 2*ldim)
                ENDIF
                !
@@ -132,7 +132,7 @@ SUBROUTINE hub_summary()
                      l_to_spdf(Hubbard_l(nt),.FALSE.) // ')'
                   !
                   ldim = 2*Hubbard_l(nt)+1
-                  WRITE( stdout,'(5x,15f8.4)'), &
+                  WRITE( stdout,'(5x,15f8.4)') &
                            (Hubbard_alpha_m_nc(m1,nt)*rytoev, m1=1, 2*ldim)
                ENDIF
          ENDIF
@@ -216,7 +216,6 @@ SUBROUTINE determine_hubbard_occ ( nt, lflag )
     INTEGER, INTENT(IN) :: lflag       ! Hubbard channel
     !
     CHARACTER(LEN=2), ALLOCATABLE :: label(:)
-    CHARACTER(LEN=2) :: label_aux
     CHARACTER(LEN=2) :: label_hub
     INTEGER :: i, & ! runs over all pseudo-atomic orbitals for the atomic type nt
                ldim
@@ -246,8 +245,7 @@ SUBROUTINE determine_hubbard_occ ( nt, lflag )
     DO i = 1, ldim
        ! Label of the i-th atomic orbital for the atomic type nt
        ! (if lowercase, then capitalize)
-       label_aux = upf(nt)%els(i)
-       label(i) = label_aux(1:1) // capital(label_aux(2:2))
+       label(i) = capital(TRIM(upf(nt)%els(i)))
        IF (label(i)==label_hub) THEN
           IF (first) THEN
              hubbard_occ(nt,lflag) = upf(nt)%oc(i)     
@@ -493,7 +491,7 @@ DO na = 1, nat
    !
    nt = ityp (na)
    !
-   WRITE(manifold, "(i1,a1)")Hubbard_n(nt), l_to_spdf(Hubbard_l(nt),.FALSE.)
+   WRITE(manifold, "(i1,a1)") Hubbard_n(nt), l_to_spdf(Hubbard_l(nt),.FALSE.)
    ldim = 2*Hubbard_l(nt)+1
    tralpha = 0.0
    ALLOCATE( eigval_list(0), eigenvecs_current(ldim,ldim,nspin) )
@@ -540,7 +538,7 @@ DO na = 1, nat
       IF (nspin ==1) tralpha = tralpha*2
       !
       WRITE( stdout,'(/5x,"@ ATOM: ",i3," | MANIFOLD: ",a2," | U: ", f4.2, &
-            & " | OCCUPATION: ", f10.8," | EIGVALS:", 21i3)'),na,manifold,u,tralpha,(eigval_list(m),m=1,SIZE(eigval_list))
+            & " | OCCUPATION: ", f10.8," | EIGVALS:", 21i3)') na,manifold,u,tralpha,(eigval_list(m),m=1,SIZE(eigval_list))
 
       !
    ELSEIF ( ANY(Hubbard_Um(:,:,nt) .NE. 0.d0) .AND. ALL(Hubbard_alpha_m(:,:,nt) .EQ. 0.d0) ) THEN
@@ -573,7 +571,7 @@ IF (has_second_manifold) THEN
       na = unpert_ats(i)
       nt = ityp (na)
       !
-      WRITE(manifold, "(i1,a1)")Hubbard_n(nt), l_to_spdf(Hubbard_l(nt),.FALSE.)
+      WRITE(manifold, "(i1,a1)") Hubbard_n(nt), l_to_spdf(Hubbard_l(nt),.FALSE.)
       ldim = 2*Hubbard_l(nt)+1
       tralpha = 0.0
       ALLOCATE( eigval_list(0) )
@@ -612,7 +610,7 @@ IF (has_second_manifold) THEN
       !
       IF (nspin ==1) tralpha = tralpha*2
       WRITE( stdout,'(/5x,"@ ATOM: ",i3," | MANIFOLD: ",a2," | U: ", f4.2, &
-      & " | OCCUPATION: ", f10.8," | EIGVALS:", 21i3)'),na,manifold,u,tralpha,(eigval_list(m),m=1,SIZE(eigval_list))
+      & " | OCCUPATION: ", f10.8," | EIGVALS:", 21i3)') na,manifold,u,tralpha,(eigval_list(m),m=1,SIZE(eigval_list))
       !
    DEALLOCATE( eigval_list )
    DEALLOCATE( eigenvecs_current)
@@ -713,7 +711,7 @@ DO na = 1, nat
       ENDDO
       !
       WRITE( stdout,'(/5x,"@ ATOM: ",i3," | MANIFOLD: ",a2," | U: ", f4.2, &
-            & " | OCCUPATION: ", f10.8," | EIGVALS:", 21i3)'),na,manifold,u,tralpha,(eigval_list(m),m=1,SIZE(eigval_list))
+            & " | OCCUPATION: ", f10.8," | EIGVALS:", 21i3)') na,manifold,u,tralpha,(eigval_list(m),m=1,SIZE(eigval_list))
       !
    ELSEIF ( ANY(Hubbard_Um_nc(:,nt) .NE. 0.d0) .AND. &
             ALL(Hubbard_alpha_m_nc(:,nt) .EQ. 0.d0) ) THEN
@@ -779,7 +777,7 @@ IF (has_second_manifold) THEN
       ENDDO
       !
       WRITE( stdout,'(/5x,"@ ATOM: ",i3," | MANIFOLD: ",a2," | U: ", f4.2, &
-      & " | OCCUPATION: ", f10.8," | EIGVALS:", 21i3)'),na,manifold,u,tralpha,(eigval_list(m),m=1,SIZE(eigval_list))
+      & " | OCCUPATION: ", f10.8," | EIGVALS:", 21i3)') na,manifold,u,tralpha,(eigval_list(m),m=1,SIZE(eigval_list))
       !
    DEALLOCATE( eigval_list )
    DEALLOCATE( eigenvecs_current)

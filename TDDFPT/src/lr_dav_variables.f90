@@ -29,10 +29,10 @@ MODULE lr_dav_variables
              p_nbnd_occ,p_nbnd_virt ! number of occ and virt bands for projection
   REAL(kind=dp) :: residue_conv_thr, reference, close_pre, broadening,start,&
                    finish,step,turn2planb, vccouple_shift
-  logical :: precondition,dav_debug, single_pole,&
-             sort_contr,diag_of_h,print_spectrum,if_check_orth,&
-             if_random_init,if_check_her,poor_of_ram,poor_of_ram2,&
-             conv_assistant,if_dft_spectrum,lplot_drho
+  logical :: precondition, single_pole,&
+             sort_contr,diag_of_h,print_spectrum,&
+             if_random_init,poor_of_ram,poor_of_ram2,&
+             conv_assistant,if_dft_spectrum,lplot_drho,ace
 
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !Global Variables
@@ -41,6 +41,7 @@ MODULE lr_dav_variables
         vc_couple(:,:),&  ! for calculating the optimal initial vector
         eign_value_order(:), energy_dif_order(:)
 
+  LOGICAL :: use_ace_td
   LOGICAL :: dav_conv
   LOGICAL :: ploted(3)=.false., done_calc_R=.false.
   real(dp) :: max_res
