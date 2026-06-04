@@ -346,7 +346,7 @@ elseif(CMAKE_Fortran_COMPILER_ID MATCHES "Intel")
     include(IntelFortranCompiler)
 elseif(CMAKE_Fortran_COMPILER_ID MATCHES "XL")
     include(IBMFortranCompiler)
-elseif(CMAKE_Fortran_COMPILER_ID MATCHES "Fujitsu" OR CMAKE_Fortran_COMPILER_ID MATCHES "FujitsuClang")
+elseif(CMAKE_Fortran_COMPILER_ID MATCHES "Fujitsu")
     include(FujitsuFortranCompiler)
 endif()
 
