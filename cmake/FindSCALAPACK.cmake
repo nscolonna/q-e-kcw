@@ -292,8 +292,6 @@ macro(
 
   if(_libraries_work)
     set(${LIBRARIES} ${${LIBRARIES}} ${_blaslapack} ${_mpi} ${_threads})
-  else(_libraries_work)
-    set(${LIBRARIES} FALSE)
   endif(_libraries_work)
 
 endmacro(Check_Scalapack_Libraries)

@@ -429,9 +429,3 @@ add_custom_target(pw
         ${PW_EXE_TARGETS}
     COMMENT
         "basic code for scf, structure optimization, MD")
-
-if(CMAKE_Fortran_COMPILER_ID STREQUAL "Fujitsu" OR CMAKE_Fortran_COMPILER_ID STREQUAL "FujitsuClang")
-    set_property(
-        SOURCE src/force_hub.f90
-        APPEND PROPERTY COMPILE_OPTIONS -O0)
-endif()

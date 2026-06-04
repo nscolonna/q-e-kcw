@@ -39,16 +39,12 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Kfast")
 ############################################################
 
 # Always compile with SCALAPACK ENABLED
-qe_add_global_compile_definitions(__SCALAPACK)
+#qe_add_global_compile_definitions(__SCALAPACK)
 
-if(QE_ENABLE_OPENMP)
-	set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -Kopenmp -SCALAPACK -SSL2BLAMP")
-	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Kopenmp -SCALAPACK -SSL2BLAMP")
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Kopenmp -SCALAPACK -SSL2BLAMP")
-else()
-	set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -SCALAPACK -SSL2")
-	set(CMAKE_C_FLAGS "${CMAKE_Fortran_FLAGS} -SCALAPACK -SSL2")
-	set(CMAKE_CXX_FLAGS "${CMAKE_Fortran_FLAGS} -SCALAPACK -SSL2")
+if(QE_ENABLE_OPENMP AND NOT BLA_VENDOR)
+   set(BLA_VENDOR Fujitsu_SSL2BLAMPSVE)
+elseif(NOT BLA_VENDOR)
+   set(BLA_VENDOR Fujitsu_SSL2SVE)
 endif()
 
 
