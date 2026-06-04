@@ -53,6 +53,7 @@ subroutine readmat2 ( fildyn, asr, axis, nat, ntyp, atm, &
   !
   allocate ( dyn (3,3,nat,nat) )
   allocate ( dchi_dtau (3,3,3,nat) )
+  dchi_dtau(:,:,:,:) = 0.0_dp
   allocate (zstar(3,3,nat) )
   allocate ( tau (3,nat) )
   allocate (ityp (nat) )
