@@ -12,12 +12,12 @@ MODULE incdrhoscf_mod
   !
 CONTAINS
   !-----------------------------------------------------------------------
-  subroutine incdrhoscf (drhoscf, weight, ik, dbecsum, dpsi)
+  subroutine incdrhoscf (drhoscf, weight, ik, dbecsum, dpsi, firstband)
   !-----------------------------------------------------------------------
   !
-  !     This routine computes the change of the charge density due to the
-  !     perturbation. It is called at the end of the computation of the
-  !     change of the wavefunction for a given k point.
+  !!     This routine computes the change of the charge density due to the
+  !!     perturbation. It is called at the end of the computation of the
+  !!     change of the wavefunction for a given k point.
   !
   USE kinds,                ONLY : DP
   USE cell_base,            ONLY : omega
@@ -38,13 +38,17 @@ CONTAINS
   !
   ! I/O variables
   INTEGER, INTENT (IN) :: ik
-  ! input: the k point
+  !! input: the k point
   REAL(DP), INTENT (IN) :: weight
-  ! input: the weight of the k point
+  !! input: the weight of the k point
   COMPLEX(DP), INTENT (IN) :: dpsi (npwx,nbnd)
-  ! input: the perturbed wfc for the given k point
-  COMPLEX(DP), INTENT (INOUT) :: drhoscf (dffts%nnr), dbecsum (nhm*(nhm+1)/2,nat)
-  ! input/output: the accumulated change to the charge density and dbecsum
+  !! input: the perturbed wfc for the given k point
+  COMPLEX(DP), INTENT (INOUT) :: drhoscf (dffts%nnr)
+  !! input/output: the accumulated change to the charge density
+  COMPLEX(DP), INTENT (INOUT) :: dbecsum (nhm*(nhm+1)/2,nat)
+  !! input/output: the accumulated change to dbecsum
+  INTEGER, INTENT(IN), OPTIONAL :: firstband
+  !! input: first band if not 1 (for two chemical potentials calculations)
   !
   !   here the local variables
   !
@@ -57,11 +61,16 @@ CONTAINS
   COMPLEX(DP), ALLOCATABLE :: tg_psi(:), tg_dpsi(:), tg_drho(:)
 
   INTEGER :: npw, npwq, ikk, ikq, itmp
-  INTEGER :: ibnd, ir, ir3, ig, incr, v_siz, idx, ioff, ioff_tg, nxyp
-  INTEGER :: right_inc, ntgrp
+  INTEGER :: nb1, ibnd, ir, ig, incr
+  INTEGER :: right_inc, ntgrp, v_siz, idx, ioff, ioff_tg, nxyp
   ! counters
   !
   CALL start_clock ('incdrhoscf')
+  !
+  nb1 = 1
+  IF ( PRESENT(firstband) ) THEN
+     nb1 = firstband
+  END IF
   !
   wgt = 2.d0 * weight / omega
   ikk = ikks(ik)
@@ -85,7 +94,7 @@ CONTAINS
      !
      incr = fftx_ntgrp(dffts)
      !
-     do ibnd = 1, nbnd_occ(ikk), incr
+     do ibnd = nb1, nbnd_occ(ikk), incr
         !
         tg_drho=(0.0_DP, 0.0_DP)
         tg_psi=(0.0_DP, 0.0_DP)
@@ -142,7 +151,7 @@ CONTAINS
      !$acc data present_or_copyin(dpsi) present_or_copy(drhoscf) &
      !$acc      create(psi,dpsic) present(igk_k)
      !
-     do ibnd = 1, nbnd_occ(ikk), incr
+     do ibnd = nb1, nbnd_occ(ikk), incr
         !
         ! Initialize psi and dpsic
         !
@@ -199,10 +208,10 @@ CONTAINS
 end subroutine incdrhoscf
 !
 !-----------------------------------------------------------------------
-subroutine incdrhoscf_nc (drhoscf, weight, ik, dbecsum, dpsi, rsign)
+subroutine incdrhoscf_nc (drhoscf, weight, ik, dbecsum, dpsi, rsign, firstband)
   !-----------------------------------------------------------------------
   !
-  !     Non-colinear version of incdrhoscf_nc
+  !!     Non-colinear version of incdrhoscf_nc
   !
   USE kinds,                ONLY : DP
   USE cell_base,            ONLY : omega
@@ -227,15 +236,19 @@ subroutine incdrhoscf_nc (drhoscf, weight, ik, dbecsum, dpsi, rsign)
   !
   ! I/O variables
   INTEGER, INTENT(IN) :: ik
-  ! input: the k point
+  !! input: the k point
   REAL(DP), INTENT(IN) :: weight
+  !! input: the weight of the k point
   REAL(DP), INTENT(IN) :: rsign
-  ! input: the weight of the k point
-  ! the sign in front of the response of the magnetization density
+  !! the sign in front of the response of the magnetization density
   COMPLEX(DP), INTENT(IN) :: dpsi(npwx*npol,nbnd)
-  ! input: the perturbed wfcs at the given k point
-  COMPLEX(DP), INTENT(INOUT) :: drhoscf (dffts%nnr,nspin_mag), dbecsum (nhm,nhm,nat,nspin)
-  ! input/output: the accumulated change of the charge density and dbecsum
+  !! input: the perturbed wfcs at the given k point
+  COMPLEX(DP), INTENT(INOUT) :: drhoscf (dffts%nnr,nspin_mag)
+  !! input/output: the accumulated change of the charge density
+  COMPLEX(DP), INTENT(INOUT) :: dbecsum (nhm,nhm,nat,nspin)
+  ! input/output: the accumulated change of dbecsum
+  INTEGER, INTENT(IN), OPTIONAL :: firstband
+  !! input: first band if not 1 (for two chemical potentials calculations)
   !
   !   here the local variables
   !
@@ -249,13 +262,17 @@ subroutine incdrhoscf_nc (drhoscf, weight, ik, dbecsum, dpsi, rsign)
   COMPLEX(DP), ALLOCATABLE :: tg_psi (:,:), tg_dpsi (:,:), tg_drho(:,:)
   !
   INTEGER :: npw, npwq, ikk, ikq, itmp
-  INTEGER :: ibnd, jbnd, ir, ir3, ig, incr, v_siz, idx, ioff, ioff_tg, nxyp
-  INTEGER :: ntgrp, right_inc
+  INTEGER :: nb1, ibnd, jbnd, ir, ig, incr
+  INTEGER :: ntgrp, right_inc, v_siz, idx, ioff, ioff_tg, nxyp
   ! counters
   !
   !
   CALL start_clock ('incdrhoscf')
   !
+  nb1 = 1
+  IF ( PRESENT(firstband) ) THEN
+     nb1 = firstband
+  END IF
   wgt = 2.d0 * weight / omega
   ikk = ikks(ik)
   ikq = ikqs(ik)
@@ -278,7 +295,7 @@ subroutine incdrhoscf_nc (drhoscf, weight, ik, dbecsum, dpsi, rsign)
      !
      incr  = fftx_ntgrp(dffts)
      !
-     do ibnd = 1, nbnd_occ(ikk), incr
+     do ibnd = nb1, nbnd_occ(ikk), incr
         !
         tg_drho=(0.0_DP, 0.0_DP)
         tg_psi=(0.0_DP, 0.0_DP)
@@ -350,7 +367,7 @@ subroutine incdrhoscf_nc (drhoscf, weight, ik, dbecsum, dpsi, rsign)
      !$acc data present_or_copyin(dpsi) present_or_copy(drhoscf) &
      !$acc      create(psi,dpsic) present(igk_k)
      !
-     do ibnd = 1, nbnd_occ(ikk), incr
+     do ibnd = nb1, nbnd_occ(ikk), incr
         !
         ! Initialize psi and dpsic
         !
