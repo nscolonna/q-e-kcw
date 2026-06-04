@@ -1,21 +1,6 @@
 ############################################################
 # This is based on experience from thea Odyssey cluster
 # at the University of Tokyo.
-#
-# Note that this compiler option will overwrite some of 
-# the choices from CMakeLists.txt.
-#
-# It seems that FFTW is detected automatically so this is
-# handled by the functionality in CMakeLists.txt
-#
-# But the BLAS, LAPACK and SCALAPACK options should be set
-# using the convinient compiler flags provided by the Fujitsu
-# compiler.
-#
-# Given that this compiler is mainly used in HPC environments
-# we will here enforce SCALAPACK even without setting the
-# appropriate cmake flags.
-#
 ############################################################
 
 # Stop if OFFLOAD enabled, as this is not tested
@@ -25,7 +10,8 @@ if(QE_ENABLE_OFFLOAD)
 endif()
 
 ############################################################
-# Set flag to allow allocating assignment, 
+# Set flag to allow allocating assignment,
+# and -Kfast for code optiomizations.
 # this is not default for the Fujitsu compiler.
 ############################################################
 
@@ -35,11 +21,8 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Kfast")
 
 
 ############################################################
-# Setup OpenMP, BLAS, LAPACK and SCALAPACK libraries
+# Setup  BLAS and LAPACK libraries
 ############################################################
-
-# Always compile with SCALAPACK ENABLED
-#qe_add_global_compile_definitions(__SCALAPACK)
 
 if(QE_ENABLE_OPENMP AND NOT BLA_VENDOR)
    set(BLA_VENDOR Fujitsu_SSL2BLAMPSVE)
