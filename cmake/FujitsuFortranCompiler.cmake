@@ -10,18 +10,21 @@ if(QE_ENABLE_OFFLOAD)
 endif()
 
 ############################################################
+# Needed to compile EPW/src/utilities/low_lvl.f90 
+# Might be useful in the future for compiler specific workarounds.
+############################################################
+qe_add_global_compile_definitions(__FUJITSU)
+
+############################################################
 # Set flag to allow allocating assignment,
 # and -Kfast for code optiomizations.
 # this is not default for the Fujitsu compiler.
 ############################################################
 
 set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -Nalloc_assign -Kfast")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Kfast")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Kfast")
-
 
 ############################################################
-# Setup  BLAS and LAPACK libraries
+# Suggest BLAS and LAPACK libraries
 ############################################################
 
 if(QE_ENABLE_OPENMP AND NOT BLA_VENDOR)
@@ -31,3 +34,9 @@ elseif(NOT BLA_VENDOR)
 endif()
 
 
+############################################################
+# Note, that for SCALAPACK support to work on Odyssey
+# it requires setting both QE_ENABLE_SCALAPACK
+# and QE_ENABLE_OPENMP as the Fujitsu SCALAPACK
+# library has only been compiled together with openMP
+############################################################

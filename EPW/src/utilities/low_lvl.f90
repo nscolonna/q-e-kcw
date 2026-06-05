@@ -736,7 +736,7 @@
     !!
     LOGICAL :: ifxst
     !! Does the file exists
-#if defined(__PGI) || defined(__CRAY) || defined(__XLF) || defined(__FLANG)
+#if defined(__PGI) || defined(__CRAY) || defined(__XLF) || defined(__FLANG) || defined(__FUJITSU)
     INTEGER, EXTERNAL :: getpid
     !! PID of the process
 #endif
