@@ -1516,10 +1516,13 @@
   ENDIF
   !
   ! S.Tiwari: This is a patch work to prevent a crash/should be fixed asap
-  IF (.NOT. restart) THEN
+  IF (.NOT. epwread) THEN
     IF (lda_plus_u) THEN
-      IF (lda_plus_u_kind /= 0) CALL errore('ep_coarse_unfolding', 'Current &
-        lda_plus_u_kind is not implemented', 1)
+      IF (lda_plus_u_kind /= 0) THEN !CALL errore('readin', 'Current &
+        !lda_plus_u_kind is not implemented', 1)
+        WRITE(stdout,'(/,5x,a)') 'Warning: lda_plus_u_kind not 0; check results &
+        carefully'
+      ENDIF
       ldfptu = .TRUE.
     ENDIF
   ENDIF
