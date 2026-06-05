@@ -441,7 +441,7 @@ if(BLAS_FOUND
       "scalapack" # scalapack lib to look for
       "${LAPACK_LIBRARIES};${BLAS_LIBRARIES}" # blas and lapack libs
       "${MPI_Fortran_LIBRARIES}" # mpi libs
-      ""
+      "" # threads libs
     )
   endif()
 else(
