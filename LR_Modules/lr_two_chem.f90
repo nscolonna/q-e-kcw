@@ -242,307 +242,6 @@ subroutine ef_shift_wfc_twochem(npert, ldos_data, drhos)
   !
   end subroutine ef_shift_wfc_twochem
   !
-!-----------------------------------------------------------------------
-subroutine localdos_cond (ldos_data)
-  !-----------------------------------------------------------------------
-  !
-  !    This routine compute the local and total density of states
-  !    for the conduction chemical potential in the twochem case
-  !
-  !    Note: this routine use psic as auxiliary variable. it should alread
-  !          be defined
-  !
-  !    Note: For the twochem case, localdos_cond uses the conduction Fermi level and loops
-  !          only over the conduction bands. In contrast, localdos uses the valence Fermi
-  !          level and loops over all bands (not just the valence bands). This is to
-  !          minimize modification of the ordinary (non-twochem) code, and is fine because
-  !          conduction bands will have negligible occupation with the valence Fermi level.
-  !
-  !    NB: this routine works only with gamma
-  !
-  !
-  USE kinds,            ONLY : DP
-  USE cell_base,        ONLY : omega
-  USE ions_base,        ONLY : nat, ityp, ntyp => nsp
-  USE ener,             ONLY : ef_cond
-  USE fft_base,         ONLY : dffts, dfftp
-  USE fft_interfaces,   ONLY : invfft, fft_interpolate
-  USE buffers,          ONLY : get_buffer
-  USE gvecs,            ONLY : doublegrid
-  USE klist,            ONLY : xk, wk, ngk, igk_k, degauss, ngauss, ltetra
-  USE lsda_mod,         ONLY : nspin, lsda, current_spin, isk
-  USE noncollin_module, ONLY : noncolin, npol, nspin_mag
-  USE wvfct,            ONLY : nbnd, npwx, et, nbnd_cond
-  USE becmod,           ONLY : calbec, bec_type, allocate_bec_type_acc, deallocate_bec_type_acc
-  USE wavefunctions,    ONLY : evc, psic, psic_nc
-  USE uspp,             ONLY : okvan, nkb, vkb
-  USE uspp_param,       ONLY : upf, nh, nhm
-  USE qpoint,           ONLY : nksq, ikks
-  USE control_lr,       ONLY : nbnd_occ
-  USE units_lr,         ONLY : iuwfc, lrwfc
-  USE mp_pools,         ONLY : inter_pool_comm
-  USE mp,               ONLY : mp_sum
-  USE dfpt_tetra_mod,   ONLY : dfpt_tetra_delta
-  USE uspp_init,        ONLY : init_us_2
-  USE control_flags,    ONLY : offload_type
-  USE dfpt_type,        ONLY : dfpt_ldos_type
-  USE paw_variables,    ONLY : okpaw
-
-  implicit none
-
-  TYPE(dfpt_ldos_type), INTENT(INOUT) :: ldos_data
-  !! Local density of states at Ef for conduction states
-  !! Contains: dos_ef, ldos, ldoss, becsum_dos
-  !
-  !    local variables for Ultrasoft PP's
-  !
-  integer :: ikb, jkb, ijkb0, ih, jh, na, ijh, nt
-  ! counters
-  complex(DP), allocatable :: becsum1_nc(:,:,:,:)
-  TYPE(bec_type) :: becp
-  !
-  ! local variables
-  !
-  real(DP) :: weight, w1, wdelta
-  ! weights
-  real(DP), external :: w0gauss
-  !
-  integer :: npw, ik, is, ig, ibnd, j, is1, is2, v_siz
-  ! counters
-  integer :: ios
-  ! status flag for i/o
-  !
-  !  initialize ldos and dos_ef
-  !
-  INTEGER, ALLOCATABLE :: nl_d(:)
-  !
-  ALLOCATE( nl_d(dffts%ngm) )
-  nl_d  = dffts%nl
-  !$acc enter data copyin(evc, nl_d)
-  v_siz = dffts%nnr
-
-  call start_clock ('localdos_cond')
-  IF (noncolin) THEN
-     allocate (becsum1_nc( (nhm * (nhm + 1)) / 2, nat, npol, npol))
-     becsum1_nc=(0.d0,0.d0)
-  ENDIF
-
-  call allocate_bec_type_acc (nkb, nbnd, becp)
-
-  ldos_data%becsum_dos (:,:,:) = 0.d0
-  ldos_data%ldos (:,:) = (0d0, 0.0d0)
-  ldos_data%ldoss(:,:) = (0d0, 0.0d0)
-  ldos_data%dos_ef = 0.d0
-  !
-  !  loop over kpoints
-  !
-  !$acc data create(psic, psic_nc) copy(ldos_data%ldoss)
-  do ik = 1, nksq
-     if (lsda) current_spin = isk (ikks(ik))
-     npw = ngk(ikks(ik))
-     weight = wk (ikks(ik))
-     !
-     ! unperturbed wfs in reciprocal space read from unit iuwfc
-     !
-     if (nksq > 1) then
-             call get_buffer (evc, lrwfc, iuwfc, ikks(ik))
-             !$acc update device(evc)
-     endif
-     call init_us_2 (npw, igk_k(1,ikks(ik)), xk (1, ikks(ik)), vkb, .true.)
-     !
-     !$acc data present(vkb, becp, evc)
-     call calbec ( offload_type, npw, vkb, evc, becp)
-     !$acc end data
-     !
-     do ibnd = 1+(nbnd-nbnd_cond), nbnd_occ (ikks(ik))
-        !
-        if(ltetra) then
-           wdelta = dfpt_tetra_delta(ibnd,ikks(ik))
-        else
-           wdelta = w0gauss ( (ef_cond-et(ibnd,ikks(ik))) / degauss, ngauss) / degauss
-        end if
-        !
-        w1 = weight * wdelta / omega
-        !
-        ! unperturbed wf from reciprocal to real space
-        !
-        IF (noncolin) THEN
-           !$acc kernels
-           psic_nc = (0.d0, 0.d0)
-           !$acc end kernels
-           !$acc parallel loop present(igk_k, psic_nc, nl_d, evc)
-           do ig = 1, npw
-              psic_nc (nl_d (igk_k(ig,ikks(ik))), 1 ) = evc (ig, ibnd)
-              psic_nc (nl_d (igk_k(ig,ikks(ik))), 2 ) = evc (ig+npwx, ibnd)
-           enddo
-           !$acc end parallel loop
-           !$acc host_data use_device(psic_nc)
-           CALL invfft ('Rho', psic_nc(:,1), dffts)
-           CALL invfft ('Rho', psic_nc(:,2), dffts)
-           !$acc end host_data
-           !$acc parallel loop present(psic_nc, ldos_data%ldoss)
-           do j = 1, v_siz
-              ldos_data%ldoss (j, 1) = ldos_data%ldoss (j, 1) + &
-                    w1 * ( DBLE(psic_nc(j,1))**2+AIMAG(psic_nc(j,1))**2 + &
-                           DBLE(psic_nc(j,2))**2+AIMAG(psic_nc(j,2))**2)
-           enddo
-           !$acc end parallel loop
-           IF (nspin_mag==4) THEN
-              !$acc parallel loop present(psic_nc, ldos_data%ldoss)
-              DO j = 1, v_siz
-              !
-                 ldos_data%ldoss(j,2) = ldos_data%ldoss(j,2) + w1*2.0_DP* &
-                             (DBLE(psic_nc(j,1))* DBLE(psic_nc(j,2)) + &
-                             AIMAG(psic_nc(j,1))*AIMAG(psic_nc(j,2)))
-
-                 ldos_data%ldoss(j,3) = ldos_data%ldoss(j,3) + w1*2.0_DP* &
-                             (DBLE(psic_nc(j,1))*AIMAG(psic_nc(j,2)) - &
-                              DBLE(psic_nc(j,2))*AIMAG(psic_nc(j,1)))
-
-                 ldos_data%ldoss(j,4) = ldos_data%ldoss(j,4) + w1* &
-                             (DBLE(psic_nc(j,1))**2+AIMAG(psic_nc(j,1))**2 &
-                             -DBLE(psic_nc(j,2))**2-AIMAG(psic_nc(j,2))**2)
-              !
-              END DO
-              !$acc end parallel loop
-           END IF
-        ELSE
-           !$acc kernels
-           psic (:) = (0.d0, 0.d0)
-           !$acc end kernels
-           !$acc parallel loop present(psic,nl_d, evc)
-           do ig = 1, npw
-              psic (nl_d (igk_k(ig,ikks(ik)) ) ) = evc (ig, ibnd)
-           enddo
-           !$acc end parallel loop
-           !$acc host_data use_device(psic)
-           CALL invfft ('Rho', psic, dffts)
-           !$acc end host_data
-           !$acc parallel loop present(ldos_data%ldoss, psic)
-           do j = 1, v_siz
-              ldos_data%ldoss (j, current_spin) = ldos_data%ldoss (j, current_spin) + &
-                    w1 * ( DBLE ( psic (j) ) **2 + AIMAG (psic (j) ) **2)
-           enddo
-           !$acc end parallel loop
-        END IF
-        !
-        !    If we have a US pseudopotential we compute here the becsum term
-        !
-        if(noncolin) then
-        !$acc update self(becp%nc)
-        else
-        !$acc update self(becp%k)
-        endif
-        !
-        w1 = weight * wdelta
-        ijkb0 = 0
-        do nt = 1, ntyp
-           if (upf(nt)%tvanp ) then
-              do na = 1, nat
-                 if (ityp (na) == nt) then
-                    ijh = 1
-                    do ih = 1, nh (nt)
-                       ikb = ijkb0 + ih
-                       IF (noncolin) THEN
-                          DO is1=1,npol
-                             DO is2=1,npol
-                                becsum1_nc (ijh, na, is1, is2) = &
-                                becsum1_nc (ijh, na, is1, is2) + w1 * &
-                                 (CONJG(becp%nc(ikb,is1,ibnd))* &
-                                        becp%nc(ikb,is2,ibnd))
-                             END DO
-                          END DO
-                       ELSE
-                          ldos_data%becsum_dos (ijh, na, current_spin) = &
-                            ldos_data%becsum_dos (ijh, na, current_spin) + w1 * &
-                             DBLE (CONJG(becp%k(ikb,ibnd))*becp%k(ikb,ibnd) )
-                       ENDIF
-                       ijh = ijh + 1
-                       do jh = ih + 1, nh (nt)
-                          jkb = ijkb0 + jh
-                          IF (noncolin) THEN
-                             DO is1=1,npol
-                                DO is2=1,npol
-                                   becsum1_nc(ijh,na,is1,is2) = &
-                                      becsum1_nc(ijh,na,is1,is2) + w1* &
-                                      (CONJG(becp%nc(ikb,is1,ibnd))* &
-                                             becp%nc(jkb,is2,ibnd) )
-                                END DO
-                             END DO
-                          ELSE
-                             ldos_data%becsum_dos (ijh, na, current_spin) = &
-                               ldos_data%becsum_dos (ijh, na, current_spin) + w1 * 2.d0 * &
-                                DBLE(CONJG(becp%k(ikb,ibnd))*becp%k(jkb,ibnd) )
-                          END IF
-                          ijh = ijh + 1
-                       enddo
-                    enddo
-                    ijkb0 = ijkb0 + nh (nt)
-                 endif
-              enddo
-           else
-              do na = 1, nat
-                 if (ityp (na) == nt) ijkb0 = ijkb0 + nh (nt)
-              enddo
-           endif
-        enddo
-        ldos_data%dos_ef = ldos_data%dos_ef + weight * wdelta
-     enddo
-
-  enddo
-  !$acc end data
-  if (doublegrid) then
-     do is = 1, nspin_mag
-        call fft_interpolate (dffts, ldos_data%ldoss (:, is), dfftp, ldos_data%ldos (:, is))
-     enddo
-  else
-     ldos_data%ldos (:,:) = ldos_data%ldoss (:,:)
-  endif
-
-  IF (noncolin.and.okvan) THEN
-     DO nt = 1, ntyp
-        IF ( upf(nt)%tvanp ) THEN
-           DO na = 1, nat
-              IF (ityp(na)==nt) THEN
-                 IF (upf(nt)%has_so) THEN
-                    CALL transform_becsum_so(becsum1_nc,ldos_data%becsum_dos,na)
-                 ELSE
-                    CALL transform_becsum_nc(becsum1_nc,ldos_data%becsum_dos,na)
-                 END IF
-              END IF
-           END DO
-        END IF
-     END DO
-  END IF
-
-  call addusldos (ldos_data%ldos, ldos_data%becsum_dos)
-  !
-  !    Collects partial sums on k-points from all pools
-  !
-  call mp_sum ( ldos_data%ldoss, inter_pool_comm )
-  call mp_sum ( ldos_data%ldos, inter_pool_comm )
-  call mp_sum ( ldos_data%dos_ef, inter_pool_comm )
-  call mp_sum ( ldos_data%becsum_dos, inter_pool_comm )
-  !check
-  !      check =0.d0
-  !      do is=1,nspin_mag
-  !         call fwfft('Rho',ldos(:,is),dfftp)
-  !         check = check + omega* DBLE(ldos(nl(1),is))
-  !         call invfft('Rho',ldos(:,is),dfftp)
-  !      end do
-  !      WRITE( stdout,*) ' check ', check, dos_ef
-  !check
-  !
-  IF (noncolin) deallocate(becsum1_nc)
-  call deallocate_bec_type_acc(becp)
-  !$acc exit data detach(evc) delete(nl_d)
-  !
-  ! For non-PAW calculations, becsum_dos is not needed anymore so deallocate it.
-  IF (.NOT. okpaw) DEALLOCATE(ldos_data%becsum_dos)
-  !
-  call stop_clock ('localdos_cond')
-  return
-end subroutine localdos_cond
 !
 SUBROUTINE sternheimer_kernel_twochem(first_iter, time_reversed, npert, lrdvpsi, iudvpsi, &
          thresh, dvscfins, all_conv, avg_iter, drhoout, dbecsum, dbecsum_nc, &
@@ -796,6 +495,10 @@ SUBROUTINE sternheimer_kernel_twochem(first_iter, time_reversed, npert, lrdvpsi,
 END SUBROUTINE sternheimer_kernel_twochem
 !
 SUBROUTINE allocate_twochem(npe, nsolv)
+   !
+   ! allocate arrays for twochem calculation
+   ! NOTE: also computes local dos
+   !
    USE fft_base,             ONLY : dfftp, dffts
    USE ions_base,            ONLY : nat
    USE uspp_param,           ONLY : nhm
@@ -803,6 +506,8 @@ SUBROUTINE allocate_twochem(npe, nsolv)
    USE paw_variables,        ONLY : okpaw
    USE noncollin_module,     ONLY : noncolin, nspin_mag
    USE dfpt_type,            ONLY : allocate_dfpt_ldos
+   USE localdos_mod,         ONLY : localdos_new
+   USE ener,                 ONLY : ef_cond
    !
    IMPLICIT NONE
    !
@@ -813,7 +518,9 @@ SUBROUTINE allocate_twochem(npe, nsolv)
    allocate (drhop_cond ( dfftp%nnr, nspin_mag , npe))
    allocate (dbecsum_cond ( (nhm * (nhm + 1))/2 , nat , nspin_mag , npe))
    CALL allocate_dfpt_ldos(ldos_cond_data)
-   CALL localdos_cond(ldos_cond_data)
+   !
+   CALL localdos_new(ldos_cond_data, ef_cond)
+   !
 END SUBROUTINE allocate_twochem
 !
 SUBROUTINE deallocate_twochem
