@@ -412,25 +412,6 @@ if(BLAS_FOUND
       endforeach()
     endif()
   endif()
-
-  # Fujitsu scalapack
-  if(BLA_VENDOR MATCHES "Fujitsu")
-    if(NOT QE_ENABLE_OPENMP)
-	    message(FATAL_ERROR "The Fujitsu Scalapack library "
-		    "requires setting QE_ENABLE_OPENMP to work.")
-    endif()
-    check_scalapack_libraries(
-      SCALAPACK_LIBRARIES
-      SCALAPACK
-      pdgemm
-      ""
-      "scalapack" # scalapack lib to look for
-      "${LAPACK_LIBRARIES};${BLAS_LIBRARIES}" # blas and lapack libs
-      "${MPI_Fortran_LIBRARIES}" # mpi libs
-      "${OpenMP_Fortran_FLAGS}" # threads libs
-      )
-  endif()
-  
   # vanilla SCALAPACK library
   if(NOT SCALAPACK_LIBRARIES)
     check_scalapack_libraries(
