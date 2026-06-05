@@ -5,11 +5,213 @@
 ! in the root directory of the present distribution,
 ! or http://www.gnu.org/copyleft/gpl.txt .
 !
-!-----------------------------------------------------------------------
-subroutine incdrhoscf_nc (drhoscf, weight, ik, dbecsum, dpsi, rsign)
+MODULE incdrhoscf_mod
+  !
+  PRIVATE
+  PUBLIC :: incdrhoscf, incdrhoscf_nc
+  !
+CONTAINS
+  !-----------------------------------------------------------------------
+  subroutine incdrhoscf (drhoscf, weight, ik, dbecsum, dpsi, firstband)
   !-----------------------------------------------------------------------
   !
-  !     Non-colinear version of incdrhoscf_nc
+  !!     This routine computes the change of the charge density due to the
+  !!     perturbation. It is called at the end of the computation of the
+  !!     change of the wavefunction for a given k point.
+  !
+  USE kinds,                ONLY : DP
+  USE cell_base,            ONLY : omega
+  USE ions_base,            ONLY : nat
+  USE fft_base,             ONLY : dffts
+  USE fft_interfaces,       ONLY : invfft
+  USE wvfct,                ONLY : npwx, nbnd
+  USE uspp_param,           ONLY : nhm
+  USE wavefunctions,        ONLY : evc
+  USE klist,                ONLY : ngk,igk_k
+  USE qpoint,               ONLY : ikks, ikqs
+  USE control_lr,           ONLY : nbnd_occ
+  USE mp_bands,             ONLY : me_bgrp, inter_bgrp_comm, ntask_groups
+  USE mp,                   ONLY : mp_sum
+  USE fft_helper_subroutines
+
+  IMPLICIT NONE
+  !
+  ! I/O variables
+  INTEGER, INTENT (IN) :: ik
+  !! input: the k point
+  REAL(DP), INTENT (IN) :: weight
+  !! input: the weight of the k point
+  COMPLEX(DP), INTENT (IN) :: dpsi (npwx,nbnd)
+  !! input: the perturbed wfc for the given k point
+  COMPLEX(DP), INTENT (INOUT) :: drhoscf (dffts%nnr)
+  !! input/output: the accumulated change to the charge density
+  COMPLEX(DP), INTENT (INOUT) :: dbecsum (nhm*(nhm+1)/2,nat)
+  !! input/output: the accumulated change to dbecsum
+  INTEGER, INTENT(IN), OPTIONAL :: firstband
+  !! input: first band if not 1 (for two chemical potentials calculations)
+  !
+  !   here the local variables
+  !
+  REAL(DP) :: wgt
+  ! the effective weight of the k point
+
+  COMPLEX(DP), ALLOCATABLE :: psi (:), dpsic (:)
+  ! the wavefunctions in real space
+  ! the change of wavefunctions in real space
+  COMPLEX(DP), ALLOCATABLE :: tg_psi(:), tg_dpsi(:), tg_drho(:)
+
+  INTEGER :: npw, npwq, ikk, ikq, itmp
+  INTEGER :: nb1, ibnd, ir, ig, incr
+  INTEGER :: right_inc, ntgrp, v_siz, idx, ioff, ioff_tg, nxyp
+  ! counters
+  !
+  CALL start_clock ('incdrhoscf')
+  !
+  nb1 = 1
+  IF ( PRESENT(firstband) ) THEN
+     nb1 = firstband
+  END IF
+  !
+  wgt = 2.d0 * weight / omega
+  ikk = ikks(ik)
+  ikq = ikqs(ik)
+  npw = ngk(ikk)
+  npwq= ngk(ikq)
+  incr = 1
+  !
+  ! dpsi contains the   perturbed wavefunctions of this k point
+  ! evc  contains the unperturbed wavefunctions of this k point
+  !
+  IF ( dffts%has_task_groups ) THEN
+     !
+     ! calculation with task groups (no GPU acceleration)
+     !
+     v_siz = dffts%nnr_tg
+     !
+     ALLOCATE( tg_psi( v_siz ) )
+     ALLOCATE( tg_dpsi( v_siz ) )
+     ALLOCATE( tg_drho( v_siz ) )
+     !
+     incr = fftx_ntgrp(dffts)
+     !
+     do ibnd = nb1, nbnd_occ(ikk), incr
+        !
+        tg_drho=(0.0_DP, 0.0_DP)
+        tg_psi=(0.0_DP, 0.0_DP)
+        tg_dpsi=(0.0_DP, 0.0_DP)
+        !
+        ioff   = 0
+        CALL tg_get_recip_inc( dffts, right_inc )
+        ntgrp = fftx_ntgrp( dffts )
+        !
+        DO idx = 1, ntgrp
+           !
+           ! ... dtgs%nogrp ffts at the same time. We prepare both
+           ! evc (at k) and dpsi (at k+q)
+           !
+           IF( idx + ibnd - 1 <= nbnd_occ(ikk) ) THEN
+              !
+              DO ig = 1, npw
+                 tg_psi( dffts%nl( igk_k( ig,ikk ) ) + ioff ) = evc( ig, idx+ibnd-1 )
+              END DO
+              DO ig = 1, npwq
+                 tg_dpsi( dffts%nl( igk_k( ig,ikq ) ) + ioff ) = dpsi( ig, idx+ibnd-1 )
+              END DO
+              !
+           END IF
+           !
+           ioff = ioff + right_inc
+           !
+        END DO
+        CALL invfft ('tgWave', tg_psi, dffts)
+        CALL invfft ('tgWave', tg_dpsi, dffts)
+
+        do ir = 1, dffts%nr1x * dffts%nr2x * dffts%my_nr3p
+           tg_drho (ir) = tg_drho (ir) + wgt * CONJG(tg_psi (ir) ) *  tg_dpsi (ir)
+        enddo
+        !
+        ! reduce the group charge (equivalent to sum over bands of the
+        ! orbital group)
+        !
+        CALL tg_reduce_rho( drhoscf, tg_drho, dffts )
+        !
+     end do
+     !
+     DEALLOCATE(tg_psi)
+     DEALLOCATE(tg_dpsi)
+     DEALLOCATE(tg_drho)
+     !
+  ELSE
+     !
+     ! Default calculation, OpenACC-enabled for GPU execution
+     !
+     ALLOCATE(dpsic(dffts%nnr))
+     ALLOCATE(psi(dffts%nnr))
+     !
+     !$acc data present_or_copyin(dpsi) present_or_copy(drhoscf) &
+     !$acc      create(psi,dpsic) present(igk_k)
+     !
+     do ibnd = nb1, nbnd_occ(ikk), incr
+        !
+        ! Initialize psi and dpsic
+        !
+        !$acc kernels 
+        psi (:) = (0.d0, 0.d0)
+        dpsic(:) = (0.d0, 0.d0)
+        !$acc end kernels
+        !
+        !$acc parallel loop present(dffts,dffts%nl)
+        do ig = 1, npw
+           itmp = dffts%nl (igk_k(ig,ikk) )
+           psi (itmp ) = evc (ig, ibnd)
+        enddo
+        !$acc parallel loop present(dffts,dffts%nl)
+        do ig = 1, npwq
+           itmp = dffts%nl (igk_k(ig,ikq) )
+           dpsic ( itmp ) = dpsi (ig, ibnd)
+        enddo
+        !
+        ! FFT to R-space of the unperturbed/perturbed wfcts psi/dpsi
+        !
+        !$acc host_data use_device(psi)
+        CALL invfft ('Wave', psi, dffts)
+        !$acc end host_data
+        !$acc host_data use_device(dpsic)
+        CALL invfft ('Wave', dpsic, dffts)
+        !$acc end host_data
+        !
+        ! Calculation of the response charge-density
+        !
+        !$acc parallel loop 
+        do ir = 1, dffts%nnr
+           drhoscf (ir) = drhoscf (ir) + wgt * CONJG(psi (ir) ) * dpsic (ir)
+        enddo
+        !
+     enddo ! loop on bands
+     !
+     !$acc end data
+     !
+     DEALLOCATE(psi)
+     DEALLOCATE(dpsic)
+     !
+  ENDIF
+  !
+  ! Ultrasoft contribution
+  ! Calculate dbecsum = <evc|vkb><vkb|dpsi>
+  ! 
+  CALL addusdbec (ik, weight, dpsi, dbecsum)
+  !
+  CALL stop_clock ('incdrhoscf')
+  !
+  RETURN
+  !
+end subroutine incdrhoscf
+!
+!-----------------------------------------------------------------------
+subroutine incdrhoscf_nc (drhoscf, weight, ik, dbecsum, dpsi, rsign, firstband)
+  !-----------------------------------------------------------------------
+  !
+  !!     Non-colinear version of incdrhoscf_nc
   !
   USE kinds,                ONLY : DP
   USE cell_base,            ONLY : omega
@@ -34,15 +236,19 @@ subroutine incdrhoscf_nc (drhoscf, weight, ik, dbecsum, dpsi, rsign)
   !
   ! I/O variables
   INTEGER, INTENT(IN) :: ik
-  ! input: the k point
+  !! input: the k point
   REAL(DP), INTENT(IN) :: weight
+  !! input: the weight of the k point
   REAL(DP), INTENT(IN) :: rsign
-  ! input: the weight of the k point
-  ! the sign in front of the response of the magnetization density
+  !! the sign in front of the response of the magnetization density
   COMPLEX(DP), INTENT(IN) :: dpsi(npwx*npol,nbnd)
-  ! input: the perturbed wfcs at the given k point
-  COMPLEX(DP), INTENT(INOUT) :: drhoscf (dffts%nnr,nspin_mag), dbecsum (nhm,nhm,nat,nspin)
-  ! input/output: the accumulated change of the charge density and dbecsum
+  !! input: the perturbed wfcs at the given k point
+  COMPLEX(DP), INTENT(INOUT) :: drhoscf (dffts%nnr,nspin_mag)
+  !! input/output: the accumulated change of the charge density
+  COMPLEX(DP), INTENT(INOUT) :: dbecsum (nhm,nhm,nat,nspin)
+  ! input/output: the accumulated change of dbecsum
+  INTEGER, INTENT(IN), OPTIONAL :: firstband
+  !! input: first band if not 1 (for two chemical potentials calculations)
   !
   !   here the local variables
   !
@@ -56,13 +262,17 @@ subroutine incdrhoscf_nc (drhoscf, weight, ik, dbecsum, dpsi, rsign)
   COMPLEX(DP), ALLOCATABLE :: tg_psi (:,:), tg_dpsi (:,:), tg_drho(:,:)
   !
   INTEGER :: npw, npwq, ikk, ikq, itmp
-  INTEGER :: ibnd, jbnd, ir, ir3, ig, incr, v_siz, idx, ioff, ioff_tg, nxyp
-  INTEGER :: ntgrp, right_inc
+  INTEGER :: nb1, ibnd, jbnd, ir, ig, incr
+  INTEGER :: ntgrp, right_inc, v_siz, idx, ioff, ioff_tg, nxyp
   ! counters
   !
   !
   CALL start_clock ('incdrhoscf')
   !
+  nb1 = 1
+  IF ( PRESENT(firstband) ) THEN
+     nb1 = firstband
+  END IF
   wgt = 2.d0 * weight / omega
   ikk = ikks(ik)
   ikq = ikqs(ik)
@@ -85,7 +295,7 @@ subroutine incdrhoscf_nc (drhoscf, weight, ik, dbecsum, dpsi, rsign)
      !
      incr  = fftx_ntgrp(dffts)
      !
-     do ibnd = 1, nbnd_occ(ikk), incr
+     do ibnd = nb1, nbnd_occ(ikk), incr
         !
         tg_drho=(0.0_DP, 0.0_DP)
         tg_psi=(0.0_DP, 0.0_DP)
@@ -157,7 +367,7 @@ subroutine incdrhoscf_nc (drhoscf, weight, ik, dbecsum, dpsi, rsign)
      !$acc data present_or_copyin(dpsi) present_or_copy(drhoscf) &
      !$acc      create(psi,dpsic) present(igk_k)
      !
-     do ibnd = 1, nbnd_occ(ikk), incr
+     do ibnd = nb1, nbnd_occ(ikk), incr
         !
         ! Initialize psi and dpsic
         !
@@ -230,3 +440,5 @@ subroutine incdrhoscf_nc (drhoscf, weight, ik, dbecsum, dpsi, rsign)
   RETURN
   !
 end subroutine incdrhoscf_nc
+!
+END MODULE INCDRHOSCF_MOD
