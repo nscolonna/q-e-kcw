@@ -68,11 +68,11 @@ CONTAINS
   !
   ! local variables
   !
-  real(DP) :: weight, w1, wdelta
-  ! weights
+  real(DP) :: weight, w1, wdelta, dos_ef
+  ! weights, DOS(E_F) 
   real(DP), external :: w0gauss
   !
-  integer :: npw, ik, is, ig, ibnd, j, is1, is2, v_siz
+  integer :: npw, ik, ikk, is, ig, ibnd, j, is1, is2, v_siz
   ! counters
   integer :: ios
   ! status flag for i/o
@@ -80,7 +80,8 @@ CONTAINS
   !  initialize ldos and dos_ef
   !
   v_siz = dffts%nnr
-
+  dos_ef = 0.0_dp
+  !
   nb1 = 1
   IF ( PRESENT(firstband) ) THEN
      nb1 = firstband
@@ -98,34 +99,38 @@ CONTAINS
   ldos_data%becsum_dos (:,:,:) = 0.d0
   ldos_data%ldos (:,:) = (0d0, 0.0d0)
   ldos_data%ldoss(:,:) = (0d0, 0.0d0)
-  ldos_data%dos_ef = 0.d0
+  ldos_data%dos_ef = 0.0_dp
+  !
+  ! NB: auxiliary dos_ef variable is used to compute DOS(E_F) on CPU
+  ! NB: instead of ldos_data%dos_ef because !$acc copy(ldos_dat) 
+  ! NB: overwrites it with GPU value at the end of the $acc region
   !
   !  loop over kpoints
   !
-  !$acc data create(psic, psic_nc) copy(ldos_data,ldos_data%ldoss)
+  !$acc data create(psic, psic_nc) copy(ldos_data,ldos_data%ldoss) &
+  !$acc      present(vkb, evc, becp)
   do ik = 1, nksq
-     if (lsda) current_spin = isk (ikks(ik))
-     npw = ngk(ikks(ik))
-     weight = wk (ikks(ik))
+     ikk = ikks(ik)
+     if (lsda) current_spin = isk (ikk)
+     npw = ngk(ikk)
+     weight = wk (ikk)
      !
      ! unperturbed wfs in reciprocal space read from unit iuwfc
      !
      if (nksq > 1) then
-        call get_buffer (evc, lrwfc, iuwfc, ikks(ik))
+        call get_buffer (evc, lrwfc, iuwfc, ikk)
         !$acc update device(evc)
      endif
-     call init_us_2 (npw, igk_k(1,ikks(ik)), xk (1, ikks(ik)), vkb, .true.)
      !
-     !$acc data present(vkb, becp, evc)
+     call init_us_2 (npw, igk_k(1,ikk), xk (1, ikk), vkb, .true.)
      call calbec ( offload_type, npw, vkb, evc, becp)
-     !$acc end data
      !
-     do ibnd = nb1, nbnd_occ (ikks(ik))
+     do ibnd = nb1, nbnd_occ (ikk)
         !
         if(ltetra) then
-           wdelta = dfpt_tetra_delta(ibnd,ikks(ik))
+           wdelta = dfpt_tetra_delta(ibnd,ikk)
         else
-           wdelta = w0gauss ( (ef-et(ibnd,ikks(ik))) / degauss, ngauss) / degauss
+           wdelta = w0gauss ( (ef-et(ibnd,ikk)) / degauss, ngauss) / degauss
         end if
         !
         w1 = weight * wdelta / omega
@@ -138,15 +143,15 @@ CONTAINS
            !$acc end kernels
            !$acc parallel loop present(igk_k, psic_nc, dffts, dffts%nl)
            do ig = 1, npw
-              psic_nc (dffts%nl (igk_k(ig,ikks(ik))), 1 ) = evc (ig, ibnd)
-              psic_nc (dffts%nl (igk_k(ig,ikks(ik))), 2 ) = evc (ig+npwx, ibnd)
+              psic_nc (dffts%nl (igk_k(ig,ikk)), 1 ) = evc (ig, ibnd)
+              psic_nc (dffts%nl (igk_k(ig,ikk)), 2 ) = evc (ig+npwx, ibnd)
            enddo
            !$acc end parallel loop
            !$acc host_data use_device(psic_nc)
            CALL invfft ('Rho', psic_nc(:,1), dffts)
            CALL invfft ('Rho', psic_nc(:,2), dffts)
            !$acc end host_data
-           !$acc parallel loop present(psic_nc, ldos_data%ldoss)
+           !$acc parallel loop present(psic_nc, ldos_data, ldos_data%ldoss)
            do j = 1, v_siz
               ldos_data%ldoss (j, 1) = ldos_data%ldoss (j, 1) + &
                     w1 * ( DBLE(psic_nc(j,1))**2+AIMAG(psic_nc(j,1))**2 + &
@@ -154,7 +159,7 @@ CONTAINS
            enddo
            !$acc end parallel loop
            IF (nspin_mag==4) THEN
-              !$acc parallel loop present(psic_nc, ldos_data%ldoss)
+              !$acc parallel loop present(psic_nc, ldos_data, ldos_data%ldoss)
               DO j = 1, v_siz
               !
                  ldos_data%ldoss(j,2) = ldos_data%ldoss(j,2) + w1*2.0_DP* &
@@ -178,13 +183,13 @@ CONTAINS
            !$acc end kernels
            !$acc parallel loop present(psic,igk_k,dffts,dffts%nl)
            do ig = 1, npw
-              psic (dffts%nl (igk_k(ig,ikks(ik)) ) ) = evc (ig, ibnd)
+              psic (dffts%nl (igk_k(ig,ikk) ) ) = evc (ig, ibnd)
            enddo
            !$acc end parallel loop
            !$acc host_data use_device(psic)
            CALL invfft ('Rho', psic, dffts)
            !$acc end host_data
-           !$acc parallel loop present(ldos_data%ldoss, psic)
+           !$acc parallel loop present(ldos_data, ldos_data%ldoss, psic)
            do j = 1, v_siz
               ldos_data%ldoss (j, current_spin) = ldos_data%ldoss (j, current_spin) + &
                     w1 * ( DBLE ( psic (j) ) **2 + AIMAG (psic (j) ) **2)
@@ -252,7 +257,7 @@ CONTAINS
               enddo
            endif
         enddo
-        ldos_data%dos_ef = ldos_data%dos_ef + weight * wdelta
+        dos_ef = dos_ef + weight * wdelta
      enddo
 
   enddo
@@ -287,8 +292,9 @@ CONTAINS
   !
   call mp_sum ( ldos_data%ldoss, inter_pool_comm )
   call mp_sum ( ldos_data%ldos, inter_pool_comm )
-  call mp_sum ( ldos_data%dos_ef, inter_pool_comm )
   call mp_sum ( ldos_data%becsum_dos, inter_pool_comm )
+  call mp_sum ( dos_ef, inter_pool_comm )
+  ldos_data%dos_ef = dos_ef
   !check
   !      check =0.d0
   !      do is=1,nspin_mag
