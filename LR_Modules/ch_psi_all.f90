@@ -153,7 +153,6 @@ CONTAINS
     !
     USE becmod, ONLY : becp, calbec
     USE control_lr,  ONLY : alpha_pv
-    
     IMPLICIT NONE
     INTEGER :: m_start, m_end
     INTEGER :: k
@@ -219,6 +218,7 @@ CONTAINS
           CALL calbec (offload_type, n, vkb, hpsi, becp, m)
        endif
        CALL stop_clock ('ch_psi_calbec')
+       !$acc wait
     ENDIF ! okvan
     CALL s_psi (npwx, n, m, hpsi, spsi)
     !$acc parallel loop collapse(2)
@@ -251,7 +251,6 @@ CONTAINS
     USE realus, ONLY : real_space, invfft_orbital_gamma, &
                        fwfft_orbital_gamma, calbec_rs_gamma,  s_psir_gamma
     use gvect,  only : gstart
-
     IMPLICIT NONE
     INTEGER :: m_start, m_end ,ntemp
     INTEGER :: ibnd, ig
@@ -311,6 +310,7 @@ CONTAINS
              CALL calbec (offload_type, n, vkb, hpsi, becp, m)
           end if
           CALL stop_clock ('ch_psi_calbec')
+          !$acc wait
        ENDIF ! okvan
        CALL s_psi (npwx, n, m, hpsi, spsi)
     ENDIF
