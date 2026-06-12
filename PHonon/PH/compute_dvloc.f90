@@ -251,6 +251,4 @@ subroutine compute_dvloc_cc (uact, dvlocin)
   DEALLOCATE(nlp_d)
 #endif
   !
-  call stop_clock ('com_dvloc')
-  !
 end subroutine compute_dvloc_cc
