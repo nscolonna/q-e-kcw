@@ -355,6 +355,7 @@ SUBROUTINE lr_apply_liouvillian( evc1, evc1_new, interaction )
   DEALLOCATE(spsi1)
   DEALLOCATE(sevc1_new)
   !
+  !$acc wait
   IF (interaction)      CALL stop_clock('lr_apply_int')
   IF (.not.interaction) CALL stop_clock('lr_apply_no')
   !
@@ -582,6 +583,7 @@ CONTAINS
           !
        ENDIF
        !
+       !$acc wait
        CALL stop_clock('interaction')
        !
     ENDIF
