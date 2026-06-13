@@ -29,6 +29,10 @@ default :
 prolog :
 	@sed "s|XXXXXX|$(ESPRESSO_ROOT)|g" < userconfig.tmp > userconfig
 	@if ! test -d $(ESPRESSO_TMPDIR); then mkdir $(ESPRESSO_TMPDIR); fi
+	@if ! test -f ph_multipole/ph.in.01; then touch ph_multipole/ph.in.01 ; fi
+	@if ! test -f ph_multipole/ph.in.02; then touch ph_multipole/ph.in.02 ; fi
+	@if ! test -f ph_multipole/ph.in.03; then touch ph_multipole/ph.in.03 ; fi
+	@if ! test -f ph_multipole/ph.in.04; then touch ph_multipole/ph.in.04 ; fi
 
 pseudo :
 	@./check_pseudo.sh pw_

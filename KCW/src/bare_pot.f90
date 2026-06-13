@@ -117,26 +117,25 @@ SUBROUTINE bare_pot ( rhor, rhog, vh_rhog, delta_vr, delta_vg, iq, delta_vr_, de
   !
   IF (.NOT. lrpa) THEN 
     ALLOCATE ( rhor_(dffts%nnr,nspin_mag) )
-!GPU    !$acc enter data create(rhor_)
-!GPU    !$acc kernels present(rhor_)
+    !$acc enter data create(rhor_)
+    !$acc kernels present(rhor_)
     rhor_ = CMPLX(0.D0,0.D0,kind=DP)
-!GPU    !$acc end kernels
+    !$acc end kernels
     IF (nspin_mag == 4) THEN
-!GPU      !$acc kernels present(rhor_)
+      !$acc kernels present(rhor_)
       rhor_=rhor/omega
-!GPU      !$acc end kernels
+      !$acc end kernels
     ELSE
-!GPU      !$acc kernels present(rhor_)
+      !$acc kernels present(rhor_)
       rhor_(:,spin_component) = rhor(:,1)/omega
-!GPU      !$acc end kernels
+      !$acc end kernels
     ENDIF
-!GPU    !$acc enter data copyin(dmuxc) 
-!GPU    !$acc kernels 
-      delta_vr = (0.0_dp, 0.0_dp)
-!GPU    !$acc end kernels  
+    !$acc enter data copyin(dmuxc) 
+    !$acc kernels 
+     delta_vr = (0.0_dp, 0.0_dp)
+    !$acc end kernels  
     CALL dv_of_drho_xc(delta_vr, rhor_) !!JA ON GPU
-    !$acc update device(delta_vr)
-!GPU    !$acc exit data delete(rhor_, dmuxc)
+    !$acc exit data delete(rhor_, dmuxc)
     DEALLOCATE (rhor_)
     !$acc kernels 
     delta_vr_ = delta_vr 
