@@ -93,9 +93,9 @@ subroutine solve_linter_koop ( spin_ref, i_ref, delta_vr, drhog_scf, delta_vg, d
               aux(:)           !  
   INTEGER :: nrec
   !
-  COMPLEX(DP), POINTER ::  dvscfin(:,:,:), dvscfins (:,:,:)
-  ! change of the scf potential,  change of the scf potential (smooth part only)
-  REAL(DP), ALLOCATABLE :: becsum1(:,:,:)
+  COMPLEX(DP), ALLOCATABLE, target :: dvscfin(:,:,:)
+  ! change of the scf potential 
+  COMPLEX(DP), pointer :: dvscfins (:,:,:)
   !
   LOGICAL :: lmetq0,     & ! true if xq=(0,0,0) in a metal
              all_conv,   & ! true if the Linear system converged for all the bands and k-points
