@@ -132,17 +132,21 @@ subroutine solve_linter_koop ( spin_ref, i_ref, delta_vr, drhog_scf, delta_vg, d
   !
   nnr = dfftp%nnr
   IF (doublegrid) THEN
-     ALLOCATE (dvscfins (dffts%nnr , nspin_mag , 1))
-    !$acc enter data create(dvscfins)
-    !$acc kernels present(dvscfins)
+    ALLOCATE (dvscfins (dffts%nnr , nspin_mag , 1))
     dvscfins(:,:,:) = (0.D0, 0.D0)
-    !$acc end kernels
+    !$acc enter data copyin(dvscfins)
+!    !$acc enter data create(dvscfins)
+!    !$acc kernels present(dvscfins)
+!    dvscfins(:,:,:) = (0.D0, 0.D0)
+!    !$acc end kernels
   ELSE
     ALLOCATE (dvscfin (dfftp%nnr, nspin_mag, 1)) 
-    !$acc enter data create(dvscfin)
-    !$acc kernels present(dvscfin)
     dvscfin(:,:,:) = (0.D0, 0.D0)
-    !$acc end kernels
+     !$acc enter data copyin(dvscfin)
+!    !$acc enter data create(dvscfin)
+!    !$acc kernels present(dvscfin)
+!    dvscfin(:,:,:) = (0.D0, 0.D0)
+!    !$acc end kernels
   ENDIF
   !
   ALLOCATE (drhoscf  (dffts%nnr, nspin_mag))
