@@ -217,6 +217,7 @@ CONTAINS
        CALL calbec (offload_type, n, vkb, hpsi, becp, m)
     endif
     CALL stop_clock ('ch_psi_calbec')
+    !$acc wait
     CALL s_psi (npwx, n, m, hpsi, spsi)
     !$acc parallel loop collapse(2) present(ah, spsi)
     DO ibnd = 1, m
