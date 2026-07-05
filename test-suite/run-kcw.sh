@@ -9,9 +9,8 @@
 # of the present distribution.
 
 if [[ "$QE_USE_MPI" != "" ]]; then
-  export PARA_PREFIX="srun -n $QE_USE_MPI"
-  #export PARA_SUFFIX="-npool $QE_USE_MPI"
-  export PARA_SUFFIX="-npool"
+  export PARA_PREFIX="mpirun -np $QE_USE_MPI"
+  export PARA_SUFFIX="-npool $QE_USE_MPI"
 else
   unset PARA_PREFIX
   unset PARA_SUFFIX

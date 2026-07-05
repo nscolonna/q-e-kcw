@@ -73,7 +73,7 @@ SUBROUTINE reset_symmetry_op(iwann)
   ! ... Here we re-order all rotations in such a way that true sym.ops
   ! are the first nsym; rotations that are not sym.ops. follow
   nsym = copy_sym( nrot, sym )
-  WRITE(stdout,'(8X, "SYM : number of symmetry for iwann =", I5, " :", I5, 3x "(out of ", I5, " )")') iwann, nsym, nrot
+  WRITE(stdout,'(8X, "SYM : number of symmetry for iwann =", I5, " :", I5, 3x, "(out of ", I5, " )")') iwann, nsym, nrot
   !
   ! ... check if inversion (I) is a symmetry.
   ! If so, it should be the (nsym/2+1)-th operation of the group

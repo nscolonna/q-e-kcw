@@ -25,7 +25,6 @@ SUBROUTINE bare_pot ( rhor, rhog, vh_rhog, delta_vr, delta_vg, iq, delta_vr_, de
   USE gvect,                ONLY : g
   USE qpoint,               ONLY : xq
   USE constants,            ONLY : e2, fpi
-  USE eqv,                  ONLY : dmuxc
   USE control_lr,           ONLY : lrpa
   USE martyna_tuckerman,    ONLY : wg_corr_h, do_comp_mt
   USE io_global,            ONLY : stdout
@@ -130,12 +129,13 @@ SUBROUTINE bare_pot ( rhor, rhog, vh_rhog, delta_vr, delta_vg, iq, delta_vr_, de
       rhor_(:,spin_component) = rhor(:,1)/omega
       !$acc end kernels
     ENDIF
-    !$acc enter data copyin(dmuxc) 
-    !$acc kernels 
+    !$acc kernels
      delta_vr = (0.0_dp, 0.0_dp)
-    !$acc end kernels  
+    !$acc end kernels
+    ! NOTE: dmuxc is invariant and kept resident on the device
+    ! (see kcw_setup_ham.f90 / kcw_q_setup.f90), so no enter/exit data here.
     CALL dv_of_drho_xc(delta_vr, rhor_) !!JA ON GPU
-    !$acc exit data delete(rhor_, dmuxc)
+    !$acc exit data delete(rhor_)
     DEALLOCATE (rhor_)
     !$acc kernels 
     delta_vr_ = delta_vr 

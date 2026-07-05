@@ -98,7 +98,6 @@ SUBROUTINE alpha_corr ( iwann, delta)
       USE mp_bands,              ONLY : intra_bgrp_comm
       USE buffers,               ONLY : get_buffer
       USE mp,                    ONLY : mp_sum
-      USE eqv,                   ONLY : dmuxc
       USE gvecs,                 ONLY : ngms
       USE noncollin_module,      ONLY : domag, noncolin, m_loc, angle1, angle2, &
                                         ux, nspin_lsda, nspin_gga, nspin_mag, npol
@@ -130,6 +129,10 @@ SUBROUTINE alpha_corr ( iwann, delta)
       CALL v_xc( rho, rho_core, rhog_core, etxc, vtxc, vxc )
       en = etxc*nkstot_eff
       !
+      ! vxc does not change inside the k-point loop below: keep it resident
+      ! on the device instead of shuttling evc_r back to the host every ik.
+      !$acc enter data copyin(vxc)
+      !
       ! The xc contribution to the expertation value of the DFT Ham on the Wann function
       ! eig = \sum_k <u_nk | vxc[\rho] u_nk > (A part from prefactors that needs to be checked 
       ! throughout the code .... )
@@ -149,17 +152,28 @@ SUBROUTINE alpha_corr ( iwann, delta)
         !
         !$acc enter data copyin(evc_g) create(evc_r)
         CALL invfft_wave (npwx, npw, igk_k (1,ik), evc_g , evc_r )
-        !$acc exit data copyout(evc_r) delete(evc_g)
         !! The wfc in R-space at k
+        ! Reduce on the device: only the scalar eig_k needs to reach the
+        ! host, so evc_r never has to be copied back (it was previously
+        ! copyout'd in full just to run this sum on the CPU).
+        eig_k = 0.D0
         IF (nspin_mag==2) THEN
-            eig_k = sum ( vxc(:,spin_component) * evc_r(:,1) * CONJG(evc_r(:,1) ) ) !check the (:,->1)
+          !$acc parallel loop present(vxc, evc_r) reduction(+:eig_k)
+          DO ir = 1, dffts%nnr
+            eig_k = eig_k + vxc(ir,spin_component) * REAL(evc_r(ir,1) * CONJG(evc_r(ir,1)), KIND=DP)
+          END DO
         ELSE
-            eig_k = sum ( vxc(:,1) * (evc_r(:,1) * CONJG(evc_r(:,1) )+evc_r(:,2) * CONJG(evc_r(:,2)))) + & 
-                    sum ( vxc(:,2) * (conjg(evc_r(:,1))*evc_r(:,2) + conjg(evc_r(:,2))*evc_r(:,1))) + & 
-                    sum ( vxc(:,3) * (-CMPLX(0.D0,1.D0, kind=DP) * conjg(evc_r(:,1))*evc_r(:,2) & 
-                                     + CMPLX(0.D0,1.D0, kind=DP) * conjg(evc_r(:,2))*evc_r(:,1))) + & 
-                    sum ( vxc(:,4) * ( conjg(evc_r(:,1))*evc_r(:,1) - conjg(evc_r(:,2))*evc_r(:,2)))
+          !$acc parallel loop present(vxc, evc_r) reduction(+:eig_k)
+          DO ir = 1, dffts%nnr
+            eig_k = eig_k &
+                  + vxc(ir,1) * REAL(evc_r(ir,1)*CONJG(evc_r(ir,1)) + evc_r(ir,2)*CONJG(evc_r(ir,2)), KIND=DP) &
+                  + vxc(ir,2) * REAL(CONJG(evc_r(ir,1))*evc_r(ir,2) + CONJG(evc_r(ir,2))*evc_r(ir,1), KIND=DP) &
+                  + vxc(ir,3) * REAL(-CMPLX(0.D0,1.D0,KIND=DP)*CONJG(evc_r(ir,1))*evc_r(ir,2) &
+                                     + CMPLX(0.D0,1.D0,KIND=DP)*CONJG(evc_r(ir,2))*evc_r(ir,1), KIND=DP) &
+                  + vxc(ir,4) * REAL(CONJG(evc_r(ir,1))*evc_r(ir,1) - CONJG(evc_r(ir,2))*evc_r(ir,2), KIND=DP)
+          END DO
         END IF
+        !$acc exit data delete(evc_r, evc_g)
         eig_k = eig_k/( dffts%nr1*dffts%nr2*dffts%nr3 )
         CALL mp_sum (eig_k, intra_bgrp_comm) 
         eig = eig + eig_k
@@ -169,8 +183,9 @@ SUBROUTINE alpha_corr ( iwann, delta)
       eig = eig/(nkstot_eff)
       !
       ! The kernel term (as in bare_pot.f90, but only xc contribution)
+      ! NOTE: dmuxc is invariant across calls and kept resident on the device
+      ! (see kcw_setup_ham.f90 / kcw_q_setup.f90), so no enter/exit data here.
       !
-      !$acc enter data copyin(dmuxc)
       DO iq = 1, nqstot
         !
         lrrho=num_wann * dffts%nnr * nrho
@@ -237,9 +252,9 @@ SUBROUTINE alpha_corr ( iwann, delta)
         CALL mp_sum (krnl_q, intra_bgrp_comm)
         krnl = krnl + krnl_q/nqstot
       ENDDO
-      !$acc exit data delete(dmuxc)
       !
       DEALLOCATE ( rho_wann_g , delta_vg, aux )
+      !$acc exit data delete(vxc)
       DEALLOCATE ( vxc )
       DEALLOCATE ( evc_g, evc_r )
       DEALLOCATE ( rhowann, rhor, delta_vr) 

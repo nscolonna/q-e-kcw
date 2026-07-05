@@ -126,6 +126,7 @@ subroutine kcw_setup_ham
     allocate (dmuxc ( dfftp%nnr , nspin_mag, nspin_mag))
     dmuxc = 0.d0
     CALL setup_dmuxc()
+    !$acc enter data copyin(dmuxc)
     ! Setup all gradient correction stuff
     CALL setup_dgc()
     CALL kcw_R_points ()

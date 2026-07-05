@@ -55,6 +55,7 @@ subroutine kcw_q_setup
   USE symm_base,        ONLY : time_reversal
   USE control_flags,    ONLY : noinv
   USE noncollin_module,  ONLY : domag, noncolin, m_loc, angle1, angle2, ux, nspin_lsda, nspin_gga, nspin_mag, npol
+  USE eqv,              ONLY : dmuxc
   !
   IMPLICIT NONE
   !
@@ -90,6 +91,7 @@ subroutine kcw_q_setup
   ! 3) Computes the derivative of the XC potential
   !
   call setup_dmuxc()
+  !$acc enter data copyin(dmuxc)
   !
   ! Setup all gradient correction stuff
   !

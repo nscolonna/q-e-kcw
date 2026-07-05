@@ -36,7 +36,10 @@ SUBROUTINE kcw_deallocate_q()
   !
   if (allocated(dvpsi))     deallocate (dvpsi)
   if (allocated(dpsi))      deallocate ( dpsi)
-  if (allocated(dmuxc))     deallocate (dmuxc)
+  if (allocated(dmuxc))     then
+     !$acc exit data delete(dmuxc)
+     deallocate (dmuxc)
+  endif
   if (allocated(nbnd_occ))  deallocate (nbnd_occ)
   if (allocated(ikks))      deallocate (ikks)
   if (allocated(ikqs))      deallocate (ikqs)
