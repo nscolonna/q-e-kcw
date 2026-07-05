@@ -79,8 +79,10 @@ SUBROUTINE rotate_ks ()
      !
      npw = ngk(ik)
      !
-     CALL get_buffer ( evc, nwordwfc, iuwfc, ik ) 
-     !$acc update device(evc)
+     CALL get_buffer ( evc, nwordwfc, iuwfc, ik )
+     ! NOTE: evc is only consumed on the host in this routine (apply_u_matrix
+     ! is plain host code, and ks_hamiltonian is given evc0, not evc), so no
+     ! device copy of evc is needed here.
      !
      IF ( nkb > 0 ) CALL init_us_2( npw, igk_k(1,ik), xk(1,ik), vkb )
      !

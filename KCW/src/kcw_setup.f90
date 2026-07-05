@@ -244,6 +244,11 @@ subroutine kcw_setup
   !
   CALL bcast_wfc ( igk_k_all, ngk_all )
   !
+  ! igk_k_all does not change across the q-point loop below (it is only
+  ! read inside rho_of_q), so keep a single device-resident copy instead
+  ! of re-uploading it on every call to rho_of_q.
+  !$acc enter data copyin(igk_k_all)
+  !
   !DEALLOCATE ( nbnd_occ )  ! otherwise allocate_ph complains: FIXME
   !
   call setup_coulomb()
@@ -439,6 +444,7 @@ subroutine kcw_setup
     !
   ENDDO
   !$acc exit data delete(rhor, rhog, delta_vg, vh_rhog, delta_vg_, delta_vr, delta_vr_)
+  !$acc exit data delete(igk_k_all)
 
   !
   IF (kcw_iverbosity .gt. 1) THEN

@@ -85,11 +85,12 @@ SUBROUTINE rho_of_q (rhowann, ngk_all, igk_k_all)
   ELSE
     nkstot_eff = nkstot/nspin
   ENDIF
-  !$acc enter data create(rhowann, evc_k_g, evc_k_r, evc_kq_g, evc_kq_r, phase) 
+  !$acc enter data create(rhowann, evc_k_g, evc_k_r, evc_kq_g, evc_kq_r, phase)
   !$acc kernels present(rhowann)
   rhowann(:,:,:)=ZERO
   !$acc end kernels
-  !$acc enter data copyin(igk_k_all)
+  ! NOTE: igk_k_all is invariant across q-points and kept resident on the
+  ! device by the caller (kcw_setup.f90), so no enter/exit data here.
   DO ik = 1, nks
     ! CHECK: Need to understand/think more about pool parallelization
     ! what happen if k+q is outside the pool??
@@ -156,9 +157,8 @@ SUBROUTINE rho_of_q (rhowann, ngk_all, igk_k_all)
        evc_k_g(:) =  evc0(:,iband)
        !$acc update device(evc_k_g)
       !! !$acc enter data copyin(evc_k_g) create(evc_k_r)
-       !$acc kernels present(evc_k_r)
-       evc_k_r(:,:) = ZERO
-       !$acc end kernels
+       ! invfft_wave zeroes evc_r itself as its first statement, so no need
+       ! to zero evc_k_r here beforehand.
        CALL invfft_wave (npwx, npw_k, igk_k (1,ik), evc_k_g , evc_k_r )
     !!   !$acc exit data copyout(evc_k_r) delete(evc_k_g)
        !! ... The wfc in R-space at k
@@ -167,9 +167,7 @@ SUBROUTINE rho_of_q (rhowann, ngk_all, igk_k_all)
        evc_kq_g = evc0_kq(:,iband)
        !$acc update device(evc_kq_g)
       !! !$acc enter data copyin(evc_kq_g) create(evc_kq_r)
-       !$acc kernels present(evc_kq_r)
-       evc_kq_r(:,:) = ZERO
-       !$acc end kernels     
+       ! Same here: invfft_wave zeroes evc_kq_r itself.
        CALL invfft_wave (npwx, npw_kq, igk_k_all (1,ikq), evc_kq_g , evc_kq_r )
      !!  !$acc exit data copyout(evc_kq_r) delete(evc_kq_g)
        ! ... The wfc in R-space at k' <-- k+q where k' = (k+q)-G_bar
@@ -220,8 +218,7 @@ SUBROUTINE rho_of_q (rhowann, ngk_all, igk_k_all)
     ENDDO ! bands
     ! 
   ENDDO ! kpoints
-  !$acc exit data delete(igk_k_all)
-  !$acc exit data copyout(rhowann) delete(evc_k_g, evc_k_r, evc_kq_g, evc_kq_r, phase) 
+  !$acc exit data copyout(rhowann) delete(evc_k_g, evc_k_r, evc_kq_g, evc_kq_r, phase)
   DEALLOCATE( evc0_kq, evc_k_g, evc_k_r, phase, evc_kq_g, evc_kq_r)
   !
   CALL mp_sum( rhowann, inter_pool_comm )
