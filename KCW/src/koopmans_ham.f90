@@ -519,6 +519,7 @@ SUBROUTINE koopmans_ham ()
     !
     ALLOCATE ( rhog (ngms,nrho) , delta_vg(ngms,nspin_mag), vh_rhog(ngms), delta_vg_(ngms,nspin_mag) )
     !$acc enter data create(rhor, rhog, vh_rhog, delta_vr, delta_vr_, delta_vg, delta_vg_)
+    !$acc enter data create(phase)
     !
     deltaH = CMPLX(0.D0,0.D0,kind=DP)
     rho_r_nm = CMPLX(0.D0,0.D0,kind=DP)
@@ -554,9 +555,12 @@ SUBROUTINE koopmans_ham ()
         ! xk(:,ikq)+G_bar = xk(:,k+q)
         ! see compute_map_ikq_single.f90  
         phase(:) = 0.D0
-        CALL calculate_phase(g_vect, phase) 
+        CALL calculate_phase(g_vect, phase)
         ! Calculate the phase associated to the k+q-> ikq map: exp[ -i(G_bar * r) ]
       END IF
+      ! phase only depends on iq, not on iwann/jwann: upload it once here
+      ! instead of re-copying it in/out on every iwann iteration below.
+      !$acc update device(phase)
       !
       evc0_kq = CMPLX(0.D0,0.D0,kind=DP)
       lrwfc = num_wann * npwx * npol
@@ -581,9 +585,9 @@ SUBROUTINE koopmans_ham ()
          !$acc exit data delete(evc_k_g)
          !! The wfc R=0 n=iwann in R-space at k
          !
-         !DO jwann = iwann+1, num_wann 
-         !$acc enter data create(evc_kq_r, rho_r_nm, rho_g_nm, aux) copyin(phase)
-         DO jwann = iwann, num_wann 
+         !DO jwann = iwann+1, num_wann
+         !$acc enter data create(evc_kq_r, rho_r_nm, rho_g_nm, aux)
+         DO jwann = iwann, num_wann
             !
             IF (.NOT. off_diag .AND. jwann /= iwann) CYCLE 
             !
@@ -714,8 +718,8 @@ SUBROUTINE koopmans_ham ()
             deltaH(jwann,iwann) = CONJG(deltaH(iwann,jwann))
             !
          ENDDO ! jwann
-         !$acc exit data delete(evc_kq_r, rho_r_nm, rho_g_nm, aux, phase)
-         !$acc exit data delete(evc_k_r) 
+         !$acc exit data delete(evc_kq_r, rho_r_nm, rho_g_nm, aux)
+         !$acc exit data delete(evc_k_r)
          ! 
          !
       ENDDO ! iwann
@@ -724,6 +728,7 @@ SUBROUTINE koopmans_ham ()
       !    
     ENDDO ! qpoints
     !$acc exit data delete(rhor, rhog, delta_vg, vh_rhog, delta_vg_, delta_vr, delta_vr_)
+    !$acc exit data delete(phase)
 
     !WRITE( stdout, '(5X,"INFO: KC HAMILTONIAN CALCULATION ik= ", i4, " ... DONE")') ik
     !
