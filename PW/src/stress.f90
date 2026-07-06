@@ -165,9 +165,13 @@ SUBROUTINE stress( sigma )
   !
   sigmael(:,:)=0.d0
   sigmaion(:,:)=0.d0
-  !the following is for calculating the improper stress tensor
-!  call stress_bp_efield (sigmael )
-!  call stress_ion_efield (sigmaion )
+  !
+  ! ... The following calls compute macroscopic electric-field 
+  ! ... contributions, disabled for reasons explained here at the end:
+  ! ... https://gitlab.com/QEF/q-e/-/work_items/856
+  !
+  !  call stress_bp_efield (sigmael )
+  !  call stress_ion_efield (sigmaion )
   !
   ! ... vdW dispersion contribution: xdm
   !

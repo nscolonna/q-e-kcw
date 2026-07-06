@@ -83,7 +83,6 @@ MODULE dftd3_qe
     FUNCTION dftd3_xc ( dft )
       CHARACTER(LEN=*), INTENT(in) :: dft
       CHARACTER(LEN=256) :: dftd3_xc
-      CHARACTER(LEN=1), EXTERNAL :: lowercase
       integer :: i
        
       dftd3_xc = ''
@@ -380,5 +379,29 @@ MODULE dftd3_qe
 
   end subroutine dftd3_printout
 
-
+!
+!-----------------------------------------------------------------------
+FUNCTION lowercase( in_char )  
+  !-----------------------------------------------------------------------
+  !
+  ! ... converts character to lowercase if capital
+  ! ... copy character to output in all other cases
+  !
+  IMPLICIT NONE  
+  !
+  CHARACTER(LEN=1), INTENT(IN) :: in_char
+  CHARACTER(LEN=1)             :: lowercase
+  CHARACTER(LEN=26), PARAMETER :: lower = 'abcdefghijklmnopqrstuvwxyz', &
+                                  upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+  INTEGER                      :: i
+  !
+  i = SCAN( upper, in_char )
+  IF ( i /= 0 ) THEN
+     lowercase = lower(i:i)
+  ELSE
+     lowercase = in_char
+  END IF
+  !
+END FUNCTION lowercase
+  !
 END MODULE dftd3_qe

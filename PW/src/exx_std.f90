@@ -263,8 +263,8 @@ MODULE exx_std
                       CALL scatter_grid( dfftt, psic_all_nc(:,ipol), psic_nc(:,ipol) )
                    ENDDO
 #else
-                   psic_nc(:,ipol) = (0._DP,0._DP)
                    DO ipol = 1, npol
+                      psic_nc(:,ipol) = (0._DP,0._DP)
                       DO jpol = 1, npol
                          psic_nc(:,ipol) = psic_nc(:,ipol) + CONJG(d_spin(jpol,ipol,isym))* &
                                             temppsic_nc(rir(:,isym),jpol)

@@ -75,18 +75,25 @@ program test_diagh_4
     h_save = h
     !
     ! Solve with serial version first to get reference
-    CALL diagh(n, m, h_save, n, e_save, v_save, me_bgrp, root_bgrp, intra_bgrp_comm)
+    CALL diagh(n, m, h_save, e_save, v_save, me_bgrp, root_bgrp, intra_bgrp_comm)
     !
     ! Now test parallel version
     CALL init_parallel_diag(desc, n)
     !
     CALL laxlib_desc_to_intarray( idesc, desc )
     !
-    v = 0.d0
+    ! Poison v so an unbroadcast rank is detectable.
+    v = 1234.5_DP
     e = 0.d0
-    CALL pdiagh( n, h, n, e, v, idesc )
+    CALL pdiagh( n, h, e, v, idesc )
     !
     CALL test%assert_close( e(1:m), e_save(1:m) )
+    !
+    ! Run on every rank; |<v_i, v_save_i>| = 1 catches v left
+    ! uninitialized on ranks outside the ortho pool.
+    DO i = 1, m
+       CALL test%assert_close( ABS(SUM(v(:,i) * v_save(:,i))), 1.0_DP )
+    END DO
     !
     DEALLOCATE(h, e, v, h_save, e_save, v_save)
     !
@@ -126,18 +133,25 @@ program test_diagh_4
     h_save = h
     !
     ! Solve with serial version first to get reference
-    CALL diagh(n, m, h_save, n, e_save, v_save, me_bgrp, root_bgrp, intra_bgrp_comm)
+    CALL diagh(n, m, h_save, e_save, v_save, me_bgrp, root_bgrp, intra_bgrp_comm)
     !
     ! Now test parallel version
     CALL init_parallel_diag(desc, n)
     !
     CALL laxlib_desc_to_intarray( idesc, desc )
     !
-    v = (0.d0, 0.d0)
+    ! Poison v so an unbroadcast rank is detectable.
+    v = (1234.5_DP, 6789.0_DP)
     e = 0.d0
-    CALL pdiagh( n, h, n, e, v, idesc )
+    CALL pdiagh( n, h, e, v, idesc )
     !
     CALL test%assert_close( e(1:m), e_save(1:m) )
+    !
+    ! Run on every rank; |<v_i, v_save_i>| = 1 catches v left
+    ! uninitialized on ranks outside the ortho pool.
+    DO i = 1, m
+       CALL test%assert_close( ABS(SUM(CONJG(v(:,i)) * v_save(:,i))), 1.0_DP )
+    END DO
     !
     DEALLOCATE(h, e, v, h_save, e_save, v_save)
     !

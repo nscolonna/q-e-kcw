@@ -22,6 +22,7 @@ MODULE funct
   USE kinds,          ONLY: DP
   USE beef_interface, ONLY: beef_set_type
   USE xc_lib
+  USE upf_utils,      ONLY: matches, capital
   !
   IMPLICIT NONE
   !
@@ -350,12 +351,11 @@ CONTAINS
     !
     ! ... local variables
     !
-    INTEGER :: len, l, i
+    INTEGER :: l, i
     CHARACTER(len=150) :: dftout, dftout_loc
     LOGICAL :: dft_defined
     LOGICAL :: check_libxc
     !
-    CHARACTER(LEN=1), EXTERNAL :: capital
     CHARACTER(LEN=4) :: lda_exch, lda_corr, gga_exch, gga_corr
     !
     INTEGER :: save_inlc, lnt, ln_nlc
@@ -373,12 +373,7 @@ CONTAINS
     !
     ! convert to uppercase
     !
-    len = LEN_TRIM(dft_)
-    dftout = ' '
-    !
-    DO l = 1, len
-       dftout(l:l) = capital( dft_(l:l) )
-    ENDDO
+    dftout = capital( TRIM(dft_) )
     !
     !
     ! ----------------------------------------------
@@ -410,6 +405,12 @@ CONTAINS
        END SELECT
        dft_defined = xclib_set_dft_IDs(1,4,43,14,0,0)
        inlc = beefvdw
+    ! Special case BEEF_LXC: BEEF-vdW via LibXC (XC_GGA_XC_BEEFVDW, ID 286)
+    ! + vdW-DF2 non-local correlation (inlc=2), same as native BEEF-vdW.
+    CASE( 'BEEF_LXC' )
+       CALL xclib_set_dft_from_name( 'BEEF_LXC' )
+       dft_defined = .TRUE.
+       inlc = 2
     ! Special case vdW-DF
     CASE( 'VDW-DF' )
        dft_defined = xclib_set_dft_IDs(1,4,4,0,0,0)
@@ -609,7 +610,6 @@ CONTAINS
     CHARACTER(LEN=*), INTENT(IN):: name(0:n)
     CHARACTER(LEN=*), INTENT(IN):: dft
     INTEGER :: i
-    LOGICAL, EXTERNAL :: matches
     !
     matching = notset
     !

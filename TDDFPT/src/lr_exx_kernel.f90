@@ -39,7 +39,8 @@ MODULE lr_exx_kernel
   USE wavefunctions,          ONLY : psic
   USE cell_base,              ONLY : omega
   USE exx_base,               ONLY : g2_convolution
-  USE exx,                    ONLY : exxalfa, npwt, gt, dfftt 
+  USE exx,                    ONLY : exxalfa, npwt, gt, dfftt , xi
+  USE lr_dav_variables,       ONLY : use_ace_td
 
 
   REAL(kind=dp),    PUBLIC, ALLOCATABLE :: revc_int(:,:)
@@ -62,7 +63,7 @@ MODULE lr_exx_kernel
 
 CONTAINS
   !------------------------------------------------------------------------
-  SUBROUTINE lr_exx_restart( set_ace )
+  SUBROUTINE lr_exx_restart( )
      !------------------------------------------------------------------------
      !This SUBROUTINE is called when restarting an exx calculation
      USE xc_lib,    ONLY : xclib_get_exx_fraction, start_exx, &
@@ -72,17 +73,15 @@ CONTAINS
      USE exx_base,  ONLY : exxdiv, erfc_scrlen, exx_divergence, exx_grid_init,&
                            exx_div_check
      ! FIXME: are these variable useful?
-     USE exx,       ONLY : fock0, exxenergy2, local_thr, use_ace
+     USE exx,       ONLY : fock0, exxenergy2, local_thr
      USE exx,       ONLY : exxinit, aceinit, exx_gvec_reinit 
 
      IMPLICIT NONE
-     LOGICAL, INTENT(in) :: set_ace
      !
      CALL exx_grid_init( reinit=.true. )
      CALL exx_gvec_reinit( at )
      CALL exx_div_check()
      !
-     use_ace = set_ace
      erfc_scrlen = get_screening_parameter()
      
      exxdiv = exx_divergence()
@@ -92,7 +91,7 @@ CONTAINS
      ! FIXME: is this useful ?
      IF(local_thr.gt.0.0d0) CALL errore('exx_restart','SCDM with restart NYI',1)
      CALL exxinit(.false.)
-     IF (use_ace) CALL aceinit ( DOLOC = .FALSE. )
+     !IF (use_ace_td) CALL aceinit ( DOLOC = .FALSE. ) ! (ACE is read from file in aceinit0)
      ! FIXME: are these variable useful?
      fock0 = exxenergy2()
      !
@@ -105,6 +104,7 @@ CONTAINS
 
   USE exx_base,    ONLY : nkqs
   USE klist,       ONLY : nks
+  USE exx,         ONLY : nbndproj
   
   IMPLICIT NONE
   INTEGER :: nrxxs
@@ -131,6 +131,8 @@ CONTAINS
      k2q=0
   ENDIF
   !
+  if(use_ace_td) Call aceinit0( nbndproj )
+  !
 END SUBROUTINE lr_exx_alloc
 !
 SUBROUTINE lr_exx_dealloc()
@@ -146,6 +148,8 @@ SUBROUTINE lr_exx_dealloc()
   ENDIF
   !
   DEALLOCATE(pseudo_dens_c, vhart, red_revc0) 
+  !
+  IF( ALLOCATED( xi ) ) DEALLOCATE( xi )
   !
 END SUBROUTINE lr_exx_dealloc
 !

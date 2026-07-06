@@ -23,8 +23,8 @@ SUBROUTINE electrons()
                                    vtxc, etxc, etxcc, ewld, demet, epaw, &
                                    elondon, edftd3, vsol, esol, ef_up, ef_dw
   USE tsvdw_module,         ONLY : EtsvdW
-  USE scf,                  ONLY : rho, rho_core, rhog_core, v, vltot, vrs, &
-                                   kedtau, vnew
+  USE scf,                  ONLY : rho, rho_core, rhog_core, tau_core, v, vltot, &
+                                   vrs, kedtau, vnew
   USE control_flags,        ONLY : tr2, nexxiter, conv_elec, restart, lmd, &
                                    do_makov_payne, sic
   USE sic_mod,              ONLY : sic_energy, occ_f2fn, occ_fn2f, save_rhon, sic_first
@@ -137,7 +137,7 @@ SUBROUTINE electrons()
            domat = .false.
 ! 
            !
-           CALL v_of_rho( rho, rho_core, rhog_core, &
+           CALL v_of_rho( rho, rho_core, rhog_core, tau_core, &
                ehart, etxc, vtxc, eth, etotefield, charge, v)
            IF (lrism) CALL rism_calc3d(rho%of_g(:, 1), esol, vsol, v%of_r, tr2)
            IF (okpaw) CALL PAW_potential(rho%bec, ddd_paw, epaw,etot_cmp_paw)
@@ -230,7 +230,7 @@ SUBROUTINE electrons()
         ! Recalculate potential because XC functional has changed,
         ! start self-consistency loop on exchange
         !
-        CALL v_of_rho( rho, rho_core, rhog_core, &
+        CALL v_of_rho( rho, rho_core, rhog_core, tau_core, &
              ehart, etxc, vtxc, eth, etotefield, charge, v)
         etot = etot + etxc + exxen
         !
@@ -407,7 +407,7 @@ SUBROUTINE electrons_scf ( printout, exxen )
                                    egrand, vsol, esol, esic, esci
   USE scf,                  ONLY : scf_type, scf_type_COPY, bcast_scf_type,&
                                    create_scf_type, destroy_scf_type, &
-                                   scf_ns_copy, rho, rho_core, rhog_core, &
+                                   scf_ns_copy, rho, rho_core, rhog_core, tau_core, &
                                    v, vltot, vrs, kedtau, vnew
   USE mix,                  ONLY : open_mix_file, close_mix_file, mix_rho
   USE control_flags,        ONLY : mixing_beta, tr2, ethr, niter, nmix, &
@@ -424,7 +424,7 @@ SUBROUTINE electrons_scf ( printout, exxen )
                                    niter_with_fixed_ns, hub_pot_fix, &
                                    v_nsg, at_sc, neighood, &
                                    ldim_u, is_hubbard_back, apply_U, orbital_resolved
-  USE extfield,             ONLY : tefield, etotefield, gate, etotgatefield !TB
+  USE extfield,             ONLY : tefield, dipfield, etotefield, gate, etotgatefield, edir !TB
   USE noncollin_module,     ONLY : noncolin, magtot_nc, i_cons,  bfield, &
                                    lambda, report, domag, nspin_mag, npol
   USE io_rho_xml,           ONLY : write_scf
@@ -445,6 +445,7 @@ SUBROUTINE electrons_scf ( printout, exxen )
   USE paw_symmetry,         ONLY : PAW_symmetrize_ddd
   USE dfunct,               ONLY : newd
   USE esm,                  ONLY : do_comp_esm, esm_printpot, esm_ewald
+  USE printpot_module,      ONLY : printpot
   USE gcscf_module,         ONLY : lgcscf, gcscf_mu, gcscf_ignore_mun, gcscf_set_nelec
   USE clib_wrappers,        ONLY : memstat
   USE fcp_module,           ONLY : lfcp, fcp_mu
@@ -869,7 +870,7 @@ SUBROUTINE electrons_scf ( printout, exxen )
            ENDIF
            !
            !
-           CALL v_of_rho( rhoin, rho_core, rhog_core, &
+           CALL v_of_rho( rhoin, rho_core, rhog_core, tau_core, &
                           ehart, etxc, vtxc, eth, etotefield, charge, v )
            !
            IF (lrism) THEN
@@ -912,7 +913,7 @@ SUBROUTINE electrons_scf ( printout, exxen )
            !
            vnew%of_r(:,:) = v%of_r(:,:)
            !
-           CALL v_of_rho( rho,rho_core,rhog_core, &
+           CALL v_of_rho( rho,rho_core,rhog_core,tau_core, &
                           ehart, etxc, vtxc, eth, etotefield, charge, v )
            !
            IF (lrism) THEN
@@ -1123,6 +1124,7 @@ SUBROUTINE electrons_scf ( printout, exxen )
         ! ... print out ESM potentials if desired
         !
         IF ( do_comp_esm ) CALL esm_printpot( rho%of_g )
+        IF ( tefield .AND. dipfield ) CALL printpot( rho%of_g(:,1), rho%of_r, edir )
         !
         ! ... print out 3D-RISM potentials if desired
         !

@@ -993,6 +993,9 @@ SUBROUTINE control_iosys()
      isolve = 5
      WRITE( stdout, '(/5X,"Using direct diagonalization")')
      WRITE( stdout, '(5X,"WARNING: Use only when you need a lot of unoccupied states")')
+#if defined(__CUDA)
+    Call errore('input', 'direct diagonalization on GPU not present in this version',1)
+#endif
      !
   CASE DEFAULT
      !
@@ -2097,12 +2100,14 @@ SUBROUTINE dftd3_iosys ( )
   USE dftd3_api,        ONLY : dftd3_init, dftd3_set_functional
   USE dftd3_qe,         ONLY : dftd3_xc, dftd3, dftd3_in
   USE funct,            ONLY : get_dft_short
+  USE mp_images,        ONLY : intra_image_comm
+  !
   IMPLICIT NONE
   CHARACTER(LEN=256):: dft
   !
   if (dftd3_version==2) dftd3_threebody=.false.
   dftd3_in%threebody = dftd3_threebody
-  CALL dftd3_init(dftd3, dftd3_in)
+  CALL dftd3_init(dftd3, dftd3_in, intra_image_comm)
   dft = get_dft_short( )
   dft = dftd3_xc ( dft )
   CALL dftd3_set_functional(dftd3, func=dft, version=dftd3_version,tz=.false.)
@@ -2184,7 +2189,8 @@ SUBROUTINE exx_iosys ( ecutwfc, ecutrho )
   IF (screening_parameter >= 0.0_DP) &
         & CALL set_screening_parameter(screening_parameter)
   !
-  write(stdout, '(/,5x,"Exact exchange band parallelism type set to ",A/)' ) trim(adjustl(exx_type))
+  IF (xclib_dft_is('hybrid')) WRITE(stdout, &
+     '(/,5x,"Exact exchange band parallelism type set to ",A/)' ) trim(adjustl(exx_type))
   !
   select case(trim(adjustl(exx_type)))
   case("bands")

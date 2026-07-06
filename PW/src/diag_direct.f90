@@ -15,8 +15,7 @@ MODULE diag_direct
   !!
   !! H(G,G') = δ_GG' × (k+G)² + V_loc(G-G') + Σ_ij |β_i(G)⟩ D_ij ⟨β_j(G')|
   !!
-  !! RESTRICTIONS: NCPP only, no special features, serial only
-  !!              (see diag_direct_check_compat)
+  !! RESTRICTIONS: NCPP only, no special features (see diag_direct_check_compat)
   !!
   !! This module is inspired by the ParaBands code, part of the BerkeleyGW package,
   !! distributed under a 3-Clause BSD license:
@@ -112,7 +111,6 @@ CONTAINS
     mill_min(2) = MINVAL(mill(2, 1:ngm))
     mill_min(3) = MINVAL(mill(3, 1:ngm))
     !
-    ! Get global maximum/minimum across all processors
     CALL mp_max(mill_max, intra_bgrp_comm)
     CALL mp_min(mill_min, intra_bgrp_comm)
     !
@@ -304,11 +302,8 @@ CONTAINS
   !-----------------------------------------------------------------------
   SUBROUTINE diag_direct_hamiltonian_vnl(hmat, npw)
     !-----------------------------------------------------------------------
-    !! Build nonlocal pseudopotential contribution (NOT IMPLEMENTED for distributed PWs)
+    !! Build nonlocal pseudopotential contribution
     !! H(G,G') += Σ_ij |β_i(G)⟩ D_ij ⟨β_j(G')|
-    !!
-    !! TODO: Implement full-column construction by collecting vkb globally
-    !! For now, vnl is skipped in plane-wave parallel mode
     !
     USE kinds,      ONLY : DP
     USE mp,         ONLY : mp_sum
@@ -392,157 +387,6 @@ CONTAINS
   END SUBROUTINE diag_direct_hamiltonian_vnl
   !-----------------------------------------------------------------------
   !
-  !-----------------------------------------------------------------------
-  SUBROUTINE diag_direct_diag(hmat, nbnd, npw, evc, et_k, notconv)
-    !-----------------------------------------------------------------------
-    !! Diagonalize the Hamiltonian matrix and distribute eigenvectors
-    !! Uses parallel (pdiagh) or serial (diagh) Hermitian eigensolver
-    !! depending on use_para_diag flag
-    !
-    USE kinds,          ONLY : DP
-    USE io_global,      ONLY : stdout
-    USE mp_bands,       ONLY : intra_bgrp_comm, me_bgrp, root_bgrp
-    USE mp_bands_util,  ONLY : my_bgrp_id, root_bgrp_id, nbgrp, inter_bgrp_comm
-    USE mp,             ONLY : mp_bcast
-    USE LAXlib,         ONLY : diagh, pdiagh
-    USE control_flags,  ONLY : use_para_diag
-    USE wvfct,          ONLY : npwx
-    !
-    IMPLICIT NONE
-    !
-    include 'laxlib.fh'
-    !
-    COMPLEX(DP), INTENT(INOUT) :: hmat(ngk_g, ngk_g)
-    !! Hamiltonian matrix
-    INTEGER, INTENT(IN) :: nbnd
-    !! number of bands
-    INTEGER, INTENT(IN) :: npw
-    !! number of local plane waves
-    COMPLEX(DP), INTENT(OUT) :: evc(npwx, nbnd)
-    !! eigenvectors (distributed output)
-    REAL(DP), INTENT(OUT) :: et_k(nbnd)
-    !! eigenvalues
-    INTEGER, INTENT(OUT) :: notconv
-    !! number of non-converged bands (always 0 for direct method)
-    !
-    REAL(DP), ALLOCATABLE :: et_tmp(:)
-    !! Temporary eigenvalue array (needed because diagh requires size ngk_g)
-    COMPLEX(DP), ALLOCATABLE :: evc_global(:,:)
-    !! Global eigenvectors (ngk_g, nbnd for diagh, ngk_g, ngk_g for pdiagh)
-    INTEGER :: ibnd, ig
-    !
-    ! Variables for parallel diagonalization
-    INTEGER :: idesc(LAX_DESC_SIZE)
-    !! LAXlib descriptor for parallel diagonalization
-    INTEGER, ALLOCATABLE :: rank_ip(:,:)
-    !! Rank mapping for LAXlib
-    INTEGER, ALLOCATABLE :: idesc_ip(:,:,:)
-    !! Descriptor array for LAXlib
-    INTEGER :: nx
-    !! Leading dimension for distributed arrays
-    LOGICAL :: la_proc
-    !! True if this processor participates in linear algebra
-    LOGICAL :: do_distr_diag_inside_bgrp
-    !! Flag for distributed diagonalization inside band groups
-    INTEGER :: neig
-    !! Number of eigenvectors to allocate (nbnd for diagh, ngk_g for pdiagh)
-    !
-    CALL start_clock('direct_diag')
-    WRITE(stdout,'(5X,"Diagonalizing",I5,"x",I5," matrix...")') ngk_g, ngk_g
-    !
-    ! Determine number of eigenvectors to allocate
-    ! pdiagh returns all ngk_g eigenvectors, diagh returns only nbnd
-    !
-    IF ( use_para_diag ) THEN
-       neig = ngk_g
-       WRITE(stdout,'(5X,"Using parallel diagonalization (pdiagh)")')
-    ELSE
-       neig = nbnd
-       WRITE(stdout,'(5X,"Using serial diagonalization (diagh)")')
-    ENDIF
-    !
-    ALLOCATE(et_tmp(ngk_g))
-    ALLOCATE(evc_global(ngk_g, neig))
-    !
-    ! Choose between parallel or serial diagonalization
-    !
-    IF ( use_para_diag ) THEN
-       !
-       ! Parallel diagonalization using pdiagh
-       ! Pattern follows:
-       !   - LAXlib/tests/test_diagh_4.f90 for pdiagh interface
-       !   - KS_Solvers/DENSE/rotate_wfc_k.f90 for band group logic
-       !
-       ! Get laxlib parallelization parameters
-       !
-       CALL laxlib_getval( do_distr_diag_inside_bgrp = do_distr_diag_inside_bgrp )
-       !
-       ! Initialize descriptor for parallel diagonalization
-       !
-       CALL desc_init( ngk_g, nx, la_proc, idesc, rank_ip, idesc_ip )
-       !
-       ! Print distributed matrix layout information
-       !
-       WRITE(stdout,'(5X,"Parallel diagonalization descriptor:")')
-       WRITE(stdout,'(5X,"  Matrix dimension (N)      =",I8)') idesc(LAX_DESC_N)
-       WRITE(stdout,'(5X,"  Local block dimension     =",I8)') nx
-       WRITE(stdout,'(5X,"  Processor grid            =",I4," x",I4)') &
-            idesc(LAX_DESC_NPR), idesc(LAX_DESC_NPC)
-       WRITE(stdout,'(5X,"  This processor position   = (",I3,",",I3,")")') &
-            idesc(LAX_DESC_MYR), idesc(LAX_DESC_MYC)
-       WRITE(stdout,'(5X,"  Active in diag?           =",L2)') la_proc
-       WRITE(stdout,'(5X,"  do_distr_diag_inside_bgrp =",L2)') do_distr_diag_inside_bgrp
-       !
-       ! Call parallel diagonalization with band group logic
-       !
-       IF ( do_distr_diag_inside_bgrp ) THEN
-          ! Only root band group diagonalizes
-          IF ( my_bgrp_id == root_bgrp_id ) THEN
-             CALL pdiagh( ngk_g, hmat, ngk_g, et_tmp, evc_global, idesc )
-          ENDIF
-          ! Broadcast results to other band groups
-          IF ( nbgrp > 1 ) THEN
-             CALL mp_bcast( evc_global, root_bgrp_id, inter_bgrp_comm )
-             CALL mp_bcast( et_tmp, root_bgrp_id, inter_bgrp_comm )
-          ENDIF
-       ELSE
-          ! All processors participate in diagonalization
-          CALL pdiagh( ngk_g, hmat, ngk_g, et_tmp, evc_global, idesc )
-       ENDIF
-       !
-       ! Clean up LAXlib arrays
-       !
-       IF ( ALLOCATED(rank_ip) )   DEALLOCATE( rank_ip )
-       IF ( ALLOCATED(idesc_ip) )  DEALLOCATE( idesc_ip )
-       !
-    ELSE
-       !
-       ! Use standard serial Hermitian eigensolver (S=I for NCPP)
-       !
-       CALL diagh(ngk_g, nbnd, hmat, ngk_g, et_tmp, evc_global, &
-                  me_bgrp, root_bgrp, intra_bgrp_comm)
-       !
-    ENDIF
-    !
-    et_k(1:nbnd) = et_tmp(1:nbnd)
-    notconv = 0  ! Always converged (direct diagonalization)
-    !
-    ! Distribute eigenvectors to local format
-    !
-    CALL start_clock('direct_distrib')
-    evc(:,:) = (0.0_DP, 0.0_DP)
-    DO ibnd = 1, nbnd
-       DO ig = 1, npw
-          evc(ig, ibnd) = evc_global(igk_l2g_kdip(ig), ibnd)
-       END DO
-    END DO
-    CALL stop_clock('direct_distrib')
-    !
-    DEALLOCATE(et_tmp, evc_global)
-    !
-    CALL stop_clock('direct_diag')
-    !
-  END SUBROUTINE diag_direct_diag
   !
   !-----------------------------------------------------------------------
   SUBROUTINE diag_direct_run_k(ik, npw, nbnd, evc, et_k, notconv)
@@ -550,17 +394,21 @@ CONTAINS
     !! Construct and diagonalize explicit Hamiltonian matrix for k-point ik
     !!
     !! This is the main coordinator that:
-    !! 1. Allocates H and S matrices
-    !! 2. Builds identity S matrix (for NCPP)
-    !! 3. Calls hamiltonian_kinetic, hamiltonian_vloc, hamiltonian_vnl
-    !! 4. Checks hermiticity
-    !! 5. Calls diagonalize_hamiltonian
-    !! 6. Verifies against h_psi
+    !! 1. Sets up the local-to-global k+G mapping
+    !! 2. Builds H column-block by column-block via hamiltonian_kinetic,
+    !!    hamiltonian_vloc, hamiltonian_vnl
+    !! 3. Gathers the column blocks into a global H matrix
+    !! 4. Diagonalizes via direct_diag_k
+    !! 5. Scatters the global eigenvectors back to the local PW layout
+    !!
+    !! Optional: diag_direct_test_hamiltonian verifies H*v against h_psi(v)
+    !! (call is commented out by default; uncomment for debugging).
     !
-    USE kinds,     ONLY : DP
-    USE wvfct,     ONLY : npwx
-    USE io_global, ONLY : stdout
-    USE mp,        ONLY : mp_sum, mp_max
+    USE kinds,         ONLY : DP
+    USE wvfct,         ONLY : npwx
+    USE io_global,     ONLY : stdout
+    USE mp,            ONLY : mp_sum, mp_max
+    USE control_flags, ONLY : use_para_diag
     !
     IMPLICIT NONE
     !
@@ -583,12 +431,16 @@ CONTAINS
     !
     INTEGER :: ierr
     !! allocation error code
+    INTEGER :: ibnd, ig
+    !! loop indices for the global -> local eigenvector scatter
     REAL(DP) :: mem_gb
     !! memory estimate
     COMPLEX(DP), ALLOCATABLE :: hmat(:,:)
-    !! Hamiltonian matrix (npw, npw) - local
+    !! Hamiltonian matrix (ngk_g, npw) - full rows, local columns
     COMPLEX(DP), ALLOCATABLE :: hmat_global(:,:)
     !! Global Hamiltonian matrix (ngk_g, ngk_g)
+    COMPLEX(DP), ALLOCATABLE :: evc_global(:,:)
+    !! Global eigenvectors (ngk_g, nbnd) returned by direct_diag_k
     !
     CALL start_clock('diag_direct')
     !
@@ -628,18 +480,38 @@ CONTAINS
     !
     CALL diag_direct_collect_matrices(hmat, npw, hmat_global)
     !
-    ! Verification against h_psi
+    ! Verification against h_psi (compares H*v from the explicit matrix
+    ! against h_psi(v) for a random vector). Disabled by default because
+    ! it adds an O(ngk_g^2) matvec + an h_psi call at every k-point of
+    ! every SCF iteration. Uncomment when developing or debugging the
+    ! Hamiltonian construction.
     !
-    CALL diag_direct_test_hamiltonian(hmat_global, npw)
+    ! CALL diag_direct_test_hamiltonian(hmat_global, npw)
     !
-    ! Diagonalize global matrix and distribute eigenvectors
+    ! Diagonalize global matrix using the KS_Solvers/Direct routine,
+    ! then scatter the global eigenvectors to local PW layout (PW-side concern).
     !
-    CALL diag_direct_diag(hmat_global, nbnd, npw, evc, et_k, notconv)
+    ALLOCATE( evc_global(ngk_g, nbnd), STAT=ierr )
+    IF ( ierr /= 0 ) CALL errore('diag_direct_run_k', 'evc_global allocation failed', ierr)
+    evc_global(:,:) = (0.0_DP, 0.0_DP)
+    !
+    CALL direct_diag_k( ngk_g, nbnd, hmat_global, evc_global, et_k, &
+                        use_para_diag, notconv )
+    !
+    CALL start_clock('direct_distrib')
+    evc(:,:) = (0.0_DP, 0.0_DP)
+    DO ibnd = 1, nbnd
+       DO ig = 1, npw
+          evc(ig, ibnd) = evc_global(igk_l2g_kdip(ig), ibnd)
+       END DO
+    END DO
+    CALL stop_clock('direct_distrib')
     !
     ! Deallocate
     !
     DEALLOCATE(hmat)
     DEALLOCATE(hmat_global)
+    DEALLOCATE(evc_global)
     DEALLOCATE(igk_l2g_kdip)
     DEALLOCATE(mill_k_global)
     !
@@ -751,11 +623,15 @@ CONTAINS
     ENDDO
     rms_error = SQRT(rms_error / REAL(npw,DP))
     !
-    ! Report results
+    ! Report results: stop the run if H*v disagrees with h_psi(v).
+    ! Continuing past a failed verification means SCF would proceed with
+    ! a wrong Hamiltonian, so this must be an errore, not a stdout note.
     !
     IF (max_error > 1.d-10) THEN
       WRITE(stdout,'(5X,"max |H_mat*v - h_psi(v)| =",E12.4)') max_error
       WRITE(stdout,'(5X,"RMS |H_mat*v - h_psi(v)| =",E12.4)') rms_error
+      CALL errore('diag_direct_test_hamiltonian', &
+                  'explicit H disagrees with h_psi', 1)
     ENDIF
     !
     DEALLOCATE( v, v_global, hv_mat_global, hv_hpsi_global, rand_vec, hv_hpsi )
@@ -773,7 +649,7 @@ CONTAINS
     !! Each processor has hmat(ngk_g, npw) - full rows, local columns
     !! Gather to hmat_global(ngk_g, ngk_g) - full matrix on all processors
     !!
-    !! For S matrix: build identity directly (more efficient for NCPP)
+    !! NCPP-only: no S matrix is needed (S=I is handled inside direct_diag_k).
     !
     USE kinds,     ONLY : DP
     USE mp_bands,  ONLY : intra_bgrp_comm
@@ -804,7 +680,7 @@ CONTAINS
     ! Sum H matrix across all processors (non-overlapping contributions)
     CALL mp_sum(hmat_global, intra_bgrp_comm)
     !
-    ! Note: No S matrix needed for NCPP (S=I handled by diagh eigensolver)
+    ! Note: No S matrix needed for NCPP (S=I handled by direct_diag_k)
     !
     CALL stop_clock('direct_collect')
     !

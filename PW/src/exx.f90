@@ -853,7 +853,7 @@ MODULE exx
 #endif
     REAL(DP), PARAMETER :: Zero=0._DP, One=1._DP
     !
-    CALL start_clock_gpu( 'vexxace' )
+    CALL start_clock( 'vexxace' )
     !
     IF ( .NOT. PRESENT(vphi_d) ) THEN
       ALLOCATE( vv_d(nnpw,nbnd) )
@@ -904,7 +904,7 @@ MODULE exx
     DEALLOCATE( rmexx_d )
     IF( .NOT. PRESENT(vphi_d) ) DEALLOCATE( vv_d )
     !
-    CALL stop_clock_gpu( 'vexxace' )
+    CALL stop_clock( 'vexxace' )
     !
   END SUBROUTINE vexxace_gamma_gpu
   !
@@ -1174,7 +1174,7 @@ MODULE exx
 #endif
     REAL(DP), PARAMETER :: Zero=0._DP, One=1._DP
     !
-    CALL start_clock_gpu( 'vexxace' )
+    CALL start_clock( 'vexxace' )
     !
     IF ( .NOT. PRESENT(vphi_d) ) THEN
       ALLOCATE( vv_d(npwx*npol,nbnd) )
@@ -1219,7 +1219,7 @@ MODULE exx
     DEALLOCATE( cmexx_d )
     IF( .NOT. PRESENT(vphi_d) ) DEALLOCATE( vv_d )
     !
-    CALL stop_clock_gpu( 'vexxace' )
+    CALL stop_clock( 'vexxace' )
     !
   END SUBROUTINE vexxace_k_gpu
   !
