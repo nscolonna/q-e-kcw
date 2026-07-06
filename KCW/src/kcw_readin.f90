@@ -113,8 +113,7 @@ SUBROUTINE kcw_readin()
   !! qp_symm         : if TRUE make the KI hamitonian hermitian in the spirit of quasiparticle GW scheme 
   !! l_alpha_corr    : If true a correction is applied to the screening coefficient to mimick effect beyond the 
   !!                   second order
-  !! h_proj          : if true an alterantive definition of the KI Hamitlonian is built and diagonalized
-  !!                   using projectors (see koopmans_ham_proj.f90)
+  !! which_odd       : ODD flavour: qki (both SC and PC), ki, and pkipz (only SC)
   !! io_sp           : write/read wannier orbital densities in single precision to save disk space
   !! io_real_space   : write/read wannier orbital densities in real space (space consuming but more robust when restart)
   ! 
