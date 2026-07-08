@@ -133,7 +133,7 @@ SUBROUTINE compute_map_ikq_single (iq,also_minus)
       !
       IF (kcw_iverbosity .gt. 1) THEN
         WRITE(stdout,'(8X, "The map (iq,ik) --> ip + G", 5x, & 
-                                                &  " ( ", 2(i4,1x), " ) " , 5x, i4 , 7x, "+", 3f8.4, " [Cryst]" )') iq, ik, ikq, gvect_
+                            &  " ( ", 2(i4,1x), " ) " , 5x, i4 , 7x, "+", 3f8.4, " [Cryst]" )') iq, ik, ikq, gvect_
         IF (do_minus) THEN
           WRITE(stdout,'(8X, "The map [-q] (iq,ik) --> ip + G", 5x, & 
           &  " ( ", 2(i4,1x), " ) " , 5x, i4 , 7x, "+", 3f8.4, " [Cryst]" )') iq, ik, ikq_m, gvect_m_
