@@ -15,7 +15,6 @@ SUBROUTINE screen_coeff ()
   !
   USE kinds,                ONLY : DP
   USE fft_base,             ONLY : dffts
-  USE fft_interfaces,       ONLY : fwfft, invfft
   USE klist,                ONLY : nkstot
   USE mp,                   ONLY : mp_sum
   USE control_kcw,          ONLY : kcw_iverbosity, spin_component, num_wann, iorb_start, l_do_alpha, &
@@ -27,7 +26,6 @@ SUBROUTINE screen_coeff ()
   USE io_global,            ONLY : stdout, ionode
   USE mp_bands,             ONLY : intra_bgrp_comm
   USE dv_of_drho_lr,        ONLY : dv_of_drho
-  USE fft_interfaces,       ONLY : fwfft
   USE control_lr,           ONLY : lgamma
   USE lsda_mod,             ONLY : nspin
   USE gvecs,                ONLY : ngms
@@ -51,13 +49,13 @@ SUBROUTINE screen_coeff ()
   INTEGER :: iwann, jwann, lrrho, iq_start, iun_res
   !! Band counter, leght of the rho record, starting iq (if restart), iunit partial results
   !
-  COMPLEX(DP) :: rhowann(dffts%nnr, num_wann,nrho), rhor(dffts%nnr,nrho) 
+!  COMPLEX(DP) :: rhowann(dffts%nnr, num_wann,nrho), rhor(dffts%nnr,nrho) 
   !! The periodic part of the wannier orbital density
   !
-  COMPLEX (DP):: delta_vr(dffts%nnr,nspin_mag), delta_vr_(dffts%nnr,nspin_mag)
+!  COMPLEX (DP):: delta_vr(dffts%nnr,nspin_mag), delta_vr_(dffts%nnr,nspin_mag)
   !! The perturbing potential w and w/o q+G=0 contribution
   !
-  COMPLEX(DP) :: vki_u(num_wann), sh(num_wann), vki_r(num_wann)
+!  COMPLEX(DP) :: vki_u(num_wann), sh(num_wann), vki_r(num_wann)
   ! ki unrelaxed and relaxed potential and self-hartree
   !
   COMPLEX(DP), ALLOCATABLE  :: rhog(:,:), delta_vg(:,:), vh_rhog(:), drhog_scf(:,:), drhor_scf(:,:), delta_vg_(:,:)
@@ -77,13 +75,27 @@ SUBROUTINE screen_coeff ()
   REAL(DP) :: weight(nkstot)
   REAL(DP) :: alpha
   REAL(DP) :: div, div_eps
+
+  COMPLEX(DP), ALLOCATABLE, DIMENSION(:,:,:) :: rhowann
+  COMPLEX(DP), ALLOCATABLE, DIMENSION(:,:) ::  rhor, delta_vr, delta_vr_
+  !! The periodic part of the wannier orbital density
+  COMPLEX(DP), ALLOCATABLE, DIMENSION(:) :: vki_u, sh, vki_r
+  ! ki unrelaxed and relaxed potential and self-hartree
+ !! COMPLEX(DP), ALLOCATABLE :: phase(:) !, wann_c(:,:)  !, rho_c(:,:)
+  !! The phase associated to the hift k+q-> k'
+  INTEGER :: ii
+
+  ALLOCATE(rhowann(dffts%nnr, num_wann,nrho), rhor(dffts%nnr,nrho) )
+  ALLOCATE(delta_vr(dffts%nnr,nspin_mag), delta_vr_(dffts%nnr,nspin_mag))
+  ALLOCATE(vki_u(num_wann), sh(num_wann), vki_r(num_wann))
   !
+
   nqs = nqstot
   !
   IF (nqs == 1) do_real_space = .TRUE. 
   IF (do_real_space) THEN 
      ALLOCATE ( drhor_scf(dffts%nnr,nspin_mag) ) 
-     drhor_scf = ZERO
+     !!JA drhor_scf = ZERO no needed
   ENDIF
   ! If only 1 K point do also integral in REAL space (Extra check for the Super cell calculation)
   !
@@ -100,7 +112,7 @@ SUBROUTINE screen_coeff ()
   ! INITIALIZATIONs
   div = exxdiv
   div_eps = exxdiv_eps
-  wann_c = ZERO
+ ! wann_c = ZERO
   vki_u = ZERO
   vki_r = ZERO
   sh = ZERO
@@ -153,6 +165,8 @@ SUBROUTINE screen_coeff ()
     !
     IF ( lgamma .AND. .NOT. l_unique_manifold) CALL check_density (rhowann) 
     !
+    !$acc enter data create(rhor, rhog, vh_rhog, delta_vr, delta_vr_, delta_vg, delta_vg_)
+    !
     DO iwann = iorb_start, iorb_end  ! for each wannier, that is actually the perturbation
       !
       IF ( .NOT. l_do_alpha (iwann)) CYCLE
@@ -197,14 +211,18 @@ SUBROUTINE screen_coeff ()
        !
        ! Skip LR calculation if this orbital match with a one already computed (see group_orbital)
        !
-       drhog_scf (:,:) = ZERO
+       !
+       !$acc kernels present(rhog, delta_vg, delta_vg_, vh_rhog, rhor)
+       !!JA drhog_scf (:,:) = ZERO
        rhog(:,:)         = ZERO
        delta_vg(:,:)   = ZERO
        delta_vg_(:,:)  = ZERO
        vh_rhog(:)      = ZERO
        rhor(:,:)         = ZERO
+       !$acc end kernels
        !
        rhor(:,:) = rhowann(:,iwann,:)
+       !$acc update device(rhor)
        !! ... The periodic part of the orbital desity in real space
        !
        !
@@ -215,18 +233,38 @@ SUBROUTINE screen_coeff ()
        !! ... The periodic part of the perturbation
        !
        IF (nspin==2 .OR. nspin==1) THEN
-        ! This can/should be an IF over noncolin
-        pi_q_unrelax  = sum (CONJG(rhog (:,1)) * delta_vg(:,spin_component)) *weight(iq)*omega
-        pi_q_unrelax_ = sum (CONJG(rhog (:,1)) * delta_vg_(:,spin_component))*weight(iq)*omega
+          ! This can/should be an IF over noncolin
+          pi_q_unrelax  = (0.0_dp, 0.0_dp)
+          pi_q_unrelax_ = (0.0_dp, 0.0_dp)
+           
+          !$acc parallel loop reduction(+: pi_q_unrelax, pi_q_unrelax_) present(rhog, delta_vg, delta_vg_)
+          DO ii = 1, ngms
+            pi_q_unrelax  = pi_q_unrelax +  CONJG(rhog (ii,1)) * delta_vg(ii,spin_component)
+            pi_q_unrelax_ = pi_q_unrelax_ + CONJG(rhog (ii,1)) * delta_vg_(ii,spin_component)
+          END DO
+          pi_q_unrelax  = pi_q_unrelax  * weight(iq)*omega
+          pi_q_unrelax_ = pi_q_unrelax_ * weight(iq)*omega
+
        ELSEIF (nspin==4) THEN
-        pi_q_unrelax = ZERO
-        pi_q_unrelax_ = ZERO
-        DO ip=1,nspin_mag
-          pi_q_unrelax  = pi_q_unrelax + sum (CONJG(rhog (:,ip)) * delta_vg(:,ip)) *weight(iq)*omega
-          pi_q_unrelax_ = pi_q_unrelax_+ sum (CONJG(rhog (:,ip)) * delta_vg_(:,ip))*weight(iq)*omega
-        END DO
+          pi_q_unrelax = ZERO
+          pi_q_unrelax_ = ZERO
+          !$acc parallel loop collapse(2) reduction(+: pi_q_unrelax, pi_q_unrelax_) present(rhog, delta_vg, delta_vg_)
+          DO ip=1,nspin_mag
+            DO ii = 1, ngms
+              pi_q_unrelax  = pi_q_unrelax + CONJG(rhog (ii,ip)) * delta_vg(ii,ip)
+              pi_q_unrelax_ = pi_q_unrelax_+ CONJG(rhog (ii,ip)) * delta_vg_(ii,ip)
+            END DO  
+          END DO
+          pi_q_unrelax  = pi_q_unrelax  * weight(iq)*omega
+          pi_q_unrelax_ = pi_q_unrelax_ * weight(iq)*omega
        ENDIF
-       sh_q  = 0.5D0 * sum (CONJG(rhog (:,1)) * vh_rhog(:)) *weight(iq)*omega
+       sh_q = (0.0_dp, 0.0_dp)
+       !$acc parallel loop reduction(+: sh_q) present(rhog, vh_rhog)
+       DO ii = 1, ngms
+          sh_q  = sh_q + CONJG(rhog (ii,1)) * vh_rhog(ii)
+       END DO
+
+       sh_q = 0.5_dp*sh_q*weight(iq)*omega
 
        !
        CALL mp_sum (pi_q_unrelax,  intra_bgrp_comm)
@@ -240,11 +278,12 @@ SUBROUTINE screen_coeff ()
        !
        !
        spin_ref = spin_component
-       drhog_scf = CMPLX(0.D0,0.D0,kind=DP)
+       !!JA drhog_scf = CMPLX(0.D0,0.D0,kind=DP) JA no needed
        !
        IF (do_real_space) THEN
          !
-         drhor_scf = CMPLX(0.D0,0.D0,kind=DP)
+        !! drhor_scf = CMPLX(0.D0,0.D0,kind=DP) !!JA no needed
+
          CALL solve_linter_koop ( spin_ref, iwann, delta_vr_, drhog_scf, delta_vg_, drhor_scf )
          ! Also the density response in Real space is passed back. Just for check 
          !
@@ -256,13 +295,27 @@ SUBROUTINE screen_coeff ()
        !
        pi_q_relax    = ZERO
        pi_q_relax_rs = ZERO
+       !$acc parallel loop collapse(2) reduction(+:pi_q_relax) present(drhog_scf, delta_vg)
        DO is =1, nspin_mag
-         !
-         pi_q_relax = pi_q_relax + sum (CONJG(drhog_scf (:,is)) * delta_vg(:,is))*weight(iq)*omega
-         IF (do_real_space) pi_q_relax_rs = pi_q_relax_rs &  
-               + sum (CONJG(drhor_scf (:,is)) * delta_vr(:,is))/( dffts%nr1*dffts%nr2*dffts%nr3 )*omega
-         !
+         DO ii =1, ngms
+            pi_q_relax = pi_q_relax + CONJG(drhog_scf (ii,is)) * delta_vg(ii,is)
+         END DO   
        ENDDO
+       !$acc exit data delete(drhog_scf)
+       pi_q_relax = pi_q_relax * weight(iq)*omega
+
+       IF (do_real_space) THEN 
+          !$acc parallel loop collapse(2) reduction(+:pi_q_relax_rs) present(drhor_scf, delta_vr)
+          DO is =1, nspin_mag
+             DO ii = 1, dffts%nnr
+                pi_q_relax_rs = pi_q_relax_rs &  
+                    + CONJG(drhor_scf (ii,is)) * delta_vr(ii,is)
+             END DO       
+          END DO   
+          !$acc exit data delete(drhor_scf)
+          pi_q_relax_rs = pi_q_relax_rs/( dffts%nr1*dffts%nr2*dffts%nr3 )*omega
+       END IF
+
        !
        CALL mp_sum (pi_q_relax, intra_bgrp_comm)
        !
@@ -303,6 +356,9 @@ SUBROUTINE screen_coeff ()
     FLUSH(iun_res)
     !
     IF (.NOT. irr_bz) CALL clean_pw_kcw( )
+    !$acc exit data delete(rhor, rhog , delta_vg, vh_rhog, delta_vg_ )
+    !$acc exit data delete(delta_vr, delta_vr_ )
+
     DEALLOCATE ( rhog , delta_vg, vh_rhog, drhog_scf, delta_vg_ )
     !
     IF (ionode) THEN 
@@ -314,6 +370,9 @@ SUBROUTINE screen_coeff ()
     ENDIF
     !
   ENDDO ! qpoints
+
+  DEALLOCATE(rhowann, rhor )
+  DEALLOCATE(delta_vr, delta_vr_)
   !
   !
   WRITE(stdout,'(/)')
@@ -324,7 +383,9 @@ SUBROUTINE screen_coeff ()
   IF (ionode) CLOSE (iun_res, STATUS='KEEP')
   !
   !
-  IF (do_real_space) DEALLOCATE ( drhor_scf ) 
+  IF (do_real_space) THEN 
+     DEALLOCATE ( drhor_scf ) 
+  END IF   
   !
   WRITE(stdout,'(/)') 
   !
@@ -353,6 +414,7 @@ SUBROUTINE screen_coeff ()
     IF (i_orb == -1) WRITE(876,'(i5, 2(3x, F16.12))') iwann, alpha, REAL(sh(iwann))
     !
   ENDDO
+  DEALLOCATE(vki_u, sh, vki_r)
   !
   WRITE(stdout, '(3/)')
   IF ( i_orb == -1 ) CLOSE (876)
@@ -443,6 +505,22 @@ SUBROUTINE restart_screen (num_wann, iq_start, vki_r, vki_u, sh, do_real_space)
   !
 9011 FORMAT(/, 8x, "iq =", i4, 3x, "iwann =", i4, 3x, "rPi_q =", 2f15.8, 3x, "uPi_q =", & 
                2f15.8, 3x, "SH_q =", 2f15.8)
+9012 FORMAT(/, 8x,' Read skipping for #iq = ',i4)
+  !
+  CONTAINS
+
+     FUNCTION skip_iq(iq, iwann_start, iwann_end) RESULT(skip)
+       INTEGER, INTENT(IN) :: iq, iwann_start, iwann_end
+
+       INTEGER :: iwan
+       LOGICAL :: skip
+
+       skip = .TRUE.
+
+       DO iwan = iwann_start, iwann_end
+            skip = skip .and. (fbz2ibz(iq, iwan) .EQ. -1)
+       END DO
+    END FUNCTION
   !
 END SUBROUTINE restart_screen 
 
@@ -468,13 +546,15 @@ SUBROUTINE check_density (rhowann)
   INTEGER :: iwann,ii
   REAL(DP) :: int_rho, w1
 
-  COMPLEX(DP) :: density(dffts%nnr)
+  !!COMPLEX(DP) :: density(dffts%nnr)
+  COMPLEX(DP), ALLOCATABLE ::  density(:)
   COMPLEX(DP), INTENT (IN) :: rhowann(dffts%nnr, num_wann,nrho)
   REAL(DP),    ALLOCATABLE :: rhoup(:), rhodw(:)
   REAL(DP),    ALLOCATABLE :: int_rhos(:), rhos(:,:), checks(:)
   COMPLEX(DP),    ALLOCATABLE  :: densities(:,:)
   !
-  IF (nspin==4) THEN
+  ALLOCATE(density(dffts%nnr) )
+  if (nspin==4) then
     ALLOCATE (rhos(dfftp%nnr, nrho))
     ALLOCATE (densities(dfftp%nnr, nrho))
     densities(:,:) = (0.D0,0.D0)
@@ -554,7 +634,8 @@ SUBROUTINE check_density (rhowann)
        CALL errore ('check_density','\int dr [rho - rho_PWSCF] > 1e-8; SOMETHING WRONG',1)
     ENDIF
     DEALLOCATE (rhoup, rhodw)
-  ENDIF
+    ENDIF
+  DEALLOCATE(density )
   !
 END SUBROUTINE check_density
 

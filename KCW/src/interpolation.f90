@@ -53,15 +53,17 @@ CONTAINS
     !
     IMPLICIT NONE
     !
-    COMPLEX(DP) :: ham_int(num_wann,num_wann)                   ! interpolated H(k)
-    COMPLEX(DP) :: eigvc(num_wann,num_wann)
-    REAL(DP)    :: eigvl(num_wann,nks_bands)
+    !!COMPLEX(DP) :: ham_int(num_wann,num_wann)                   ! interpolated H(k)
+    COMPLEX(DP), ALLOCATABLE :: ham_int(:,:)                   ! interpolated H(k)
+    !!COMPLEX(DP) :: eigvc(num_wann,num_wann)
+    COMPLEX(DP), ALLOCATABLE :: eigvc(:,:)
+    !!REAL(DP)    :: eigvl(num_wann,nks_bands)
+    REAL(DP), ALLOCATABLE    :: eigvl(:,:)
     INTEGER     :: ik
     INTEGER     :: k_to_R     ! FT type: (+1) from k- to R-space, (-1) from R- to k-space
     !
     !
     ALLOCATE( Hamlt_R(nkstot_eff,num_wann,num_wann) )
-    ALLOCATE( centers(3,num_wann) )
     !
     CALL real_ham( Hamlt_R )
     !
@@ -69,8 +71,10 @@ CONTAINS
     WRITE( stdout, '(5x, "STARTING BAND STRUCTURE INTERPOLATION")' )
     WRITE( stdout, '(5x,36("="))')
     !
+    ALLOCATE( centers(3,num_wann) )
     IF (use_ws_distance) CALL read_wannier_centers()
     !
+    ALLOCATE(ham_int(num_wann,num_wann) , eigvc(num_wann,num_wann), eigvl(num_wann,nks_bands))
     k_to_R = -1
     DO ik = 1, nks_bands
       !
@@ -87,6 +91,7 @@ CONTAINS
     CALL print_bands_to_file( eigvl )
     !
     WRITE( stdout, '(/,5x, "ENDING BAND STRUCTURE INTERPOLATION",/)' )
+    DEALLOCATE(ham_int, eigvc, eigvl)
     !
     !
   END SUBROUTINE interpolate_ham
@@ -105,18 +110,22 @@ CONTAINS
     !
     COMPLEX(DP), INTENT(OUT) :: ham(:,:,:)     ! H(R)
     !
-    COMPLEX(DP) :: ham_aux(num_wann,num_wann)
+    !!COMPLEX(DP) :: ham_aux(num_wann,num_wann)
+    COMPLEX(DP), ALLOCATABLE :: ham_aux(:,:)
     INTEGER :: ir
     INTEGER :: k_to_R
     !
     !
+    ALLOCATE( ham_aux(num_wann, num_wann) )
     k_to_R = +1
     DO ir = 1, nkstot_eff
       !
-      CALL FT_ham( Hamlt(1:nkstot_eff,:,:), num_wann, ham_aux, ir, k_to_R )
+      !!CALL FT_ham( Hamlt(1:nkstot_eff,:,:), num_wann, ham_aux, ir, k_to_R )
+      CALL FT_ham( Hamlt(:,:,:), num_wann, ham_aux, ir, k_to_R )
       ham(ir,:,:) = ham_aux 
       !
     ENDDO
+    DEALLOCATE(ham_aux)
     !
     !
   END SUBROUTINE real_ham
@@ -144,7 +153,8 @@ CONTAINS
     INTEGER, INTENT(IN)      :: h_dim
     INTEGER, INTENT(IN)      :: ir         ! k-point (or R-point) index
     INTEGER, INTENT(IN)      :: k_to_R     ! FT type: (+1) from k- to R-space, (-1) from R- to k-space
-    COMPLEX(DP), INTENT(IN)  :: ham(nkstot_eff,h_dim,h_dim)
+    !!COMPLEX(DP), INTENT(IN)  :: ham(nkstot_eff,h_dim,h_dim)
+    COMPLEX(DP), INTENT(IN)  :: ham(:,:,:)
     !
     COMPLEX(DP), INTENT(OUT) :: ham_t(h_dim,h_dim)
     !

@@ -27,14 +27,16 @@ SUBROUTINE self_hartree (iwann, sh)
   INTEGER, INTENT(IN) :: iwann
   !
   ! Couters for the q point, wannier index. record length for the wannier density
-  INTEGER :: iq, lrrho
+  INTEGER :: iq, lrrho, ii
   !
   ! The periodic part of the wannier orbital density
-  COMPLEX(DP) :: rhowann(dffts%nnr, num_wann, nrho), rhor(dffts%nnr, nrho)
-  COMPLEX(DP) :: delta_vr(dffts%nnr,nspin_mag), delta_vr_(dffts%nnr,nspin_mag)
+  !COMPLEX(DP) :: rhowann(dffts%nnr, num_wann, nrho), rhor(dffts%nnr, nrho)
+  COMPLEX(DP), ALLOCATABLE :: rhowann(:,:,:), rhor(:,:)
+  !COMPLEX(DP) :: delta_vr(dffts%nnr,nspin_mag), delta_vr_(dffts%nnr,nspin_mag)
+  COMPLEX(DP), ALLOCATABLE :: delta_vr(:,:), delta_vr_(:,:)
   !
   ! The self Hartree
-  COMPLEX(DP) :: sh
+  COMPLEX(DP) :: sh, zpom
   !
   ! Auxiliary variables 
   COMPLEX(DP), ALLOCATABLE  :: rhog(:,:), delta_vg(:,:), vh_rhog(:), delta_vg_(:,:)
@@ -43,7 +45,10 @@ SUBROUTINE self_hartree (iwann, sh)
   REAL(DP) :: weight(nqstot)
   !
   ALLOCATE ( rhog (ngms,nrho) , delta_vg(ngms,nspin_mag), vh_rhog(ngms), delta_vg_(ngms,nspin_mag) )
+  ALLOCATE ( rhowann(dffts%nnr, num_wann, nrho), rhor(dffts%nnr, nrho) )
+  ALLOCATE ( delta_vr(dffts%nnr,nspin_mag), delta_vr_(dffts%nnr,nspin_mag) )
   !
+  !$acc enter data create(rhor, rhog, vh_rhog, delta_vr, delta_vr_, delta_vg, delta_vg_)
   DO iq = 1, nqstot
     !
     lrrho=num_wann*dffts%nnr*nrho
@@ -52,12 +57,15 @@ SUBROUTINE self_hartree (iwann, sh)
     !
     weight(iq) = 1.D0/nqstot ! No SYMM 
     !
-    rhog(:,:)       = CMPLX(0.D0,0.D0,kind=DP)
-    delta_vg(:,:)   = CMPLX(0.D0,0.D0,kind=DP)
-    vh_rhog(:)      = CMPLX(0.D0,0.D0,kind=DP)
-    rhor(:,:)       = CMPLX(0.D0,0.D0,kind=DP)
+   !$acc kernels present(rhog, delta_vg, delta_vg_, vh_rhog, rhor)
+    rhog(:,:)       = (0.0_dp,0.0_dp)
+    delta_vg(:,:)   = (0.0_dp,0.0_dp)
+    vh_rhog(:)      = (0.0_dp,0.0_dp)
+    rhor(:,:)       = (0.0_dp,0.0_dp)
+    !$acc end kernels
     !
     rhor(:,:) = rhowann(:,iwann,:) 
+    !$acc update device(rhor)
     !! The periodic part of the orbital desity in real space
     !
     CALL bare_pot ( rhor, rhog, vh_rhog, delta_vr, delta_vg, iq, delta_vr_, delta_vg_ )
@@ -72,8 +80,12 @@ SUBROUTINE self_hartree (iwann, sh)
     !
     ! 
   ENDDO ! qpoints
+  !$acc exit data delete(rhor, rhog , delta_vg, vh_rhog, delta_vg_ )
+  !$acc exit data delete(delta_vr, delta_vr_)
   !
   DEALLOCATE ( rhog , delta_vg, vh_rhog, delta_vg_ )
+  DEALLOCATE ( rhowann, rhor )
+  DEALLOCATE ( delta_vr, delta_vr_ )
   !
   CALL mp_sum (sh, intra_bgrp_comm)
  !

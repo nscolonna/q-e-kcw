@@ -17,6 +17,7 @@
     starting_magnetization(1) = 0.001
 /
 &electrons
+    conv_thr =   1.0000000000d-18
     diagonalization='david'
     mixing_beta = 0.7
     conv_thr =  1.0d-10

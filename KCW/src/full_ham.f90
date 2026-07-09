@@ -50,13 +50,15 @@ SUBROUTINE full_ham (ik)
   INTEGER i_start, i_end, ik_eff
   !
   !
-  REAL(DP) :: n_r(dfftp%nnr), num1, num2, sh, aux_r(dfftp%nnr) 
-  ! ... orbital density in rela space
+  REAL(DP) :: num1, num2, sh
   !
-  COMPLEX(DP) n_g(ngm), n_g_aux(ngm,nspin_mag), aux_g(ngm)
+  REAL(DP), ALLOCATABLE :: n_r(:), aux_r(:), v(:,:), vxc_minus1(:,:), vxc(:,:)
+  ! ... orbital density in real space
+  !
+  COMPLEX(DP), ALLOCATABLE :: n_g(:), n_g_aux(:,:), aux_g(:)
   ! ... orbital density in G space
   !
-  REAL(DP) :: ehart, v(dfftp%nnr,nspin_mag), vxc_minus1(dfftp%nnr,2), vxc(dfftp%nnr,nspin_mag), charge, w1
+  REAL(DP) :: ehart, charge, w1
   !  
   TYPE (scf_type) :: rho_minus1
   !
@@ -75,6 +77,9 @@ SUBROUTINE full_ham (ik)
   !
   ALLOCATE (psic_1( dfftp%nnr), vpsi_r(dffts%nnr), vpsi(npwx), v_ki(npwx,nbnd))
   ALLOCATE (et_aux(nbnd,nks))
+  ALLOCATE (n_r(dfftp%nnr), aux_r(dfftp%nnr) )
+  ALLOCATE (n_g(ngm), n_g_aux(ngm,nspin_mag), aux_g(ngm))
+  ALLOCATE (v(dfftp%nnr,nspin_mag), vxc_minus1(dfftp%nnr,2), vxc(dfftp%nnr,nspin_mag))
   !
   !
   WRITE(stdout,'(/,5x,"INFO: KI calcualtion: Full Hamiltonian ... ",/ )')
@@ -566,6 +571,9 @@ SUBROUTINE full_ham (ik)
   !
   DEALLOCATE (psic_1, vpsi_r, vpsi, v_ki) 
   DEALLOCATE (et_aux)
+  DEALLOCATE (n_r, aux_r)
+  DEALLOCATE (n_g, n_g_aux, aux_g)
+  DEALLOCATE (v, vxc_minus1, vxc)
   !
 9046 FORMAT(8x, 'KI[pert] highest occupied level (ev): ',F10.4 )
 9045 FORMAT(8x, 'KI[full] highest occupied level (ev): ',F10.4 )

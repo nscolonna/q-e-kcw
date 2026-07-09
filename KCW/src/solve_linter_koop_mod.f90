@@ -9,6 +9,9 @@ MODULE solve_linter_koop_mod
 
 CONTAINS
 !
+!!JA ASSUME all arrays are on GPU excpet
+!!JA drhog_scf and drhor_scf - are crateted and return ONLY on GPU
+!!JA delta_vg is only used for OLD  - sternheimer_kernel_old - not USED
 !-----------------------------------------------------------------------
 subroutine solve_linter_koop ( spin_ref, i_ref, delta_vr, drhog_scf, delta_vg, drhor_scf)
   !-----------------------------------------------------------------------
@@ -84,11 +87,10 @@ subroutine solve_linter_koop ( spin_ref, i_ref, delta_vr, drhog_scf, delta_vg, d
               dvscfout (:,:),   & !
               dbecsum(:,:,:,:), & !
               dbecsum_nc (:,:,:,:,:,:), & !
-              aux(:),           & !
-              drhoc(:)  
+              aux(:)           !  
   INTEGER :: nrec
   !
-  COMPLEX(DP), ALLOCATABLE, target :: dvscfin(:,:)
+  COMPLEX(DP), ALLOCATABLE, target :: dvscfin(:,:,:)
   ! change of the scf potential 
   COMPLEX(DP), pointer :: dvscfins (:,:,:)
   !
@@ -116,7 +118,7 @@ subroutine solve_linter_koop ( spin_ref, i_ref, delta_vr, drhog_scf, delta_vg, d
   LOGICAL :: new
   COMPLEX(DP)    ::   imag
   REAL(DP)       ::   xq_cryst(3)
-  INTEGER        ::   isym
+  INTEGER        ::   isym, nnr
 
   ! Set to false to revert to the previous implementation of the Linear solver (consistent with QE7.1)
   new = .true.
@@ -126,17 +128,27 @@ subroutine solve_linter_koop ( spin_ref, i_ref, delta_vr, drhog_scf, delta_vg, d
   nsolv=1
   IF (noncolin.AND.domag) nsolv=2
   !
-  ALLOCATE (dvscfin (dfftp%nnr, nspin)) 
-  dvscfin(:,:) = (0.D0, 0.D0)
   !
+  nnr = dfftp%nnr
   IF (doublegrid) THEN
-     ALLOCATE (dvscfins (dffts%nnr , nspin_mag , 1))
+    ALLOCATE (dvscfins (dffts%nnr , nspin_mag , 1))
+    dvscfins(:,:,:) = (0.D0, 0.D0)
+    !$acc enter data copyin(dvscfins)
+!    !$acc enter data create(dvscfins)
+!    !$acc kernels present(dvscfins)
+!    dvscfins(:,:,:) = (0.D0, 0.D0)
+!    !$acc end kernels
   ELSE
-     dvscfins(1:dffts%nnr, 1:nspin_mag, 1:1) => dvscfin
+    ALLOCATE (dvscfin (dfftp%nnr, nspin_mag, 1)) 
+    dvscfin(:,:,:) = (0.D0, 0.D0)
+     !$acc enter data copyin(dvscfin)
+!    !$acc enter data create(dvscfin)
+!    !$acc kernels present(dvscfin)
+!    dvscfin(:,:,:) = (0.D0, 0.D0)
+!    !$acc end kernels
   ENDIF
   !
-  !ALLOCATE (drhoscf  (dfftp%nnr, nspin, 1) )
-  ALLOCATE (drhoscf  (dffts%nnr, nspin_mag) ) !! NsC
+  ALLOCATE (drhoscf  (dffts%nnr, nspin_mag))
   ALLOCATE (drhoscfh (dfftp%nnr, nspin_mag))
   ALLOCATE (dvscfout (dfftp%nnr, nspin_mag))    
   ALLOCATE (dbecsum ( (nhm * (nhm + 1))/2 , nat , nspin_mag , 1)) 
@@ -156,9 +168,8 @@ subroutine solve_linter_koop ( spin_ref, i_ref, delta_vr, drhog_scf, delta_vg, d
      upert_mq(1, 1) = (1.d0, 0.d0)
   ENDIF ! minus_q
   ! 
-  IF (noncolin) allocate (dbecsum_nc (nhm,nhm, nat , nspin , 1, nsolv))
+  IF (noncolin) allocate (dbecsum_nc (nhm,nhm, nat , nspin_mag , 1, nsolv))
   ALLOCATE (aux ( dffts%nnr ))    
-  ALLOCATE (drhoc(dfftp%nnr))
   !
   drhoscf  = CMPLX(0.D0, 0.D0, kind =DP)
   drhoscfh = CMPLX(0.D0, 0.D0, kind =DP)
@@ -194,17 +205,28 @@ subroutine solve_linter_koop ( spin_ref, i_ref, delta_vr, drhog_scf, delta_vg, d
        !
        ! read unperturbed wavefunctions psi(k) and psi(k+q)
        !
-       IF (nksq .GT. 1 .OR. nsolv == 2) CALL get_buffer (evc, lrwfc, iuwfc, ikmk)
+       IF (nksq .GT. 1 .OR. nsolv == 2) THEN 
+           CALL get_buffer (evc, lrwfc, iuwfc, ikmk)
+           !$acc update device(evc)
+       END IF    
        nrec = (isolv-1) * nksq + ik
        !
        ! ... Compute dv_bare*psi (dvspi) and store it 
        !     This depends on isolv [if isolv=2 delta_vr(2:4) -> - delta_vr(2:4)]
-       IF (isolv==2) delta_vr(:,2:4) = - delta_vr(:,2:4)
-       CALL kcw_dvqpsi (ik, delta_vr)!, isolv)
+       IF (isolv==2) THEN 
+          !$acc kernels present(delta_vr)
+          delta_vr(:,2:4) = - delta_vr(:,2:4)
+          !$acc end kernels
+       END IF   
+       CALL kcw_dvqpsi (ik, delta_vr, isolv)
        CALL save_buffer (dvpsi, lrdvwfc, iudvwfc, nrec)
        !WRITE(*,'("NICOLA dvpsi", I5, 3X, 3(F20.18,2x))') nrec, REAL(CONJG(dvpsi(npwx+1:npwx+3,1))*dvpsi(npwx+1:npwx+3,1))
        ! Restore the sign of delta_vr
-       IF (isolv==2) delta_vr(:,2:4) = - delta_vr(:,2:4)
+       IF (isolv==2) THEN 
+          !$acc kernels present(delta_vr)
+          delta_vr(:,2:4) = - delta_vr(:,2:4)
+          !$acc end kernels
+       END IF   
        !
        IF (okvan) THEN
           CALL errore('solve_linter_koop', 'USPP not implemented yet', 1)
@@ -217,40 +239,54 @@ subroutine solve_linter_koop ( spin_ref, i_ref, delta_vr, drhog_scf, delta_vg, d
   !   Loop is over the iterations
   !
   dr2=0.d0
+  !$acc enter data create(drhoscf)
   DO iter = 1, niter
      !
+     !$acc kernels present(drhoscf)
      drhoscf = (0.d0, 0.d0)
+     !$acc end kernels
      dbecsum = (0.d0, 0.d0)
      !
      IF (noncolin) dbecsum_nc = (0.d0, 0.d0)
      !
-     DO isolv = 1, nsolv
-       !
-       IF (iter == 1 ) THEN
-          thresh = 1.d-6
-       ELSE
-         !thresh = min (1.d-1 * sqrt (dr2), 1.d-2)
-         thresh = min (1.d-2 * sqrt (dr2), 1.d-6)
-       ENDIF
-       ! 
-       IF ( new ) THEN 
-         !
-         CALL sternheimer_kernel(iter==1, isolv==2, 1, lrdvwfc, iudvwfc, &
-         thresh, dvscfins, all_conv, averlt, drhoscf, dbecsum, &
-         dbecsum_nc(:,:,:,:,:,isolv))
-         !
-       ELSE
-         ! NsC: NOT UPDATED to NC case. Anyway not used anymore
-         CALL sternheimer_kernel_old(iter==1, 1, i_ref, lrdvwfc, iudvwfc, &
-             thresh, dvscfins, all_conv, averlt, drhoscf, dbecsum ,delta_vg)
-       ENDIF
-       !
-     ENDDO
+     IF (doublegrid) THEN
+        DO isolv = 1, nsolv
+          !
+          IF (iter == 1 ) THEN
+             thresh = 1.d-6
+          ELSE
+            thresh = min (1.d-2 * sqrt (dr2), 1.d-6)
+          ENDIF
+          ! 
+            CALL sternheimer_kernel(iter==1, isolv==2, 1, lrdvwfc, iudvwfc, &
+            thresh, dvscfins, all_conv, averlt, drhoscf, dbecsum, &
+            dbecsum_nc(:,:,:,:,:,isolv))
+          !
+        ENDDO
+     ELSE
+        DO isolv = 1, nsolv
+          !
+          IF (iter == 1 ) THEN
+             thresh = 1.d-6
+          ELSE
+            thresh = min (1.d-2 * sqrt (dr2), 1.d-6)
+          ENDIF
+          ! 
+            !
+            CALL sternheimer_kernel(iter==1, isolv==2, 1, lrdvwfc, iudvwfc, &
+            thresh, dvscfin, all_conv, averlt, drhoscf, dbecsum, &
+            dbecsum_nc(:,:,:,:,:,isolv))
+            !
+          !
+        ENDDO
+     END IF
      !
      IF (nsolv==2) THEN
+        !$acc kernels present(drhoscf)
         drhoscf = drhoscf / 2.0_DP
+        !$acc end kernels
         dbecsum = dbecsum / 2.0_DP
-        dbecsum_nc = dbecsum_nc / 2.0_DP
+        IF (noncolin) dbecsum_nc = dbecsum_nc / 2.0_DP
      ENDIF
      !
      !
@@ -263,6 +299,7 @@ subroutine solve_linter_koop ( spin_ref, i_ref, delta_vr, drhog_scf, delta_vg, d
      ENDIF
      !
      !
+     !$acc update host(drhoscf)
      IF (doublegrid) THEN
         DO is = 1, nspin_mag
            CALL fft_interpolate (dffts, drhoscf(:,is), dfftp, drhoscfh(:,is))
@@ -271,21 +308,11 @@ subroutine solve_linter_koop ( spin_ref, i_ref, delta_vr, drhog_scf, delta_vg, d
         CALL zcopy (nspin_mag*dfftp%nnr, drhoscf, 1, drhoscfh, 1)
      ENDIF
      !
-     ! if q=0, make sure that charge conservation is guaranteed
-     !
-     !IF ( lgamma ) THEN  !NOT UPDATED TO NC - I do not fully understand it! A.M.
-     !   psic(:) = drhoscfh(:, nspin)
-     !   CALL fwfft ('Rho', psic, dfftp)
-     !   IF ( gstart==2) psic(dfftp%nl(1)) = (0.d0, 0.d0)
-     !   CALL invfft ('Rho', psic, dfftp)
-     !   drhoscfh(:, nspin) = psic(:)
-     !ENDIF
      !
      ! Symmetrization of the response charge density.
      !
      IF (irr_bz) CALL psymdvscf (drhoscfh, dfftp)
      !
-
      !
      !    Now we compute for all perturbations the total charge and potential
      !
@@ -295,24 +322,25 @@ subroutine solve_linter_koop ( spin_ref, i_ref, delta_vr, drhog_scf, delta_vg, d
      !
      CALL mp_sum (drhoscf, inter_pool_comm)
      CALL mp_sum (drhoscfh, inter_pool_comm)
+     !$acc update device(drhoscf)
      !
      !   ... save them on disk and
      !   compute the corresponding change in scf potential
      !
-     CALL zcopy (dfftp%nnr*nspin_mag,drhoscfh(1,1),1,dvscfout(1,1),1) !<--- WHY (1,1)???
+     !! CALL zcopy (dfftp%nnr*nspin_mag,drhoscfh(1,1),1,dvscfout(1,1),1) !<--- WHY (1,1)???
+     dvscfout(:,:) = drhoscfh(:,:)
+
      ! NB: always CALL with imode=0 to avoid CALL to addcore in dv_of_drho for 
      !     nlcc pseudo. The CALL is not needed since we are not moving atoms!!
      !
-     CALL dv_of_drho (dvscfout(1,1))
-     !
-     !
+     CALL dv_of_drho (dvscfout) 
+!
      ! ... On output in dvscfin we have the mixed potential
      !
-     !HERE BELOW CHECK WHY FACTOR OF 2 IS THERE (A.M.)
-     !Not sure but it seems because dvscfin/dvscfout are complex(DP) here, real(DP) in mix_potential (N.C.)
-     CALL mix_potential (2*dfftp%nnr*nspin_mag, dvscfout, dvscfin, &
+     CALL mix_potential (2*dfftp%nnr*nspin_mag, dvscfout, dvscfin, &   
                          alpha_mix(iter), dr2, tr2/npol, iter, &
                          nmix, flmixDPot, convt)
+     !$acc update device(dvscfin) 
      !WRITE(mpime+1000, '(1i5,es10.3,1l1,1i5)') my_pool_id, dr2, convt, iter
      !
      ! check that convergent have been reached on ALL processors in this image
@@ -326,7 +354,7 @@ subroutine solve_linter_koop ( spin_ref, i_ref, delta_vr, drhog_scf, delta_vg, d
      !
      tcpu = get_clock ('KCW')
      !
-     WRITE( stdout, '(/,5x," iter # ",i3," total cpu time :",f8.1, &
+     WRITE( stdout, '(/,5x," iter # ",i3," total cpu time :",f9.1, &
           &      " secs   av.it.: ",f5.1)') iter, tcpu, averlt
      WRITE( stdout, '(5x," thresh=",es10.3, " alpha_mix = ",f6.3, &
           &      " |ddv_scf|^2 = ",es10.3 )') thresh, alpha_mix (iter) , dr2
@@ -338,32 +366,51 @@ subroutine solve_linter_koop ( spin_ref, i_ref, delta_vr, drhog_scf, delta_vg, d
      IF (convt) EXIT
      !
   ENDDO  ! loop over iteration
+
+  IF (present(drhor_scf)) THEN 
+      !$acc enter data create(drhor_scf)
+      !$acc kernels present(drhor_scf, drhoscf)
+      drhor_scf = drhoscf(:,:)
+      !$acc end kernels
+  END IF    
+  !$acc exit data delete(drhoscf)
   !
   ! The density variation in G-space
   !
+  !$acc enter data create(drhog_scf, aux)
   DO is = 1, nspin_mag
      aux(:) = drhoscfh(:,is)
+     !$acc update device(aux)
+     !$acc host_data use_device(aux)
      CALL fwfft ('Rho', aux, dffts)
+     !$acc end host_data
+     !$acc kernels present(drhog_scf, aux, dffts, dffts%nl) 
      drhog_scf(:,is) = aux(dffts%nl(:))
+     !$acc end kernels
   ENDDO
+  !$acc exit data delete(aux)
   !
-  IF (present(drhor_scf)) drhor_scf = drhoscf(:,:)
   !
   ! The induced density in G space
   !
   if (lmetq0) CALL deallocate_dfpt_ldos(ldos_data)
   DEALLOCATE (aux)
-  DEALLOCATE (drhoc)
   DEALLOCATE (dbecsum)
   IF (noncolin) DEALLOCATE (dbecsum_nc)
   DEALLOCATE (drhoscf )
   DEALLOCATE (dvscfout)
   DEALLOCATE (drhoscfh)
-  IF (doublegrid) DEALLOCATE (dvscfins)
-  DEALLOCATE (dvscfin)
+  IF (doublegrid) THEN 
+     !$acc exit data delete(dvscfins)
+     DEALLOCATE (dvscfins)
+  ELSE   
+     !$acc exit data delete(dvscfin)
+     DEALLOCATE (dvscfin)
+  END IF
   DEALLOCATE (upert)
   IF (minus_q) DEALLOCATE(upert_mq) 
   ! 
+  !
   CALL stop_clock ('solve_linter')
   !
   RETURN
@@ -401,6 +448,7 @@ SUBROUTINE check_all_convt( convt )
 END SUBROUTINE
 
 
+!!JA asume delta_vr are on GPU
 !------------------------------------------------------------------
 SUBROUTINE kcw_dvqpsi (ik, delta_vr)!, isolv)
   !----------------------------------------------------------------
@@ -424,7 +472,8 @@ SUBROUTINE kcw_dvqpsi (ik, delta_vr)!, isolv)
   INTEGER, INTENT(IN) :: ik!, isolv
   INTEGER :: ibnd, ir, ikk, ikq
   COMPLEX(DP), INTENT(in) ::delta_vr (dffts%nnr, nspin_mag)
-  COMPLEX(DP) :: aux( dffts%nnr,npol)!, aux_g(npwx*npol)
+  !!COMPLEX(DP) :: aux( dffts%nnr,npol)!, aux_g(npwx*npol)
+  COMPLEX(DP), ALLOCATABLE, DIMENSION(:,:)  :: aux  !, aux_g(npwx*npol)
   COMPLEX(DP) :: sup, sdwn    
   !
   ikk = ikks(ik)
@@ -432,19 +481,30 @@ SUBROUTINE kcw_dvqpsi (ik, delta_vr)!, isolv)
   npw = ngk(ikk)
   npwq= ngk(ikq)
   !
-  dvpsi(:,:) = (0.D0, 0.D0)
-  aux(:,:) = (0.D0, 0.D0)
+  ALLOCATE (aux(dffts%nnr, npol))
+
+  !$acc enter data create(dvpsi, aux) 
+  !$acc kernels present(dvpsi)
+    dvpsi(:,:) = (0.0_dp, 0.0_dp)
+  !$acc end kernels
+ !! aux(:,:) = (0.D0, 0.D0)
   !
   DO ibnd = 1, nbnd_occ (ik)
-      aux(:,:) = (0.d0, 0.d0)
+      !$acc kernels present(aux)
+      aux(:,:) = (0.0_dp, 0.0_dp)
+      !$acc end kernels
+
       IF (nspin==2 .OR. nspin==1) THEN
   !OLD FFT
   !       DO ig = 1, npw
   !          aux (dffts%nl(igk_k(ig,ikk)),1)=evc(ig,ibnd)
   !       ENDDO
   !       CALL invfft ('Wave', aux, dffts)
+      !!   !$acc enter data copyin(aux)
          CALL invfft_wave (npwx, npw, igk_k (1,ikk), evc(:,ibnd), aux )
+      !!   !$acc exit data copyout(aux)
 
+         !$acc parallel loop present(aux, delta_vr)
          DO ir = 1, dffts%nnr
              aux(ir,1)=aux(ir,1)*delta_vr(ir,current_spin) 
          ENDDO
@@ -453,11 +513,17 @@ SUBROUTINE kcw_dvqpsi (ik, delta_vr)!, isolv)
  !        DO ig = 1, npwq
  !           dvpsi(ig,ibnd)=aux(dffts%nl(igk_k(ig,ikq)),1)
  !        ENDDO
+    !!     !$acc enter data copyin(dvpsi, aux) 
          CALL fwfft_wave (npwx, npwq, igk_k (1,ikq), dvpsi(:,ibnd) , aux)
+    !!     !$acc exit data copyout(dvpsi, aux)
 
       ELSEIF (nspin==4) THEN
+       !!  !$acc enter data copyin(aux)
          CALL invfft_wave (npwx, npw, igk_k (1,ikk), evc(:,ibnd), aux )
+       !!  !$acc exit data copyout(aux)
+
          IF (domag) then
+            !$acc parallel loop present(aux, delta_vr) private(sup, sdwn)
             DO ir = 1, dffts%nnr
                sup=aux(ir,1)*(delta_vr(ir,1)+delta_vr(ir,4))+ &
                    aux(ir,2)*(delta_vr(ir,2)-(0.d0,1.d0)*delta_vr(ir,3))
@@ -467,15 +533,20 @@ SUBROUTINE kcw_dvqpsi (ik, delta_vr)!, isolv)
                aux(ir,2)=sdwn
             ENDDO
          ELSE
+            !$acc parallel loop present(aux, delta_vr) 
             DO ir = 1, dffts%nnr
                aux(ir,1)=aux(ir,1)*delta_vr(ir,1)
                aux(ir,2)=aux(ir,2)*delta_vr(ir,1)
             ENDDO
          END IF
+      !!   !$acc enter data copyin(dvpsi, aux) 
          CALL fwfft_wave (npwx, npwq, igk_k (1,ikq),dvpsi(:,ibnd) , aux)
+      !!   !$acc exit data copyout(dvpsi, aux)
       ENDIF
      !
   ENDDO
+  !$acc exit data copyout(dvpsi) delete(aux)
+  DEALLOCATE(aux)
   !
   RETURN 
   !
@@ -543,6 +614,7 @@ SUBROUTINE sternheimer_kernel_old(first_iter, npert, i_ref, lrdvpsi, iudvpsi, &
   ltaver = 0
   !
   linterCALL = 0
+  !$acc enter data create(aux2(1:npwx*npol, 1:nbnd), dvpsi, h_diag) copyin(dpsi)
   ! 
   do ik = 1, nksq
      !
@@ -558,9 +630,12 @@ SUBROUTINE sternheimer_kernel_old(first_iter, npert, i_ref, lrdvpsi, iudvpsi, &
      if (nksq.gt.1) then
         if (lgamma) then
            CALL get_buffer (evc, lrwfc, iuwfc, ikk)
+           !$acc update device(evc)
         else
            CALL get_buffer (evc, lrwfc, iuwfc, ikk)
+           !$acc update device(evc)
            CALL get_buffer (evq, lrwfc, iuwfc, ikq)
+           !$acc update device(evq)
         endif
      endif
      !
@@ -578,15 +653,20 @@ SUBROUTINE sternheimer_kernel_old(first_iter, npert, i_ref, lrdvpsi, iudvpsi, &
      nrec = (ipert - 1) * nksq + ik
      !
      CALL get_buffer(dvpsi, lrdvpsi, iudvpsi, ik)
+     !$acc update device(dvpsi)
      !
      ! compute the right hand side of the linear system due to
      ! the perturbation, dvscfin used as work space
      !
      IF (.NOT. first_iter ) THEN 
         ! 
+        !$acc kernels present(aux2)
         aux2(:,:) = (0.D0,0.D0)
-        CALL apply_DPot_bands(ik, nbnd_occ(ikk), dvscfins(:, :, ipert), evc, aux2)
+        !$acc end kernels
+        CALL apply_dpot_bands(ik, nbnd_occ(ikk), dvscfins(:, :, ipert), evc, aux2)
+        !$acc kernels present(aux2, dvpsi)
         dvpsi = dvpsi + aux2
+        !$acc end kernels
         !
         !
     ENDIF
@@ -603,12 +683,15 @@ SUBROUTINE sternheimer_kernel_old(first_iter, npert, i_ref, lrdvpsi, iudvpsi, &
         !
         !  At the first iteration DPsi is set to zero
         !
+        !$acc kernels present(dpsi)
         DPsi(:, :) = (0.d0,0.d0)
+        !$acc end kernels
      ELSE
         !
         ! starting value for delta_psi is read from iudwf
         !
         CALL get_buffer(DPsi, lrdwf, iudwf, nrec)
+        !$acc update device(dpsi)
       ENDIF
      !
      weight = wk (ikk); conv_root = .true.
@@ -623,6 +706,7 @@ SUBROUTINE sternheimer_kernel_old(first_iter, npert, i_ref, lrdvpsi, iudvpsi, &
      ENDIF
      ! writes delta_psi on iunit iudwf, k=kpoint,
      !
+     !$acc update self(dpsi)
      CALL save_buffer(DPsi, lrdwf, iudwf, nrec)
      !
      ltaver = ltaver + lter
@@ -637,12 +721,16 @@ SUBROUTINE sternheimer_kernel_old(first_iter, npert, i_ref, lrdvpsi, iudvpsi, &
      !
      IF (kcw_at_KS .AND. fix_orb) THEN
        IF (spin_ref == current_spin) THEN 
+          !$acc kernels present(dpsi)
           DPsi(:,i_ref) = (0.D0, 0.D0)  !! disregard the variation of the orbital i_ref 
+          !$acc end kernels 
        ENDIF
      ENDIF
      !
-     CALL incdrhoscf (drhoscf(:,current_spin,1), weight, ik, &
+     !$acc data copy(dbecsum(:,:,current_spin, 1) )
+     CALL incdrhoscf (drhoscf(1,current_spin,1), weight, ik, &
                       dbecsum(1,1,current_spin,1), DPsi)
+     !$acc end data 
     !
 !!## DEBUG 
 !   !! This is to check which k points are effectively equivalent (DEBUG/UNDERSTAND)
@@ -662,6 +750,7 @@ SUBROUTINE sternheimer_kernel_old(first_iter, npert, i_ref, lrdvpsi, iudvpsi, &
 !!## DEBUG
     !
   enddo ! on k-points
+  !$acc exit data delete(aux2, h_diag) copyout(dvpsi, dpsi)
   !
 #ifdef __MPI
    aux_avg (1) = DBLE (ltaver)

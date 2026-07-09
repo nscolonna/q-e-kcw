@@ -98,6 +98,7 @@ subroutine print_clock_kcw
   call print_clock ('cinterpolate')
   call print_clock ('davcio')
   call print_clock ('write_rec')
+  call print_clock ('bare_pot')
   WRITE( stdout, * )
   return
 end subroutine print_clock_kcw
