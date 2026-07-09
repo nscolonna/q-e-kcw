@@ -18,7 +18,7 @@ subroutine kcw_allocate_q
   USE noncollin_module,     ONLY : npol, nspin_mag
   USE fft_base,             ONLY : dfftp
   USE wavefunctions,        ONLY : evc
-  USE becmod,               ONLY : allocate_bec_type, becp
+  USE becmod,               ONLY : allocate_bec_type, becp, allocate_bec_type_acc
   USE uspp,                 ONLY : nkb
   USE qpoint,               ONLY : nksq, eigqts
   USE lrus,                 ONLY : becp1

@@ -218,7 +218,7 @@ subroutine solve_linter_koop ( spin_ref, i_ref, delta_vr, drhog_scf, delta_vg, d
           delta_vr(:,2:4) = - delta_vr(:,2:4)
           !$acc end kernels
        END IF   
-       CALL kcw_dvqpsi (ik, delta_vr, isolv)
+       CALL kcw_dvqpsi (ik, delta_vr) !, isolv)
        CALL save_buffer (dvpsi, lrdvwfc, iudvwfc, nrec)
        !WRITE(*,'("NICOLA dvpsi", I5, 3X, 3(F20.18,2x))') nrec, REAL(CONJG(dvpsi(npwx+1:npwx+3,1))*dvpsi(npwx+1:npwx+3,1))
        ! Restore the sign of delta_vr

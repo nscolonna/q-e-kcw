@@ -107,7 +107,7 @@ subroutine kcw_setup
   REAL(DP), ALLOCATABLE :: weight(:)
   LOGICAL :: lrpa_save
   REAL(DP) :: xq_(3)
-  COMPLEX(DP) :: struct_fact, int_wann, int_rho
+  COMPLEX(DP) :: struct_fact, int_wann, int_rho, zpom
   COMPLEX(DP), ALLOCATABLE :: rho_c(:,:,:),wann_c(:,:,:)
   COMPLEX(DP) :: phase(dffts%nnr)
   INTEGER :: iwann, ii
