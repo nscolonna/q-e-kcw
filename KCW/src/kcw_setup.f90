@@ -107,7 +107,7 @@ subroutine kcw_setup
   REAL(DP), ALLOCATABLE :: weight(:)
   LOGICAL :: lrpa_save
   REAL(DP) :: xq_(3)
-  COMPLEX(DP) :: struct_fact, int_wann, int_rho, zpom
+  COMPLEX(DP) :: struct_fact, int_wann, int_rho, zpom, zpom_
   COMPLEX(DP), ALLOCATABLE :: rho_c(:,:,:),wann_c(:,:,:)
   COMPLEX(DP) :: phase(dffts%nnr)
   INTEGER :: iwann, ii
@@ -376,14 +376,28 @@ subroutine kcw_setup
       rhowann_g(:,i,:) = rhog
       !! The periodic part of the perturbation DeltaV_q(G)
       ! 
+      zpom  = (0.0_dp, 0.0_dp)
+      zpom_ = (0.0_dp, 0.0_dp)
       IF (gamma_only) THEN 
-         sh(i) = sh(i) + DBLE(sum (CONJG(rhog (:,1)) * vh_rhog(:) ))*weight(iq)*omega
+         !$acc parallel loop reduction(+:zpom) reduction(+:zpom_) present(rhog, vh_rhog)
+         DO ii =1, ngms
+            zpom  = zpom  + DBLE( CONJG(rhog (ii,1)) * vh_rhog(ii) )
+            zpom_ = zpom_ + DBLE( CONJG(rhog (ii,1)) * delta_vg(ii,spin_component) )
+         END DO
+         sh(i) = sh(i) + DBLE(zpom) *weight(iq)*omega
          IF (gstart == 2) sh(i) = sh(i) - 0.5D0*DBLE(CONJG(rhog (1,1)) * vh_rhog(1)) *weight(iq)*omega
-         upi(i)  = upi(i) + 2.D0 * DBLE(sum (CONJG(rhog (:,1)) * delta_vg(:,spin_component))) *weight(iq)*omega
+         upi(i)  = upi(i) + 2.D0 * DBLE (zpom_) *weight(iq)*omega
          IF (gstart == 2 ) upi(i) = upi(i) - DBLE(CONJG(rhog (1,1)) * delta_vg(1,spin_component)) *weight(iq)*omega
       ELSE
-         sh(i) = sh(i) + 0.5D0 * sum (CONJG(rhog (:,1)) * vh_rhog(:) )*weight(iq)*omega
-         upi(i)  = upi(i) + sum (CONJG(rhog (:,1)) * delta_vg(:,spin_component)) *weight(iq)*omega
+         !$acc parallel loop reduction(+:zpom) reduction(+:zpom_) present(rhog, vh_rhog)
+         DO ii =1, ngms
+            zpom  = zpom  + CONJG(rhog (ii,1)) * vh_rhog(ii)
+            zpom_ = zpom_ + CONJG(rhog (ii,1)) * delta_vg(ii,spin_component)
+         END DO
+         sh(i)  = sh(i) + 0.5D0 * zpom*weight(iq)*omega
+         upi(i) = upi(i) + zpom*weight(iq)*omega
+         !sh(i) = sh(i) + 0.5D0 * sum (CONJG(rhog (:,1)) * vh_rhog(:) )*weight(iq)*omega
+         !upi(i)  = upi(i) + sum (CONJG(rhog (:,1)) * delta_vg(:,spin_component)) *weight(iq)*omega
 #ifdef DEBUG
          sh_q  = sum (0.5D0*CONJG(rhog (:,1)) * vh_rhog(:) )*omega
          CALL mp_sum (sh_q,    intra_bgrp_comm)

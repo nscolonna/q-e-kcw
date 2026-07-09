@@ -71,11 +71,21 @@ SUBROUTINE self_hartree (iwann, sh)
     CALL bare_pot ( rhor, rhog, vh_rhog, delta_vr, delta_vg, iq, delta_vr_, delta_vg_ )
     !! The periodic part of the perturbation DeltaV_q(G)
     ! 
-    IF (gamma_only) THEN 
-      sh = sh + DBLE ( sum (CONJG(rhog (:,1)) * vh_rhog(:) ) ) * weight(iq)*omega
+    IF (gamma_only) THEN
+      zpom = (0.0_dp, 0.0_dp)
+      !$acc parallel loop reduction(+: zpom) present(rhog, vh_rhog)
+      DO ii = 1, ngms
+         zpom = zpom + DBLE (CONJG(rhog (ii,1)) * vh_rhog(ii))
+      END DO
+      sh = sh + DBLE (zpom) *weight(iq)*omega
       IF (gstart == 2) sh = sh - 0.5D0 * DBLE( CONJG(rhog (1,1)) * vh_rhog(1) ) *weight(iq)*omega
     ELSE
-      sh = sh + 0.5D0 * sum (CONJG(rhog (:,1)) * vh_rhog(:) )*weight(iq)*omega
+      zpom = (0.0_dp, 0.0_dp)
+      !$acc parallel loop reduction(+: zpom) present(rhog, vh_rhog)
+      DO ii = 1, ngms
+         zpom = zpom + CONJG(rhog (ii,1)) * vh_rhog(ii)
+      END DO
+      sh = sh + 0.5D0 * zpom*weight(iq)*omega
     ENDIF
     !
     ! 
