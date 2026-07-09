@@ -24,6 +24,7 @@ SUBROUTINE bare_pot ( rhor, rhog, vh_rhog, delta_vr, delta_vg, iq, delta_vr_, de
   USE gvect,                ONLY : g
   USE qpoint,               ONLY : xq
   USE constants,            ONLY : e2, fpi
+  USE eqv,                  ONLY : dmuxc
   USE control_lr,           ONLY : lrpa
   USE martyna_tuckerman,    ONLY : wg_corr_h, do_comp_mt
   USE io_global,            ONLY : stdout
