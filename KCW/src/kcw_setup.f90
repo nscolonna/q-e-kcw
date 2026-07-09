@@ -394,8 +394,8 @@ subroutine kcw_setup
             zpom  = zpom  + CONJG(rhog (ii,1)) * vh_rhog(ii)
             zpom_ = zpom_ + CONJG(rhog (ii,1)) * delta_vg(ii,spin_component)
          END DO
-         sh(i)  = sh(i) + 0.5D0 * zpom*weight(iq)*omega
-         upi(i) = upi(i) + zpom*weight(iq)*omega
+         sh(i)  = sh(i)  + 0.5D0 * zpom  * weight(iq)*omega
+         upi(i) = upi(i) +         zpom_ * weight(iq)*omega
          !sh(i) = sh(i) + 0.5D0 * sum (CONJG(rhog (:,1)) * vh_rhog(:) )*weight(iq)*omega
          !upi(i)  = upi(i) + sum (CONJG(rhog (:,1)) * delta_vg(:,spin_component)) *weight(iq)*omega
 #ifdef DEBUG

@@ -269,9 +269,13 @@ SUBROUTINE dH_ki_quadratic (dH_wann, dH_wann_proj)
     ! The weight of each q point
     REAL(DP) :: weight(nqstot)
     !
+    COMPLEX(DP) :: zpom
+    INTEGER :: i, ii
+    !
     WRITE( stdout, '(/,5X, "INFO: KC SCALAR TERM CALCULATION ... START")')
     !
     ALLOCATE ( rhog (ngms,nrho) , delta_vg(ngms,nspin_mag), vh_rhog(ngms), delta_vg_(ngms,nspin_mag) )
+    !$acc enter data create(rhor, rhog, vh_rhog, delta_vr, delta_vr_, delta_vg, delta_vg_)
     !
     DO iq = 1, nqstot
       !
@@ -283,41 +287,68 @@ SUBROUTINE dH_ki_quadratic (dH_wann, dH_wann_proj)
       !
       DO iwann = 1, num_wann  ! for each band, that is actually the perturbation
          !
+         !$acc kernels present(rhog, delta_vg, vh_rhog, rhor)
          rhog(:,:)       = CMPLX(0.D0,0.D0,kind=DP)
          delta_vg(:,:)   = CMPLX(0.D0,0.D0,kind=DP)
          vh_rhog(:)      = CMPLX(0.D0,0.D0,kind=DP)
          rhor(:,:)       = CMPLX(0.D0,0.D0,kind=DP)
+         !$acc end kernels
          !
          rhor(:,:) = rhowann(:,iwann,:)
+         !$acc update device(rhor)
          !! The periodic part of the orbital desity in real space
          !
          CALL bare_pot ( rhor, rhog, vh_rhog, delta_vr, delta_vg, iq, delta_vr_, delta_vg_ )
          !! The periodic part of the perturbation DeltaV_q(G)
-         ! 
+         !
+         zpom  = (0.0_dp, 0.0_dp)
          IF (gamma_only) THEN
-           sh(iwann) = sh(iwann) + DBLE(sum (CONJG(rhog (:,1)) * vh_rhog(:))) * weight(iq)*omega
-           IF (gstart == 2) sh(iwann) = sh(iwann) - 0.5D0*DBLE(CONJG(rhog (1,1)) * vh_rhog(1)) *weight(iq)*omega
+            !$acc parallel loop reduction(+:zpom) present(rhog, vh_rhog)
+            DO ii =1, ngms
+               zpom  = zpom  + DBLE( CONJG(rhog (ii,1)) * vh_rhog(ii) )
+            END DO
+            sh(i) = sh(i) + DBLE(zpom) *weight(iq)*omega
+            IF (gstart == 2) sh(i) = sh(i) - 0.5D0*DBLE(CONJG(rhog (1,1)) * vh_rhog(1)) *weight(iq)*omega
          ELSE
-           sh(iwann) = sh(iwann) + 0.5D0 * sum (CONJG(rhog (:,1)) * vh_rhog(:))*weight(iq)*omega
+            !$acc parallel loop reduction(+:zpom) present(rhog, vh_rhog)
+            DO ii =1, ngms
+               zpom  = zpom  + CONJG(rhog (ii,1)) * vh_rhog(ii)
+            END DO
+            sh(i)  = sh(i)  + 0.5D0 * zpom  * weight(iq)*omega
          ENDIF
          !
          IF (nspin_mag ==2 ) THEN
            !
            IF (gamma_only) THEN
-              deltah_scal(iwann, iwann) = deltah_scal(iwann,iwann) &
-                      - DBLE( sum (CONJG(rhog (:,1)) * delta_vg(:,spin_component))) * weight(iq) * omega
-              IF (gstart == 2) deltah_scal(iwann, iwann) = deltah_scal(iwann,iwann) &
+              zpom = (0.0_dp, 0.0_dp)
+             !$acc parallel loop reduction(+:zpom) present(rhog, delta_vg)
+             DO ii = 1, ngms
+                zpom = zpom + DBLE(CONJG(rhog (ii,1)) * delta_vg(ii,spin_component))
+             END DO
+             deltah_scal(iwann, iwann) = deltah_scal(iwann,iwann) - DBLE( zpom) &
+                                         * weight(iq) * omega
+             IF (gstart == 2) deltah_scal(iwann, iwann) = deltah_scal(iwann,iwann) &
                       + 0.5D0*DBLE(CONJG(rhog (1,1)) * delta_vg(1,spin_component)) * weight(iq) * omega
            ELSE
-              deltah_scal(iwann, iwann) = deltah_scal(iwann,iwann) - 0.5D0 * sum (CONJG(rhog (:,1)) * delta_vg(:,spin_component)) &
-                                       * weight(iq) * omega
+             zpom = (0.0_dp, 0.0_dp)
+             !$acc parallel loop reduction(+:zpom) present(rhog, delta_vg)
+             DO ii = 1, ngms
+                zpom = zpom + CONJG(rhog (ii,1)) * delta_vg(ii,spin_component)
+             END DO
+             deltah_scal(iwann, iwann) = deltah_scal(iwann,iwann) - 0.5D0 * zpom &
+                                         * weight(iq) * omega
            ENDIF
            !
          ELSE 
-            DO ip = 1, nspin_mag
-              deltah_scal(iwann, iwann) = deltah_scal(iwann,iwann) - 0.5D0 * sum (CONJG(rhog (:,ip)) * delta_vg(:,ip)) &
+           zpom = (0.0_dp, 0.0_dp)
+           !$acc parallel loop collapse(2) reduction(+:zpom) present(rhog, delta_vg)
+           DO ip =1,nspin_mag
+              DO ii = 1, ngms
+                 zpom = zpom + CONJG(rhog (ii,ip)) * delta_vg(ii,ip)
+              END DO
+           END DO
+           deltah_scal(iwann, iwann) = deltah_scal(iwann,iwann) - 0.5D0 * zpom &
                                           * weight(iq) * omega
-            ENDDO
          ENDIF
          !
       ENDDO
@@ -325,6 +356,7 @@ SUBROUTINE dH_ki_quadratic (dH_wann, dH_wann_proj)
     ENDDO ! qpoints
     WRITE( stdout, '(/,5X, "INFO: KC SCALAR TERM CALCULATION ... END")')
     !
+    !$acc exit data delete(rhor, rhog, vh_rhog, delta_vr, delta_vr_, delta_vg, delta_vg_)
     DEALLOCATE ( rhog , delta_vg, vh_rhog, delta_vg_ )
     !
     CALL mp_sum (deltah_scal, intra_bgrp_comm)
