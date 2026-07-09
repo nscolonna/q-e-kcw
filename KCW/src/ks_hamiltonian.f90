@@ -76,16 +76,18 @@ SUBROUTINE ks_hamiltonian (evc, ik, h_dim)
         !
         hij = CMPLX(0.D0,0.D0,kind=DP)
         IF (gamma_only) THEN 
+        !$acc loop reduction(+:hij)
           DO ig = 1, npw
             hij = hij + 2.D0 * DBLE(CONJG(evc(ig,iband)) * hpsi(ig,jband))
           ENDDO
           IF (gstart == 2) hij = hij - DBLE(CONJG(evc(1,iband)) * hpsi(1,jband))
         ELSE 
+          !$acc loop reduction(+:hij)
           DO ig = 1, npw*npol
              hij = hij + CONJG(evc(ig,iband)) * hpsi(ig,jband)
           ENDDO
         ENDIF
-        CALL mp_sum (hij, intra_bgrp_comm)
+        !!CALL mp_sum (hij, intra_bgrp_comm)
         !
         ham(iband,jband) = hij
         ham(jband,iband) = CONJG(ham(iband,jband))
