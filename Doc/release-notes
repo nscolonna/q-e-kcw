@@ -6,7 +6,8 @@ New in 8.0 version
   * ...
 
 Fixed in 7.6.x version(s)
-  * .... 
+  * Missing initialization of some PAW arrays (issue #863, courtesy Minkyu Park)
+
 Incompatible changes in 7.6.x version(s)
   * None (fully compatible with 7.6) 
 New in 7.6.x version(s) 
