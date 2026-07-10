@@ -407,9 +407,6 @@ SUBROUTINE dH_ki_quadratic (dH_wann, dH_wann_proj)
     COMPLEX(DP), INTENT (INOUT) :: dH_wann(num_wann, num_wann)
     ! The KI real term contribution to the Hamiltonian
     !
-    COMPLEX(DP) :: sh
-    ! The self-Hartree of the Wannier function
-    !
     INTEGER :: iq, nqs
     ! Counter for the k/q points in the BZ, total number of q points and number of pw for a given k (k+q) point
     !
@@ -418,8 +415,7 @@ SUBROUTINE dH_ki_quadratic (dH_wann, dH_wann_proj)
     !
   !!  COMPLEX(DP) :: rhowann(dffts%nnr, num_wann,nrho), rhor(dffts%nnr,nrho), delta_vr(dffts%nnr,nspin_mag), sh(num_wann), &
   !!                 delta_vr_(dffts%nnr,nspin_mag)
-    COMPLEX(DP), ALLOCATABLE :: rhowann(:, :,:), rhor(:,:), delta_vr(:,:), sh(:), &
-                   delta_vr_(:,:)
+    COMPLEX(DP), ALLOCATABLE :: rhowann(:, :,:), rhor(:,:), delta_vr(:,:), sh(:), delta_vr_(:,:)
 
     ! The periodic part of the wannier orbital density in r space
     ! The perturbig potential in real space
@@ -493,7 +489,7 @@ SUBROUTINE dH_ki_quadratic (dH_wann, dH_wann_proj)
     ALLOCATE ( rhog (ngms,nrho) , delta_vg(ngms,nspin_mag), vh_rhog(ngms), delta_vg_(ngms,nspin_mag) )
     !$acc enter data create(rhor, rhog, vh_rhog, delta_vr, delta_vr_, delta_vg, delta_vg_)
     !
-    deltaH = CMPLX(0.D0,0.D0,kind=DP)
+    dH_wann = CMPLX(0.D0,0.D0,kind=DP)
     rho_r_nm = CMPLX(0.D0,0.D0,kind=DP)
     sh     = CMPLX(0.D0,0.D0,kind=DP)
     !
@@ -687,7 +683,7 @@ SUBROUTINE dH_ki_quadratic (dH_wann, dH_wann_proj)
               DO ii =1, ngms
                  zpom = zpom + rho_g_nm(ii,1)*CONJG(delta_vg(ii,spin_component))
               END DO   
-              deltaH(iwann, jwann) = deltaH(iwann,jwann) + zpom*weight(iq)*omega
+              dH_wann(iwann, jwann) = dH_wann(iwann,jwann) + zpom*weight(iq)*omega
 
                 !
               ENDIF
@@ -708,7 +704,7 @@ SUBROUTINE dH_ki_quadratic (dH_wann, dH_wann_proj)
               DO ii =1, ngms
                  zpom = zpom+ delta_vg(ii,spin_component)*conjg(rho_g_nm(ii,1))
               END DO   
-              deltaH(iwann, jwann) = deltaH(iwann,jwann) + zpom*weight(iq)*omega
+              dH_wann(iwann, jwann) = dH_wann(iwann,jwann) + zpom*weight(iq)*omega
 
                  !
               ENDIF
@@ -722,7 +718,7 @@ SUBROUTINE dH_ki_quadratic (dH_wann, dH_wann_proj)
               END DO    
               END DO
               !!deltaH(iwann, jwann) = deltaH(iwann,jwann) + SUM(CONJG(rho_g_nm(:,is))*(delta_vg(:,is)))*weight(iq)*omega
-              deltaH(iwann, jwann) = deltaH(iwann,jwann) + zpom*weight(iq)*omega
+              dH_wann(iwann, jwann) = dH_wann(iwann,jwann) + zpom*weight(iq)*omega
             ENDIF 
             !dH_wann(jwann, iwann) = dH_wann(jwann,iwann) + SUM(rho_g_nm(:)*CONJG(delta_vg(:,spin_component)))*weight(iq)*omega
             !WRITE(*,'("NICOLA G", 2i5, 2F20.15)') iwann, jwann, SUM (CONJG(rho_g_nm (:)) * delta_vg(:,spin_component))*weight(iq)*omega
