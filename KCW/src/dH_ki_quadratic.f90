@@ -505,8 +505,6 @@ SUBROUTINE dH_ki_quadratic (dH_wann, dH_wann_proj)
       ! Retrive the rho_wann_q(r) from buffer in REAL space
       !IF (kcw_iverbosity .gt. 0 ) WRITE(stdout,'(8X, "INFO: rhowan_q(r) RETRIEVED"/)') 
       !
-      ALLOCATE ( rhog (ngms, nrho) , delta_vg(ngms,nspin_mag), vh_rhog(ngms), delta_vg_(ngms,nspin_mag) )
-      !
       weight(iq) = 1.D0/nqs ! No SYMM 
       !
       !WRITE(stdout, '("weight =", i5, f12.8)') iq, weight(iq)
