@@ -142,8 +142,9 @@ END SUBROUTINE alpha_corr
     !CALL get_buffer ( evc, nwordwfc, iuwfc, ik )
     !evc_g(:) =  evc(:,iwann)
     !
-    evc_r(:,:) = ZERO
+    !$acc enter data copyin(evc_g) create(evc_r)
     CALL invfft_wave (npwx, npw, igk_k (1,ik), evc_g , evc_r )
+    !$acc exit data copyout(evc_r) delete(evc_g)
     !! The wfc in R-space at k
     IF (nspin_mag==2) THEN
         eig_k = REAL( sum ( vxc(:,spin_component) * evc_r(:,1) * CONJG(evc_r(:,1) ) ) ) !check the (:,->1)
@@ -164,6 +165,7 @@ END SUBROUTINE alpha_corr
   !
   ! The kernel term (as in bare_pot.f90, but only xc contribution)
   !
+  !$acc enter data copyin(dmuxc)
   DO iq = 1, nqstot
     !
     lrrho=num_wann * dffts%nnr * nrho
@@ -209,6 +211,7 @@ END SUBROUTINE alpha_corr
     CALL mp_sum (krnl_q, intra_bgrp_comm)
     krnl = krnl + krnl_q/nqstot
   ENDDO
+  !$acc exit data delete(dmuxc)
   !
   DEALLOCATE ( rho_wann_g , delta_vg, aux )
   RETURN
