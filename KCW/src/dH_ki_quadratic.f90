@@ -416,10 +416,14 @@ SUBROUTINE dH_ki_quadratic (dH_wann, dH_wann_proj)
     INTEGER :: iwann, jwann, lrrho, lrwfc
     ! Band counters, leght of the rho record
     !
-    COMPLEX(DP) :: rhowann(dffts%nnr, num_wann, nrho), rhor(dffts%nnr, nrho), delta_vr(dffts%nnr,nspin_mag), &
-                   delta_vr_(dffts%nnr,nspin_mag)
+  !!  COMPLEX(DP) :: rhowann(dffts%nnr, num_wann,nrho), rhor(dffts%nnr,nrho), delta_vr(dffts%nnr,nspin_mag), sh(num_wann), &
+  !!                 delta_vr_(dffts%nnr,nspin_mag)
+    COMPLEX(DP), ALLOCATABLE :: rhowann(:, :,:), rhor(:,:), delta_vr(:,:), sh(:), &
+                   delta_vr_(:,:)
+
     ! The periodic part of the wannier orbital density in r space
     ! The perturbig potential in real space
+    ! The self-hartree 
     ! The perturbig potential in real space (without the g=0 contribution) 
     !
     COMPLEX(DP), ALLOCATABLE  :: rhog(:,:), delta_vg(:,:), vh_rhog(:), delta_vg_(:,:)
@@ -435,23 +439,28 @@ SUBROUTINE dH_ki_quadratic (dH_wann, dH_wann_proj)
     ! Counter for the k/q points in the BZ, total number of q points and number of pw for a given k (k+q) point
     INTEGER :: ikq_m, npw_kq_m
     !
-    COMPLEX(DP) ::  evc0_kq(npwx*npol, num_wann)
+    !!COMPLEX(DP) ::  evc0_kq(npwx*npol, num_wann)
+    COMPLEX(DP), ALLOCATABLE ::  evc0_kq(:, :)
     ! Auxiliary vector to store the wfc at k+q
     !
-    COMPLEX(DP) :: rho_r_nm(dffts%nnr, nrho), rho_g_nm(ngms, nrho), aux(dffts%nnr)
-    REAL(DP) :: g_vect(3), g_vect_m(3)
+    !!COMPLEX(DP) :: rho_r_nm(dffts%nnr,nrho), rho_g_nm(ngms,nrho), aux(dffts%nnr)
+    COMPLEX(DP), ALLOCATABLE :: rho_r_nm(:,:), rho_g_nm(:,:), aux(:)
+    REAL(DP) :: g_vect(3),g_vect_m(3)
     ! G vector that shift the k+q inside the 1BZ
     !
-    COMPLEX(DP) :: evc_k_g (npwx*npol), evc_k_r (dffts%nnr,npol), phase(dffts%nnr)
-    ! Auxiliary wfc in reciprocal and real space, the phase associated to the hift k+q-> k'
+    !!COMPLEX(DP) :: evc_k_g (npwx*npol), evc_k_r (dffts%nnr,npol), phase(dffts%nnr)
+    COMPLEX(DP), ALLOCATABLE :: evc_k_g (:), evc_k_r (:,:), phase(:)
+    ! Auxiliary wfc in reciprocal and real space, the phase associated to the hift k+q-> k', and to k-q
     !
-    COMPLEX(DP) :: evc_kq_g (npwx*npol), evc_kq_r (dffts%nnr, npol)
+    !!COMPLEX(DP) :: evc_kq_g (npwx*npol), evc_kq_r (dffts%nnr,npol)
+    COMPLEX(DP), ALLOCATABLE :: evc_kq_g (:), evc_kq_r (:,:)
     ! Auxiliary wfc in reciprocal and real space
     !
     LOGICAL :: off_diag = .TRUE., debug_nc = .true.
     ! compute Off-diagonal elements. NsC: not sure off_diag=.false. here makes sense: DO NOT CHANGE!!!!
     !
-    INTEGER :: is
+    INTEGER :: ip, is, iss, ii
+    COMPLEX(dp) :: zpom
     !
     ! If there are no empty wannier functions, RETURN 
     IF (num_wann == num_wann_occ) RETURN 
@@ -463,19 +472,30 @@ SUBROUTINE dH_ki_quadratic (dH_wann, dH_wann_proj)
     !
     nqs = nqstot
     !
+    ALLOCATE(rho_r_nm(dffts%nnr,nrho), rho_g_nm(ngms,nrho), aux(dffts%nnr))
+    ALLOCATE(evc_k_g (npwx*npol), evc_k_r (dffts%nnr,npol), phase(dffts%nnr))
+    ALLOCATE(evc_kq_g (npwx*npol), evc_kq_r (dffts%nnr,npol) )
+    ALLOCATE( evc0_kq(npwx*npol, num_wann) )
     !
-    dH_wann  = CMPLX(0.D0,0.D0,kind=DP)
-    sh       = CMPLX(0.D0,0.D0,kind=DP)
-    rho_r_nm = CMPLX(0.D0,0.D0,kind=DP)
     !
     lrwfc = num_wann*npwx*npol
     CALL get_buffer ( evc0, lrwfc, iuwfc_wann, ik )
     ! Retrive the ks function at k (in the Wannier Gauge)
     ! IF (kcw_iverbosity .gt. 0 ) WRITE(stdout,'(8X, "INFO: u_k(g) RETRIEVED"/)') 
     !
-    CALL compute_map_ikq_single (ik, .true.)
-    ! find tha map k+q --> k'+G and store the res 
-    ! find also the map k-q --> k'+G and store the res
+    CALL compute_map_ikq_single (ik,.true.)
+    ! find the map k+q --> k'+G and store the res 
+    ! find also the map k-q --> k'+G and store the res 
+
+    ALLOCATE(rhowann(dffts%nnr, num_wann,nrho), rhor(dffts%nnr,nrho), delta_vr(dffts%nnr,nspin_mag), sh(num_wann), &
+                   delta_vr_(dffts%nnr,nspin_mag) )
+    !
+    ALLOCATE ( rhog (ngms,nrho) , delta_vg(ngms,nspin_mag), vh_rhog(ngms), delta_vg_(ngms,nspin_mag) )
+    !$acc enter data create(rhor, rhog, vh_rhog, delta_vr, delta_vr_, delta_vg, delta_vg_)
+    !
+    deltaH = CMPLX(0.D0,0.D0,kind=DP)
+    rho_r_nm = CMPLX(0.D0,0.D0,kind=DP)
+    sh     = CMPLX(0.D0,0.D0,kind=DP)
     !
     DO iq = 1, nqs
       !! Sum over the BZ 
@@ -528,8 +548,8 @@ SUBROUTINE dH_ki_quadratic (dH_wann, dH_wann_proj)
 !      DO iwann = 1, num_wann
          !
          npw_k = ngk(ik)
-         evc_k_g(:)   =  evc0(:,iwann)
-         evc_k_r(:,:) = CMPLX(0.D0,0.D0,kind=DP)
+         evc_k_g(:) =  evc0(:,iwann)
+         !$acc enter data copyin(evc_k_g) create(evc_k_r)
          !
          IF (gamma_only) THEN
            ! NOTA: non collinear and Gamma_trick not compatible --> npol will always be 1 here
@@ -539,27 +559,31 @@ SUBROUTINE dH_ki_quadratic (dH_wann, dH_wann_proj)
          ELSE
            CALL invfft_wave (npwx, npw_k, igk_k (1,ik), evc_k_g , evc_k_r )
          ENDIF
+         !$acc exit data delete(evc_k_g)
          !! The wfc R=0 n=iwann in R-space at k
          !
          !DO jwann = iwann+1, num_wann 
+         !$acc enter data create(evc_kq_r, rho_r_nm, rho_g_nm, aux) copyin(phase)
          DO jwann = iwann, num_wann 
             !
             IF (.NOT. off_diag .AND. jwann /= iwann) CYCLE 
             !
-            rhog(:,:)       = CMPLX(0.D0,0.D0,kind=DP)
-            delta_vg(:,:)   = CMPLX(0.D0,0.D0,kind=DP)
-            vh_rhog(:)      = CMPLX(0.D0,0.D0,kind=DP)
-            rhor(:,:)       = CMPLX(0.D0,0.D0,kind=DP)
+            !$acc kernels present(rhog, delta_vg, vh_rhog, rhor)
+            rhog(:,:)       = (0.0_dp,0.0_dp)
+            delta_vg(:,:)   = (0.0_dp,0.0_dp)
+            vh_rhog(:)      = (0.0_dp,0.0_dp)
+            rhor(:,:)       = (0.0_dp,0.0_dp)
+            !$acc end kernels
             !
             rhor(:,:) = rhowann(:,jwann,:)
-            ! The periodic part of the orbital desity R=0, n=iwann in real space
+            !$acc update device(rhor)
+            ! The periodic part of the orbital density R=0, n=iwann in real space
             !
             CALL bare_pot ( rhor, rhog, vh_rhog, delta_vr, delta_vg, iq, delta_vr_, delta_vg_ )
             ! The periodic part of the perturbation DeltaV_q(G)
             !
             evc_kq_g = evc0_kq(:,jwann)
-            evc_kq_r = CMPLX(0.D0,0.D0,kind=DP)
-            !
+            !$acc enter data copyin(evc_kq_g) 
             IF(nspin==4 .or. debug_nc ) THEN
               npw_kq_m = ngk(ikq_m)
               IF (gamma_only) THEN
@@ -579,7 +603,8 @@ SUBROUTINE dH_ki_quadratic (dH_wann, dH_wann_proj)
                 CALL invfft_wave (npwx, npw_kq, igk_k (1,ikq), evc_kq_g , evc_kq_r )
               ENDIF
             END IF
-            !
+            !$acc exit data delete(evc_kq_g)
+
             ! The wfc in R-space at k' <-- k+q where k' = (k+q)-G_bar
             ! evc_k+q(r) = sum_G exp[iG r] c_(k+q+G) = sum_G exp[iG r] c_k'+G_bar+G 
             !            = exp[-iG_bar r] sum_G' exp[iG'r] c_k'+G' = exp[-iG_bar r] *evc_k'(r)
@@ -595,17 +620,23 @@ SUBROUTINE dH_ki_quadratic (dH_wann, dH_wann_proj)
               !phase = conjg(phase)
               ! \sum_{s1,s2} [u^{s1}_{k-q}(r)]^* \sigma_i^{s1,s2} [u^{}s2_{k}(r)] = \rho^i_{k-q,k}(r)
               ! i is the pauli matrices index i=0,x,y,z
+              !$acc kernels present(rho_r_nm, evc_k_r, evc_kq_r, phase)
               rho_r_nm(:,1) = ( conjg(evc_kq_r(:,1))*evc_k_r(:,1)*phase(:) + conjg(evc_kq_r(:,2))*evc_k_r(:,2)*phase(:) )/nqs 
               rho_r_nm(:,2) = ( conjg(evc_kq_r(:,1))*evc_k_r(:,2)*phase(:) + conjg(evc_kq_r(:,2))*evc_k_r(:,1)*phase(:) )/nqs 
               rho_r_nm(:,3) = (-CMPLX(0.D0,1.D0, kind=DP) * conjg(evc_kq_r(:,1))*evc_k_r(:,2)*phase(:) & 
                                +CMPLX(0.D0,1.D0, kind=DP) * conjg(evc_kq_r(:,2))*evc_k_r(:,1)*phase(:) )/nqs
               rho_r_nm(:,4) = ( conjg(evc_kq_r(:,1))*evc_k_r(:,1)*phase(:) - conjg(evc_kq_r(:,2))*evc_k_r(:,2)*phase(:) )/nqs
+              !$acc end kernels
             ELSE IF (nspin==2 .and. debug_nc ) THEN
               !phase = conjg(phase)
+              !$acc kernels present(rho_r_nm, evc_k_r, evc_kq_r, phase)
               rho_r_nm(:,1) = conjg(evc_kq_r(:,1))*evc_k_r(:,1)*phase(:)/nqs 
+              !$acc end kernels
               ! rho_{k-q,k}^{ji}
             ELSE IF (nspin==2 .and. .not. debug_nc) THEN
+              !$acc kernels present(rho_r_nm, evc_k_r, evc_kq_r, phase)
               rho_r_nm(:,1) = conjg(evc_k_r(:,1))*evc_kq_r(:,1)*phase(:)/nqs 
+              !$acc end kernels
               ! rho_{k,k+q}^{ij}
             ENDIF
             !
@@ -618,11 +649,18 @@ SUBROUTINE dH_ki_quadratic (dH_wann, dH_wann_proj)
   !          ENDIF
             !WRITE(*,'("NICOLA R", 2i5, 2F20.15)'), iwann, jwann, SUM( delta_vr(:,spin_component)*rho_r_nm(:) )/( dffts%nr1*dffts%nr2*dffts%nr3 )
             !
-            DO is =1, nrho
-              aux(:) = rho_r_nm(:,is)/omega
-              CALL fwfft ('Rho', aux, dffts) 
-              rho_g_nm(:,is) = aux(dffts%nl(:))
-            ENDDO
+            DO is=1,nrho
+                !$acc kernels present(aux, rho_r_nm)
+                aux(:) = rho_r_nm(:,is)/omega    
+                !$acc end kernels
+                !$acc host_data use_device(aux)
+                CALL fwfft ('Rho', aux, dffts)
+                !$acc end host_data
+                !$acc kernels present(rho_g_nm, aux, dffts, dffts%nl) 
+               !! rho_g_nm(:,is) = aux(dffts%nl(:))
+                rho_g_nm(:,is) = aux(dffts%nl(:))
+                !$acc end kernels
+            END DO
             ! generalized density in G-spage
   !          IF (jwann == iwann) THEN
   !            WRITE(*,'("NICOLA rho_ij", 6F20.15)') rho_g_nm(1:3)
@@ -643,8 +681,14 @@ SUBROUTINE dH_ki_quadratic (dH_wann, dH_wann_proj)
                  !
               ELSE
                 !
-                dH_wann(iwann, jwann) = dH_wann(iwann,jwann) + SUM((rho_g_nm(:,1))*CONJG(delta_vg(:,spin_component)))& 
-                        *weight(iq)*omega
+              !!deltaH(iwann, jwann) = deltaH(iwann,jwann) + SUM((rho_g_nm(:,1))*CONJG(delta_vg(:,spin_component)))*weight(iq)*omega
+              zpom = (0.0_dp, 0.0_dp)
+              !$acc parallel loop reduction(+:zpom) present(delta_vg, rho_g_nm)
+              DO ii =1, ngms
+                 zpom = zpom + rho_g_nm(ii,1)*CONJG(delta_vg(ii,spin_component))
+              END DO   
+              deltaH(iwann, jwann) = deltaH(iwann,jwann) + zpom*weight(iq)*omega
+
                 !
               ENDIF
               !
@@ -659,21 +703,34 @@ SUBROUTINE dH_ki_quadratic (dH_wann, dH_wann_proj)
                  !
               ELSE
                  !
-                 dH_wann(iwann, jwann) = dH_wann(iwann, jwann) + SUM(delta_vg(:,spin_component)*conjg(rho_g_nm(:,1)))& 
-                         *weight(iq)*omega
+             zpom = (0.0_dp, 0.0_dp)
+              !$acc parallel loop reduction(+:zpom) present(delta_vg, rho_g_nm)
+              DO ii =1, ngms
+                 zpom = zpom+ delta_vg(ii,spin_component)*conjg(rho_g_nm(ii,1))
+              END DO   
+              deltaH(iwann, jwann) = deltaH(iwann,jwann) + zpom*weight(iq)*omega
+
                  !
               ENDIF
               !
             ELSE
-              DO is = 1, nspin_mag
-                dH_wann(iwann, jwann) = dH_wann(iwann, jwann) + SUM(CONJG(rho_g_nm(:,is))*(delta_vg(:,is)))*weight(iq)*omega
-              ENDDO
+              zpom = (0.0_dp, 0.0_dp)
+              !$acc parallel loop collapse(2) reduction(+:zpom) present(delta_vg, rho_g_nm)
+              DO is=1,nspin_mag
+              DO ii = 1, ngms
+                  zpom = zpom+ CONJG(rho_g_nm(ii,is))*(delta_vg(ii,is))
+              END DO    
+              END DO
+              !!deltaH(iwann, jwann) = deltaH(iwann,jwann) + SUM(CONJG(rho_g_nm(:,is))*(delta_vg(:,is)))*weight(iq)*omega
+              deltaH(iwann, jwann) = deltaH(iwann,jwann) + zpom*weight(iq)*omega
             ENDIF 
             !dH_wann(jwann, iwann) = dH_wann(jwann,iwann) + SUM(rho_g_nm(:)*CONJG(delta_vg(:,spin_component)))*weight(iq)*omega
             !WRITE(*,'("NICOLA G", 2i5, 2F20.15)') iwann, jwann, SUM (CONJG(rho_g_nm (:)) * delta_vg(:,spin_component))*weight(iq)*omega
             !WRITE(*,'("NICOLA G", 2i5, 2F20.15)') iwann, jwann, SUM (rho_g_nm (:) * CONJG(delta_vg(:,spin_component)))*weight(iq)*omega
             !
          ENDDO ! jwann
+         !$acc exit data delete(evc_kq_r, rho_r_nm, rho_g_nm, aux, phase)
+         !$acc exit data delete(evc_k_r) 
          ! 
          !
       ENDDO ! iwann
@@ -682,6 +739,9 @@ SUBROUTINE dH_ki_quadratic (dH_wann, dH_wann_proj)
       !
       !    
     ENDDO ! qpoints
+    !$acc exit data delete(rhor, rhog, delta_vg, vh_rhog, delta_vg_, delta_vr, delta_vr_)
+
+    !WRITE( stdout, '(5X,"INFO: KC HAMILTONIAN CALCULATION ik= ", i4, " ... DONE")') ik
     !
     dH_wann = nqstot*dH_wann
     CALL mp_sum (dH_wann, intra_bgrp_comm)
