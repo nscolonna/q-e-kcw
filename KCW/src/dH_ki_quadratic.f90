@@ -270,7 +270,7 @@ SUBROUTINE dH_ki_quadratic (dH_wann, dH_wann_proj)
     REAL(DP) :: weight(nqstot)
     !
     COMPLEX(DP) :: zpom
-    INTEGER :: i, ii
+    INTEGER :: ii
     !
     WRITE( stdout, '(/,5X, "INFO: KC SCALAR TERM CALCULATION ... START")')
     !
@@ -307,14 +307,14 @@ SUBROUTINE dH_ki_quadratic (dH_wann, dH_wann_proj)
             DO ii =1, ngms
                zpom  = zpom  + DBLE( CONJG(rhog (ii,1)) * vh_rhog(ii) )
             END DO
-            sh(i) = sh(i) + DBLE(zpom) *weight(iq)*omega
-            IF (gstart == 2) sh(i) = sh(i) - 0.5D0*DBLE(CONJG(rhog (1,1)) * vh_rhog(1)) *weight(iq)*omega
+            sh(iwann) = sh(iwann) + DBLE(zpom) *weight(iq)*omega
+            IF (gstart == 2) sh(iwann) = sh(iwann) - 0.5D0*DBLE(CONJG(rhog (1,1)) * vh_rhog(1)) *weight(iq)*omega
          ELSE
             !$acc parallel loop reduction(+:zpom) present(rhog, vh_rhog)
             DO ii =1, ngms
                zpom  = zpom  + CONJG(rhog (ii,1)) * vh_rhog(ii)
             END DO
-            sh(i)  = sh(i)  + 0.5D0 * zpom  * weight(iq)*omega
+            sh(iwann)  = sh(iwann)  + 0.5D0 * zpom  * weight(iq)*omega
          ENDIF
          !
          IF (nspin_mag ==2 ) THEN
