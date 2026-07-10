@@ -102,6 +102,7 @@ END SUBROUTINE alpha_corr
   USE noncollin_module,      ONLY : nspin_mag, npol
   USE dv_of_drho_lr,         ONLY : dv_of_drho_xc
   USE mp_pools,              ONLY : inter_pool_comm
+  USE eqv,                   ONLY : dmuxc
   !
   !
   IMPLICIT NONE 
