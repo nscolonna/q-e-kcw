@@ -85,12 +85,22 @@ make_w90: git_w90
 	cp $(BUILDDIR)/install/make_wannier90.inc \
 	   $(TOPDIR)/external/wannier90/make.inc ; \
 	cd $(TOPDIR)/external/wannier90 ; \
+	rm -rf src/obj src/objp *.a *.x libwannier.a ; \
 	( $(MAKE) lib || exit 1) ; \
 	( $(MAKE) PREFIX=$(BUILDDIR)/wannier90 install && \
 	  touch $(BUILDDIR)/wannier90/make_w90 && \
-	  ln -fs $(BUILDDIR)/wannier90/bin/*.x  $(BUILDDIR)/bin/ ) ; \
+          ( cd $(BUILDDIR)/bin && ln -fs ../wannier90/bin/*.x . ) ) ; \
 	mkdir $(BUILDDIR)/wannier90/obj ; \
-	cp src/obj/*.o src/obj/*mod $(BUILDDIR)/wannier90/obj ; fi
+	mv src/obj/*.o src/obj/*mod $(BUILDDIR)/wannier90/obj ; \
+	if test -d src/objp ; then \
+	    mkdir -p $(BUILDDIR)/wannier90/objp ; \
+	    mv src/objp/*.o src/objp/*mod $(BUILDDIR)/wannier90/objp ; \
+	fi ; \
+	rm -f *.a *.x ; fi
+# wannier90 is built in place in the shared source tree, so the initial rm
+# and final mv/rm lines clear and relocate obj/objp/lib/exe files to avoid
+# different (possibly cross-compiler) out-of-source builds reusing stale,
+# incompatible module files from a previous build against this checkout.
 
 clean_w90:
 	if test -d $(BUILDDIR)/wannier90 ; then \

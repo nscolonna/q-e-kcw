@@ -109,9 +109,11 @@ subroutine get_delta_v(rho, drho, nspin, q_point, delta_v)
 
     !! -------------------------------------------------------------------------
     !! Terms for the delta_h part
-    !! -------------------------------------------------------------------------        
+    !! -------------------------------------------------------------------------
     complex(dp) :: h1, h1part2
     complex(dp), allocatable :: h1t(:), h2t(:)
+    real(dp),    allocatable :: dtheta_dgradn_save(:,:)
+    complex(dp), allocatable :: h1part2_save(:,:)
 
     !! -------------------------------------------------------------------------
     !! For the interpolation
@@ -150,9 +152,10 @@ subroutine get_delta_v(rho, drho, nspin, q_point, delta_v)
     allocate(dq0_dq(dfftp%nnr), d2q0_dq2(dfftp%nnr))
     allocate(dq_dn_n(dfftp%nnr), dn_dq_dn_n_n(dfftp%nnr), dq_dgradn_n_gmod(dfftp%nnr))
 
-    !! Local variables 
+    !! Local variables
     allocate(b1(dfftp%nnr, Nqs), b2(dfftp%nnr, Nqs))
     allocate(u(dfftp%nnr, Nqs), delta_u(dfftp%nnr, Nqs))
+    allocate(dtheta_dgradn_save(dfftp%nnr, Nqs), h1part2_save(dfftp%nnr, Nqs))
 
     !! -------------------------------------------------------------------------
     !! Zero all values
@@ -168,6 +171,8 @@ subroutine get_delta_v(rho, drho, nspin, q_point, delta_v)
     b2(:,:) = 0.0D0
     u(:,:) = (0.0D0, 0.0D0)
     delta_u(:,:) = (0.0D0, 0.0D0)
+    dtheta_dgradn_save(:,:) = 0.0D0
+    h1part2_save(:,:) = (0.0D0, 0.0D0)
 
     ! Empty the output vector    
     delta_v(:) = (0.0D0, 0.0_DP)
@@ -227,18 +232,23 @@ subroutine get_delta_v(rho, drho, nspin, q_point, delta_v)
           !! Here gradn_graddeltan IS complex, the cast is automatic
           delta_u(i_grid, P_i) =  dtheta_dn*drho(i_grid,1) +  dtheta_dgradn*gradn_graddeltan
 
+          !! Save derivatives needed for the h-term loop below
+          dtheta_dgradn_save(i_grid, P_i) = dtheta_dgradn
+          h1part2_save(i_grid, P_i) = dn_dtheta_dgradn*(drho(i_grid,1)/total_rho(i_grid)) + &
+                                       dgradn_dtheta_dgradn*(gradn_graddeltan/total_rho(i_grid))
+
         end do
-        
+
     end do
-  
+
     !! -------------------------------------------------------------------------
     !! Delta u part
     !! -------------------------------------------------------------------------
 
     CALL get_u_delta_u(u, delta_u, q_point)
 
-    do i_grid = 1,dfftp%nnr
-        do P_i = 1, Nqs
+    do P_i = 1, Nqs
+        do i_grid = 1, dfftp%nnr
             delta_v(i_grid) = delta_v(i_grid) + &
                               delta_u(i_grid, P_i) * b1(i_grid, P_i) + &
                               u(i_grid, P_i) * b2(i_grid, P_i)
@@ -265,28 +275,14 @@ subroutine get_delta_v(rho, drho, nspin, q_point, delta_v)
     h1t(:) = (0.0D0, 0.0D0)
     h2t(:) = (0.0D0, 0.0D0)
 
-    do i_grid = 1,dfftp%nnr
-
-        CALL get_abcdef (q0, i_grid, q_hi, q_low, dq, a,b,c,d,e,f )
- 
-        do P_i = 1, Nqs
-         
-          if (total_rho(i_grid) < epsr) cycle
- 
-          CALL get_thetas_exentended( q_hi, q_low, dq, a,b,c,d,e,f, P_i, i_grid, &   ! Input
-                                      gmod, gradn_graddeltan,                    &   ! Output
-                                      theta, dtheta_dn, dtheta_dgradn,           &   ! Output - first derivatives
-                                      d2theta_dn2, dn_dtheta_dgradn, dgradn_dtheta_dgradn, .false., total_rho) ! Output - second derivatives
-          !!
-          !! Terms nedded later
-          !!
-          h1part2 = dn_dtheta_dgradn*(drho(i_grid,1)/total_rho(i_grid)) + dgradn_dtheta_dgradn*(gradn_graddeltan/total_rho(i_grid))
-          
-          h1t(i_grid) = h1t(i_grid) + delta_u(i_grid,P_i)*dtheta_dgradn + u(i_grid,P_i)*h1part2
-          h2t(i_grid) = h2t(i_grid) + u(i_grid,P_i)*dtheta_dgradn
-        
+    !! Derivatives were saved in the first loop; no kernel calls needed here.
+    do P_i = 1, Nqs
+        do i_grid = 1, dfftp%nnr
+            if (total_rho(i_grid) < epsr) cycle
+            h1t(i_grid) = h1t(i_grid) + delta_u(i_grid,P_i)*dtheta_dgradn_save(i_grid,P_i) + &
+                          u(i_grid,P_i)*h1part2_save(i_grid,P_i)
+            h2t(i_grid) = h2t(i_grid) + u(i_grid,P_i)*dtheta_dgradn_save(i_grid,P_i)
         end do
-
     end do
 
     !! --------------------------------------------------------------------------------------------- 
@@ -325,6 +321,7 @@ subroutine get_delta_v(rho, drho, nspin, q_point, delta_v)
     deallocate(h1t, h2t)
     deallocate(delta_h_aux, delta_h)
     deallocate(u, delta_u)
+    deallocate(dtheta_dgradn_save, h1part2_save)
  
 end subroutine get_delta_v
 
@@ -384,18 +381,17 @@ end subroutine get_delta_v
     real(dp), INTENT(OUT)    :: gmod, theta, dtheta_dn, dtheta_dgradn, d2theta_dn2, dn_dtheta_dgradn, dgradn_dtheta_dgradn
     complex(dp), INTENT(OUT) :: gradn_graddeltan
 
-    real(dp) :: y(Nqs), d2P_dq02, dP_dq0, P
-    character(len=70) :: fn
+    real(dp) :: d2P_dq02, dP_dq0, P, y_qlow, y_qhi
 
-    y = 0.0D0
-    y(P_i) = 1.0D0
+    y_qlow = MERGE(1.0_dp, 0.0_dp, q_low == P_i)
+    y_qhi  = MERGE(1.0_dp, 0.0_dp, q_hi  == P_i)
 
     !!
     !! P_alpha and derivatives | Num. Recip. Fortran 2nd Ed. p.108
     !!
     d2P_dq02 = a*d2y_dx2(P_i,q_low) + b*d2y_dx2(P_i,q_hi)
-    dP_dq0 = (y(q_hi) - y(q_low))/dq - e*d2y_dx2(P_i,q_low) + f*d2y_dx2(P_i,q_hi)
-    P = a*y(q_low) + b*y(q_hi) + c*d2y_dx2(P_i,q_low) + d*d2y_dx2(P_i,q_hi)
+    dP_dq0 = (y_qhi - y_qlow)/dq - e*d2y_dx2(P_i,q_low) + f*d2y_dx2(P_i,q_hi)
+    P = a*y_qlow + b*y_qhi + c*d2y_dx2(P_i,q_low) + d*d2y_dx2(P_i,q_hi)
           
     !!
     !! Thetas
@@ -462,7 +458,7 @@ end subroutine get_delta_v
   real(dp)                   :: kF, r_s, sqrt_r_s, gc                     !! Intermediate variables needed to get q and q0
   real(dp)                   :: LDA_1, LDA_2, exponent, gmod              !!
  
-  real(dp)                   :: expTemp1, expTemp2
+  real(dp)                   :: expTemp2, x_qcut, pw
   real(dp)                   :: dLDA_1_dn_n, dLDA_2_dn_n, d2LDA_1_dn2_n2, d2LDA_2_dn2_n2 
   
   !                                                                       !! Needed by dq0_drho and dq0_dgradrho by the chain rule.
@@ -519,22 +515,19 @@ end subroutine get_delta_v
 
      exponent = 0.0D0
      dq0_dq(i_grid) = 0.0D0
-     expTemp1 = 0.0D0
      expTemp2 = 0.0D0
-
+     x_qcut = q(i_grid)/q_cut
+     pw = 1.0_dp
      do index = 1, m_cut
-        
-        exponent = exponent + ( (q(i_grid)/q_cut)**index)/index
-        dq0_dq(i_grid) = dq0_dq(i_grid) + ( (q(i_grid)/q_cut)**(index-1))
-        
-        expTemp1 = expTemp1 + ( (q(i_grid)/q_cut)**(index-1))
-        expTemp2 = expTemp2 + ( ((index-1)/q_cut)*(q(i_grid)/q_cut)**(index-2))
-        
+        exponent           = exponent + pw*x_qcut/index
+        dq0_dq(i_grid)     = dq0_dq(i_grid) + pw
+        expTemp2           = expTemp2 + real(index-1,dp)*pw/(q_cut*x_qcut)
+        pw                 = pw*x_qcut
      end do
-     
+
      q0(i_grid) = q_cut*(1.0D0 - exp(-exponent))
+     d2q0_dq2(i_grid) = expTemp2*exp(-exponent) - (dq0_dq(i_grid)**2)*(1.0D0/q_cut)*exp(-exponent)
      dq0_dq(i_grid) = dq0_dq(i_grid) * exp(-exponent)
-     d2q0_dq2(i_grid) = expTemp2*exp(-exponent) - (expTemp1**2)*(1.0D0/q_cut)*exp(-exponent)
    
      dLDA_1_dn_n    = -8.0D0*pi/9.0D0 * LDA_A*LDA_a1*r_s
      d2LDA_1_dn2_n2 =  32.0D0*pi/27.0D0 * LDA_A*LDA_a1*r_s
@@ -590,16 +583,31 @@ subroutine get_u_delta_u(u, delta_u, q_point)
   !!
   !! Valirables
   !!
-  real(dp), allocatable :: kernel_of_g(:,:), kernel_of_gq(:,:)   
+  real(dp), allocatable :: kernel_of_g(:,:), kernel_of_gq(:,:)
+  complex(dp), allocatable :: ckernel_of_g(:,:)
   complex(dp), allocatable :: temp_u(:,:), temp_delta_u(:,:)
+  complex(dp), allocatable :: buf_u(:,:), res_u(:,:)
+  complex(dp) :: loc_du(Nqs)
+  integer, allocatable :: ig_buf(:)
   real(dp) :: gmod, gqmod
-  integer :: last_g, g_i, q1_i, q2_i, count, i_grid, final_g    !! Index variables
-  
+  integer :: last_g, g_i, q1_i, q2_i, count, i_grid, final_g, ig
+  integer :: ng_shell, k, sh_size, max_shell
+
   !! -------------------------------------------------------------------------------------------------
   !! Allocate variables
-  !!  
-  allocate( kernel_of_g(Nqs, Nqs), kernel_of_gq(Nqs, Nqs) )
+  !!
+  allocate( kernel_of_g(Nqs, Nqs), kernel_of_gq(Nqs, Nqs), ckernel_of_g(Nqs, Nqs) )
   allocate( temp_u(dfftp%nnr, Nqs), temp_delta_u(dfftp%nnr, Nqs) )
+
+  sh_size = 0; max_shell = 0
+  do g_i = 1, ngm
+     if (g_i > 1 .and. igtongl(g_i) /= igtongl(g_i-1)) then
+        max_shell = max(max_shell, sh_size); sh_size = 0
+     end if
+     sh_size = sh_size + 1
+  end do
+  max_shell = max(max_shell, sh_size)
+  allocate( buf_u(Nqs, max_shell), res_u(Nqs, max_shell), ig_buf(max_shell) )
 
   temp_u(:,:) = (0.0D0, 0.0D0)
   temp_delta_u(:,:) = (0.0D0, 0.0D0)
@@ -617,33 +625,46 @@ subroutine get_u_delta_u(u, delta_u, q_point)
   !!
   !! Integrate in reciprocal space
   !!
-  last_g = -1 
+  last_g = -1
+  ng_shell = 0
 
   do g_i = 1, ngm
-    
+
      if ( igtongl(g_i) .ne. last_g) then
+        !! Flush accumulated shell into temp_u via a single ZGEMM
+        if (ng_shell > 0) then
+           CALL ZGEMM('N','N', Nqs, ng_shell, Nqs, (1.0_dp,0.0_dp), &
+                      ckernel_of_g, Nqs, buf_u, Nqs, (0.0_dp,0.0_dp), res_u, Nqs)
+           do k = 1, ng_shell
+              temp_u(ig_buf(k), :) = temp_u(ig_buf(k), :) + res_u(:, k)
+           end do
+           ng_shell = 0
+        end if
         gmod = sqrt(gl(igtongl(g_i))) * tpiba
         call interpolate_kernel(gmod, kernel_of_g)
+        ckernel_of_g(:,:) = kernel_of_g(:,:)
         last_g = igtongl(g_i)
-
      end if
-    
+
+     ig = dfftp%nl(g_i)
+     ng_shell           = ng_shell + 1
+     buf_u(:, ng_shell) = u(ig, :)
+     ig_buf(ng_shell)   = ig
+
      gqmod = sqrt( (g(1,g_i)+q_point(1))**2 + (g(2,g_i)+q_point(2))**2 + (g(3,g_i)+q_point(3))**2 )*tpiba
      call interpolate_kernel(gqmod, kernel_of_gq)
- 
-     !! Loop over alpha
-     do q2_i = 1, Nqs
-        !! Sum over beta
-        do q1_i = 1, Nqs
-        
-           temp_u(dfftp%nl(g_i), q2_i) = temp_u(dfftp%nl(g_i), q2_i) + kernel_of_g(q2_i,q1_i)*u(dfftp%nl(g_i), q1_i)
-       
-           temp_delta_u(dfftp%nl(g_i), q2_i) = temp_delta_u(dfftp%nl(g_i), q2_i) + &
-                                        kernel_of_gq(q2_i,q1_i)*delta_u(dfftp%nl(g_i), q1_i)
-        end do
-     end do
+     loc_du(:) = delta_u(ig, :)
+     temp_delta_u(ig,:) = temp_delta_u(ig,:) + MATMUL(kernel_of_gq, loc_du)
 
   end do
+  !! Flush the last shell
+  if (ng_shell > 0) then
+     CALL ZGEMM('N','N', Nqs, ng_shell, Nqs, (1.0_dp,0.0_dp), &
+                ckernel_of_g, Nqs, buf_u, Nqs, (0.0_dp,0.0_dp), res_u, Nqs)
+     do k = 1, ng_shell
+        temp_u(ig_buf(k), :) = temp_u(ig_buf(k), :) + res_u(:, k)
+     end do
+  end if
 
   if (gamma_only) then
     temp_u(dfftp%nlm(:),:) = CONJG(temp_u(dfftp%nl(:),:))
@@ -663,7 +684,8 @@ subroutine get_u_delta_u(u, delta_u, q_point)
   u(:,:) = temp_u(:,:)
   delta_u(:,:) = temp_delta_u(:,:)
     
-  deallocate(temp_u, temp_delta_u, kernel_of_g, kernel_of_gq)
+  deallocate(temp_u, temp_delta_u, kernel_of_g, kernel_of_gq, ckernel_of_g)
+  deallocate(buf_u, res_u, ig_buf)
      
   !! -----------------------------------------------------------------------------------------------
   
