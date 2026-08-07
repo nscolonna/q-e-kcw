@@ -258,6 +258,7 @@ SUBROUTINE setup()
   ! time reversal operation is set up to 0 by default
   t_rev = 0
   !
+  IF (ALLOCATED(m_loc)) DEALLOCATE(m_loc)
   ALLOCATE( m_loc( 3, nat ) )
   IF ( noncolin ) THEN
      !
@@ -561,6 +562,7 @@ SUBROUTINE setup()
      !
      IF( lelfield) THEN
         !
+        IF (ALLOCATED(nx_el)) DEALLOCATE(nx_el)
         IF(noncolin) THEN
            allocate(nx_el(nkstot,3))
         ELSE
@@ -908,7 +910,7 @@ SUBROUTINE setup_exx ( )
   IMPLICIT NONE
   !
   CALL mp_start_exx ( nband_, ntg_, intra_pool_comm )
-  CALL exx_grid_init()
+  CALL exx_grid_init( reinit=.true. )
   CALL exx_mp_init()
   CALL exx_div_check()
   !
