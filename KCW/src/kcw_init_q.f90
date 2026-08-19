@@ -89,8 +89,12 @@ SUBROUTINE kcw_init_q()
      ! is not an integer number (as a consequence some k pools will have nksq=1).
      !
      CALL get_buffer (evc, lrwfc, iuwfc, ikk)
+     !$acc update device(evc)
      !
-     IF (.NOT.lgamma .AND. nksq .EQ. 1) CALL get_buffer (evq, lrwfc, iuwfc, ikq)
+     IF (.NOT.lgamma .AND. nksq .EQ. 1) THEN
+        CALL get_buffer (evq, lrwfc, iuwfc, ikq)
+        !$acc update device(evq)
+     END IF    
      !
      ! 2) USPP: Compute the becp terms which are used in the rest of the code
      !
