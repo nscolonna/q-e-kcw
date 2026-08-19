@@ -14,7 +14,7 @@ SUBROUTINE kcw_deallocate_q()
   !  (and in some other routines)
   !
   USE noncollin_module,    ONLY : m_loc
-  USE becmod,              ONLY : deallocate_bec_type, becp
+  USE becmod,              ONLY : deallocate_bec_type, becp, deallocate_bec_type_acc
   USE uspp,                ONLY : okvan
   USE qpoint,              ONLY : eigqts, ikks, ikqs, nksq
   USE lrus,                ONLY : becp1
@@ -30,6 +30,7 @@ SUBROUTINE kcw_deallocate_q()
   IF (lgamma) THEN
      if (associated(evq))  nullify(evq)
   ELSE
+     !$acc exit data delete(evq)
      if (associated(evq))  deallocate(evq)
   ENDIF
   !
@@ -51,7 +52,7 @@ SUBROUTINE kcw_deallocate_q()
      deallocate(becp1)
   endif
   !
-  CALL deallocate_bec_type ( becp )
+  CALL deallocate_bec_type_acc ( becp )
   !
   ! GGA-specific arrays
   !

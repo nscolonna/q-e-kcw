@@ -31,7 +31,7 @@ SUBROUTINE kcw_prepare_q(do_band, setup_pw, iq)
   USE wvfct,                ONLY : nbnd
   USE klist,                ONLY : nelup, neldw, nelec, lgauss, ltetra
   USE start_k,              ONLY : reset_grid
-  USE noncollin_module,     ONLY : domag, noncolin
+  USE noncollin_module,     ONLY : domag, noncolin, npol
   USE lsda_mod,             ONLY : lsda
   USE control_kcw,          ONLY : irr_bz
   !
@@ -83,7 +83,7 @@ SUBROUTINE kcw_prepare_q(do_band, setup_pw, iq)
      !IF (noncolin .OR. .NOT. lsda) degspin = 1
      IF (noncolin) degspin = 1
      !
-     nbnd = MAX ( NINT( nelec / degspin ), NINT(nelup), NINT(neldw) ) + 3
+     nbnd = MAX ( NINT( nelec / degspin ), NINT(nelup), NINT(neldw) ) + (3*npol)
      !
      IF ( lgauss .OR. ltetra ) THEN
         !

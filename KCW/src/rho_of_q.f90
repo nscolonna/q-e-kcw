@@ -47,16 +47,19 @@ SUBROUTINE rho_of_q (rhowann, ngk_all, igk_k_all)
   COMPLEX(DP), INTENT(OUT) :: rhowann(dffts%nnr, num_wann,nrho)
   !! The periodic part of the wannier orbital density
   !
-  COMPLEX(DP) ::  evc0_kq(npwx*npol, num_wann)
+  !!COMPLEX(DP) ::  evc0_kq(npwx*npol, num_wann)
+  COMPLEX(DP), ALLOCATABLE ::  evc0_kq(:, :)
   !! Auxiliary vector to store the wfc at k+q
   !
   REAL(DP) :: g_vect(3), xk_(3)
   !! G vector that shift the k+q inside the 1BZ
   !
-  COMPLEX(DP) :: evc_k_g (npwx*npol), evc_k_r (dffts%nnr,npol), phase(dffts%nnr)
+  !!COMPLEX(DP) :: evc_k_g (npwx*npol), evc_k_r (dffts%nnr,npol), phase(dffts%nnr)
+  COMPLEX(DP), ALLOCATABLE :: evc_k_g (:), evc_k_r (:,:), phase(:)
   !! Auxiliary wfc in reciprocal and real space, the phase associated to the hift k+q-> k'
   !
-  COMPLEX(DP) :: evc_kq_g (npwx*npol), evc_kq_r (dffts%nnr,npol)
+  !!COMPLEX(DP) :: evc_kq_g (npwx*npol), evc_kq_r (dffts%nnr,npol)
+  COMPLEX(DP), ALLOCATABLE :: evc_kq_g (:), evc_kq_r (:,:)
   !! Auxiliary wfc in reciprocal and real space
   !
   INTEGER, EXTERNAL :: global_kpoint_index
@@ -75,11 +78,18 @@ SUBROUTINE rho_of_q (rhowann, ngk_all, igk_k_all)
 #endif
   !  
   CALL start_clock ( 'rho_of_q' )
+  ALLOCATE( evc0_kq(npwx*npol, num_wann), evc_k_g (npwx*npol), evc_k_r (dffts%nnr,npol), phase(dffts%nnr), &
+               evc_kq_g (npwx*npol), evc_kq_r (dffts%nnr,npol) )
   IF (nspin == 4) THEN
     nkstot_eff = nkstot
   ELSE
     nkstot_eff = nkstot/nspin
   ENDIF
+  !$acc enter data create(rhowann, evc_k_g, evc_k_r, evc_kq_g, evc_kq_r, phase) 
+  !$acc kernels present(rhowann)
+  rhowann(:,:,:)=ZERO
+  !$acc end kernels
+  !$acc enter data copyin(igk_k_all)
   DO ik = 1, nks
     ! CHECK: Need to understand/think more about pool parallelization
     ! what happen if k+q is outside the pool??
@@ -133,6 +143,7 @@ SUBROUTINE rho_of_q (rhowann, ngk_all, igk_k_all)
     !
     phase(:) = 0.D0
     CALL calculate_phase(g_vect, phase) 
+    !$acc update device(phase)
     !! ... Calculate the phase associated to the k+q-> ikq map: exp[ -i(G_bar * r) ]
     !
     lrwfc = num_wann * npwx * npol
@@ -143,28 +154,42 @@ SUBROUTINE rho_of_q (rhowann, ngk_all, igk_k_all)
        !
        npw_k = ngk(ik)
        evc_k_g(:) =  evc0(:,iband)
+       !$acc update device(evc_k_g)
+      !! !$acc enter data copyin(evc_k_g) create(evc_k_r)
+       !$acc kernels present(evc_k_r)
        evc_k_r(:,:) = ZERO
+       !$acc end kernels
        CALL invfft_wave (npwx, npw_k, igk_k (1,ik), evc_k_g , evc_k_r )
+    !!   !$acc exit data copyout(evc_k_r) delete(evc_k_g)
        !! ... The wfc in R-space at k
        !
        npw_kq = ngk_all(ikq)
        evc_kq_g = evc0_kq(:,iband)
-       evc_kq_r = ZERO
+       !$acc update device(evc_kq_g)
+      !! !$acc enter data copyin(evc_kq_g) create(evc_kq_r)
+       !$acc kernels present(evc_kq_r)
+       evc_kq_r(:,:) = ZERO
+       !$acc end kernels     
        CALL invfft_wave (npwx, npw_kq, igk_k_all (1,ikq), evc_kq_g , evc_kq_r )
+     !!  !$acc exit data copyout(evc_kq_r) delete(evc_kq_g)
        ! ... The wfc in R-space at k' <-- k+q where k' = (k+q)-G_bar
        ! ... evc_k+q(r) = sum_G exp[iG r] c_(k+q+G) = sum_G exp[iG r] c_k'+G_bar+G 
        !            = exp[-iG_bar r] sum_G' exp[iG'r] c_k'+G' = exp[-iG_bar r] *evc_k'(r)
        !
        DO ip = 1,npol  
+          !$acc kernels present(rhowann, evc_k_r, evc_kq_r, phase)
           rhowann(:,iband,1) = rhowann(:,iband,1) + conjg(evc_k_r(:,ip))*evc_kq_r(:,ip)*phase(:)/(nkstot_eff) !*wg(iband,ik)
+          !$acc end kernels
        END DO 
        IF (nspin_mag==4) THEN
+        !$acc kernels present(rhowann, evc_k_r, evc_kq_r, phase)
         rhowann(:,iband,2) = rhowann(:,iband,2) + (conjg(evc_k_r(:,1))*evc_kq_r(:,2)+conjg(evc_k_r(:,2)) &
                 *evc_kq_r(:,1))*phase(:)/(nkstot_eff) !*wg(iband,ik)
         rhowann(:,iband,3) = rhowann(:,iband,3) + CMPLX(0.D0,1.D0, kind=DP)*(conjg(evc_k_r(:,2))*evc_kq_r(:,1)-conjg(evc_k_r(:,1)) &
                 *evc_kq_r(:,2))*phase(:)/(nkstot_eff) !*wg(iband,ik)
         rhowann(:,iband,4) = rhowann(:,iband,4) + (conjg(evc_k_r(:,1))*evc_kq_r(:,1)-conjg(evc_k_r(:,2)) &
                 *evc_kq_r(:,2))*phase(:)/(nkstot_eff) !*wg(iband,ik)
+        !$acc end kernels        
        END IF
        ! ... The periodic part of the wannier-orbital density in real space
        ! ... rho_q(r) = sum_k [ evc_k,v(r)* evc_k+q,v(r)] = sum_k [ evc_k,v(r)* evc_k',v(r) exp[-iG_bar r]]
@@ -175,11 +200,16 @@ SUBROUTINE rho_of_q (rhowann, ngk_all, igk_k_all)
        ! It has to match with the g_vect component of evc_kq(g) whose index ig_save was found above
        ! If phase was correctly computed pippo-evc_kq(ig_save) HAS TO BE IDENTICALLY ZERO
        pippo = (0.D0,0.d0)
+       !$acc parallel loop reduction(+:pippo) present(evc_kq_r, phase)
        DO ir = 1, dffts%nnr
          pippo = pippo + evc_kq_r(ir)*phase(ir)
        ENDDO
+       !$acc end parallel loop
+
        pippo = pippo/dffts%nnr
+       !$acc serial copyin(pippo, ig_save) copyout(pippo_real) present(evc_kq_g) 
        pippo_real = REAL(pippo-evc_kq_g(ig_save))**2+AIMAG(pippo-evc_kq_g(ig_save))**2
+       !$acc end serial
        IF ( pippo_real .gt. 1e-6) THEN 
           WRITE(*, '("ikq =" i5, 3x, "nbnd =" i5, 3x,  "CHECK =" 9f15.8, 2i5 )') & 
           ikq, iband, pippo, evc_kq_g(ig_save), pippo-evc_kq_g(ig_save), g(:,igk_k(ig_save,ikq)), igk_k(ig_save,ikq), ig_save
@@ -190,6 +220,9 @@ SUBROUTINE rho_of_q (rhowann, ngk_all, igk_k_all)
     ENDDO ! bands
     ! 
   ENDDO ! kpoints
+  !$acc exit data delete(igk_k_all)
+  !$acc exit data copyout(rhowann) delete(evc_k_g, evc_k_r, evc_kq_g, evc_kq_r, phase) 
+  DEALLOCATE( evc0_kq, evc_k_g, evc_k_r, phase, evc_kq_g, evc_kq_r)
   !
   CALL mp_sum( rhowann, inter_pool_comm )
   ! ... Sum up the results over k point in different pools

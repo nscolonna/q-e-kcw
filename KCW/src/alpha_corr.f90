@@ -106,17 +106,21 @@ SUBROUTINE alpha_corr ( iwann, delta)
       !
       !
       IMPLICIT NONE 
-      !  
+      !
       INTEGER, INTENT (IN) :: iwann
       INTEGER :: ik, npw, lrrho, iq, ir, is, ip, iss
       REAL(DP), INTENT (OUT) :: en, eig, krnl 
-      REAL(DP) ::  vtxc, etxc, vxc(dffts%nnr,nspin_mag), eig_k, krnl_q
+      REAL(DP) ::  vtxc, etxc, eig_k, krnl_q
       INTEGER :: lrwfc
-      COMPLEX(DP) :: evc_g (npwx*npol), evc_r (dffts%nnr,npol)
-      COMPLEX(DP) :: rhowann(dffts%nnr, num_wann, nrho), rhor(dffts%nnr,nrho), delta_vr(dffts%nnr,nspin_mag)
+      COMPLEX(DP), ALLOCATABLE :: evc_g(:), evc_r (:,:), rhowann(:,:,:),rhor(:,:),delta_vr(:,:)
       COMPLEX(DP), ALLOCATABLE  :: rho_wann_g(:,:), delta_vg(:,:), aux(:)
       INTEGER :: ik_eff
       COMPLEX(DP), ALLOCATABLE :: rhor_(:,:)
+      REAL(DP), ALLOCATABLE :: vxc(:,:)
+      !
+      ALLOCATE (vxc(dffts%nnr,nspin_mag))
+      ALLOCATE (evc_g (npwx*npol), evc_r (dffts%nnr,npol))
+      ALLOCATE (rhowann(dffts%nnr, num_wann, nrho), rhor(dffts%nnr,nrho), delta_vr(dffts%nnr,nspin_mag))
       !
       ALLOCATE ( rho_wann_g (ngms,nrho) , delta_vg(ngms,nspin_mag), aux (dffts%nnr) )
       ! 
@@ -131,7 +135,7 @@ SUBROUTINE alpha_corr ( iwann, delta)
       ! throughout the code .... )
       eig  = 0.D0
       krnl = 0.D0
-      ! 
+      
       DO ik = 1, nks
         !
         IF ( lsda .AND. isk(ik) /= spin_component) CYCLE
@@ -143,8 +147,9 @@ SUBROUTINE alpha_corr ( iwann, delta)
         !CALL get_buffer ( evc, nwordwfc, iuwfc, ik )
         !evc_g(:) =  evc(:,iwann)
         !
-        evc_r(:,:) = ZERO
+        !$acc enter data copyin(evc_g) create(evc_r)
         CALL invfft_wave (npwx, npw, igk_k (1,ik), evc_g , evc_r )
+        !$acc exit data copyout(evc_r) delete(evc_g)
         !! The wfc in R-space at k
         IF (nspin_mag==2) THEN
             eig_k = sum ( vxc(:,spin_component) * evc_r(:,1) * CONJG(evc_r(:,1) ) ) !check the (:,->1)
@@ -165,12 +170,14 @@ SUBROUTINE alpha_corr ( iwann, delta)
       !
       ! The kernel term (as in bare_pot.f90, but only xc contribution)
       !
+      !$acc enter data copyin(dmuxc)
       DO iq = 1, nqstot
         !
         lrrho=num_wann * dffts%nnr * nrho
         CALL get_buffer (rhowann, lrrho, iurho_wann, iq)
         rhor(:,:) = rhowann(:,iwann,:)
         !
+        print*,'alpha_corr iq, nrho=',iq, nrho
         DO ip=1,nrho
           aux(:) = rhor(:,ip)/omega
           CALL fwfft ('Rho', aux, dffts)  ! NsC: Dense or smooth grid?? I think smooth is the right one. 
@@ -181,7 +188,7 @@ SUBROUTINE alpha_corr ( iwann, delta)
         !CALL fwfft ('Rho', aux, dffts)  ! NsC: Dense or smooth grid?? I think smooth is the right one. 
         !rho_wann_g(:) = aux(dffts%nl(:))
         !
-        delta_vr = CMPLX(0.D0,0.D0, kind=DP)
+        
         !
         ALLOCATE ( rhor_(dffts%nnr,nspin_mag) )
         rhor_ = CMPLX(0.D0,0.D0,kind=DP)
@@ -190,7 +197,12 @@ SUBROUTINE alpha_corr ( iwann, delta)
         ELSE
           rhor_(:,spin_component) = rhor(:,1)/omega
         ENDIF
-        CALL dv_of_drho_xc(delta_vr, rhor_)
+!GPU        !$acc enter data create(delta_vr) copyin(rhor_)
+!GPU        !$acc kernels present(delta_vr)
+        delta_vr = (0.0_dp,0.0_dp)
+!GPU        !$acc end kernels
+        CALL dv_of_drho_xc(delta_vr, rhor_)  !!JA ON GPU
+!GPU        !$acc exit data copyout(delta_vr) delete(rhor_)
         DEALLOCATE (rhor_)
         !
 !        IF (nspin_mag==2) THEN
@@ -225,8 +237,12 @@ SUBROUTINE alpha_corr ( iwann, delta)
         CALL mp_sum (krnl_q, intra_bgrp_comm)
         krnl = krnl + krnl_q/nqstot
       ENDDO
+      !$acc exit data delete(dmuxc)
       !
       DEALLOCATE ( rho_wann_g , delta_vg, aux )
+      DEALLOCATE ( vxc )
+      DEALLOCATE ( evc_g, evc_r )
+      DEALLOCATE ( rhowann, rhor, delta_vr) 
       RETURN
       !
     END SUBROUTINE xc_energy_n
@@ -259,18 +275,22 @@ SUBROUTINE alpha_corr ( iwann, delta)
       !
       INTEGER :: ir, iq, nspin_aux, segno
       TYPE (scf_type) :: rho_minus1
-      COMPLEX (DP) :: rho_wann_ir(dffts%nnr,nrho), rho_wann(dffts%nnr,nrho)
+      COMPLEX (DP), ALLOCATABLE :: rho_wann_ir(:,:), rho_wann(:,:)
       REAL(DP) :: xq(3), xq_(3)
-      COMPLEX(DP) :: rhowann(dffts%nnr, num_wann,nrho)
-      COMPLEX(DP) :: phase_sc, phase_pc(dffts%nnr) 
+      COMPLEX(DP), ALLOCATABLE  :: rhowann(:,:,:)
+      COMPLEX(DP), ALLOCATABLE  :: phase_pc(:)
       COMPLEX(DP), ALLOCATABLE :: nq_r(:,:), aux(:)
       INTEGER :: lrrho
       LOGICAL :: lgamma
-      REAL(DP) ::  vtxc, etxc, vxc(dffts%nnr,nspin_mag)
+      REAL(DP) ::  vtxc, etxc
       !
-      COMPLEX(DP) :: imag = (0.D0,1.D0)
+      COMPLEX(DP) :: imag = (0.D0,1.D0), phase_sc
+      COMPLEX(DP), ALLOCATABLE :: vxc(:,:)
       !
       ALLOCATE ( nq_r (dffts%nnr,nrho), aux(dfftp%nnr)  )
+      ALLOCATE ( rho_wann_ir (dffts%nnr,nrho), rho_wann( dffts%nnr,nrho))
+      ALLOCATE ( rhowann(dffts%nnr, num_wann, nrho), phase_pc(dffts%nnr))
+      ALLOCATE ( vxc(dffts%nnr,nspin_mag) )
       segno=-1
       IF ( is_emp ) segno=+1
       !
