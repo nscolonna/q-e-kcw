@@ -124,6 +124,7 @@ SUBROUTINE dH_ki_full (ik, dH_wann)
   !
   ALLOCATE (vpsi_r(dffts%nnr), vpsi_g(npwx))
   ALLOCATE ( delta_vg(ngms,nspin), vh_rhog(ngms), delta_vg_(ngms,nspin) )
+  !$acc enter data create(rhor, rhog, vh_rhog, delta_vr, delta_vr_, delta_vg, delta_vg_)
   !
   !
   IF (kipz_corr) THEN 
@@ -177,7 +178,15 @@ SUBROUTINE dH_ki_full (ik, dH_wann)
      IF (gamma_only) psic(dffts%nlm(igk_k(1:npw,ik))) = CONJG(evc0(1:npw,ibnd))
      CALL invfft ('Wave', psic, dffts)
      !
+     !$acc kernels present(rhog, delta_vg, vh_rhog, rhor)
+     rhog(:)         = CMPLX(0.D0,0.D0,kind=DP)
+     delta_vg(:,:)   = CMPLX(0.D0,0.D0,kind=DP)
+     vh_rhog(:)      = CMPLX(0.D0,0.D0,kind=DP)
+     rhor(:)         = CMPLX(0.D0,0.D0,kind=DP)
+     !$acc end kernels
+     !
      rhor(:) = rhowann(:,ibnd,1)
+     !$acc update device(rhor)
      CALL bare_pot ( rhor, rhog, vh_rhog, delta_vr, delta_vg, 1, delta_vr_, delta_vg_ )
      rhor = rhor/omega
      !! The periodic part of the perturbation DeltaV_q(G)
