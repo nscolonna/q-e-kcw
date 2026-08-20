@@ -720,7 +720,6 @@ SUBROUTINE koopmans_ham ()
          ENDDO ! jwann
          !$acc exit data delete(evc_kq_r, rho_r_nm, rho_g_nm, aux)
          !$acc exit data delete(evc_k_r)
-         ! 
          !
       ENDDO ! iwann
       !
@@ -729,7 +728,7 @@ SUBROUTINE koopmans_ham ()
     ENDDO ! qpoints
     !$acc exit data delete(rhor, rhog, delta_vg, vh_rhog, delta_vg_, delta_vr, delta_vr_)
     !$acc exit data delete(phase)
-
+    !
     !WRITE( stdout, '(5X,"INFO: KC HAMILTONIAN CALCULATION ik= ", i4, " ... DONE")') ik
     !
     deltaH = nqstot*deltaH

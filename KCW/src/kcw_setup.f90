@@ -445,7 +445,6 @@ subroutine kcw_setup
   ENDDO
   !$acc exit data delete(rhor, rhog, delta_vg, vh_rhog, delta_vg_, delta_vr, delta_vr_)
   !$acc exit data delete(igk_k_all)
-
   !
   IF (kcw_iverbosity .gt. 1) THEN
   !  write(*,'(/,"DEBUG")')

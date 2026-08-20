@@ -128,7 +128,6 @@ SUBROUTINE ham_koopmans_k (ik)
 #endif
   !
   deltaH = ZERO
-  sh = ZERO
   !
   lrwfc = num_wann*npwx
   CALL get_buffer ( evc0, lrwfc, iuwfc_wann, ik )

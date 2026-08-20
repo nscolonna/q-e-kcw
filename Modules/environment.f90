@@ -228,7 +228,7 @@ CONTAINS
   SUBROUTINE parallel_info ( )
     !
 #if defined(_OPENMP)
-    INTEGER, EXTERNAL :: omp_get_max_threads
+    USE omp_lib
     !
     WRITE( stdout, '(/5X,"Parallel version (MPI & OpenMP), running on ",&
          &I7," processor cores")' ) nproc * omp_get_max_threads()
@@ -266,10 +266,8 @@ CONTAINS
   SUBROUTINE serial_info ( )
     !
 #if defined(_OPENMP)
-    INTEGER, EXTERNAL :: omp_get_max_threads
-#endif
+    USE omp_lib
     !
-#if defined(_OPENMP)
     WRITE( stdout, '(/5X,"Serial multi-threaded version, running on ",&
          &I4," processor cores")' ) omp_get_max_threads()
     !
