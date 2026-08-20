@@ -2189,7 +2189,8 @@ SUBROUTINE exx_iosys ( ecutwfc, ecutrho )
   IF (screening_parameter >= 0.0_DP) &
         & CALL set_screening_parameter(screening_parameter)
   !
-  write(stdout, '(/,5x,"Exact exchange band parallelism type set to ",A/)' ) trim(adjustl(exx_type))
+  IF (xclib_dft_is('hybrid')) WRITE(stdout, &
+     '(/,5x,"Exact exchange band parallelism type set to ",A/)' ) trim(adjustl(exx_type))
   !
   select case(trim(adjustl(exx_type)))
   case("bands")

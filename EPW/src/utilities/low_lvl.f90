@@ -1,4 +1,5 @@
   !
+  ! Copyright (C) 2023-2026 EPW-Collaboration
   ! Copyright (C) 2016-2023 EPW-Collaboration
   ! Copyright (C) 2016-2019 Samuel Ponce', Roxana Margine, Feliciano Giustino
   !
@@ -736,7 +737,7 @@
     !!
     LOGICAL :: ifxst
     !! Does the file exists
-#if defined(__PGI) || defined(__CRAY) || defined(__XLF) || defined(__FLANG)
+#if defined(__PGI) || defined(__CRAY) || defined(__XLF) || defined(__FLANG) || defined(__FUJITSU)
     INTEGER, EXTERNAL :: getpid
     !! PID of the process
 #endif

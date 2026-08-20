@@ -14,7 +14,7 @@ if(POLICY CMP0144)
 endif()
 
 project(qe
-    VERSION 7.5
+    VERSION 8.0
     DESCRIPTION "ESPRESSO: opEn-Source Package for Research in Electronic Structure, Simulation, and Optimization"
     LANGUAGES Fortran C)
 
@@ -346,6 +346,8 @@ elseif(CMAKE_Fortran_COMPILER_ID MATCHES "Intel")
     include(IntelFortranCompiler)
 elseif(CMAKE_Fortran_COMPILER_ID MATCHES "XL")
     include(IBMFortranCompiler)
+elseif(CMAKE_Fortran_COMPILER_ID MATCHES "Fujitsu")
+    include(FujitsuFortranCompiler)
 endif()
 
 if(QE_ENABLE_STATIC_BUILD)

@@ -90,7 +90,7 @@ SUBROUTINE invfft_y( fft_kind, f, dfft, howmany )
      ELSE IF( fft_kind == 'Wave' ) THEN
         CALL tg_cft3s_2d(f,dfft, 2 )
      ELSE IF( fft_kind == 'tgWave' ) THEN
-        CALL fftx_error__( ' fwfft ', ' tgWave not implemented  ', 1 )
+        CALL fftx_error__( ' invfft ', ' tgWave not implemented  ', 1 )
      END IF
 
   ELSE
@@ -344,6 +344,7 @@ SUBROUTINE invfft_y_gpu( fft_kind, f_d, dfft, howmany, stream )
   !
   INTEGER                          :: howmany_ = 1
   INTEGER(kind = cuda_stream_kind) :: stream_  = 0
+  INTEGER                          :: ierr
 
   CHARACTER(LEN=12) :: clock_label
 
@@ -424,6 +425,7 @@ SUBROUTINE invfft_y_gpu( fft_kind, f_d, dfft, howmany, stream )
 
   END IF
 
+  ierr = cudaStreamSynchronize(stream_)
   CALL stop_clock( clock_label )
 
   RETURN
@@ -465,6 +467,7 @@ SUBROUTINE fwfft_y_gpu( fft_kind, f_d, dfft, howmany, stream )
 
   INTEGER                          :: howmany_ = 1
   INTEGER(kind = cuda_stream_kind) :: stream_  = 0
+  INTEGER                          :: ierr
 
   CHARACTER(LEN=12) :: clock_label
   !
@@ -545,8 +548,9 @@ SUBROUTINE fwfft_y_gpu( fft_kind, f_d, dfft, howmany, stream )
 
   END IF
 
+  ierr = cudaStreamSynchronize(stream_)
   CALL stop_clock( clock_label )
-  
+
   RETURN
   !
 END SUBROUTINE fwfft_y_gpu

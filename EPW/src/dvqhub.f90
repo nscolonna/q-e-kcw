@@ -1,4 +1,5 @@
-  !                                         
+  !
+  ! Copyright (C) 2023-2026 EPW-Collaboration
   ! Copyright (C) 2001-2018 Quantum ESPRESSO
   ! This file is distributed under the terms
   ! GNU General Public License. See the file

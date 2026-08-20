@@ -15,6 +15,10 @@ SUBROUTINE force_hub( forceh )
    !! which is the force acting on the atom at \(\text{tau_alpha}\)
    !! (in the unit cell) along the direction \(\text{ipol}\).
    !!  Note: DFT+U+V force does not support OpenMP.
+   !! In the 'ortho-atomic' collinear case, this routine also precomputes,
+   !! once per k-point, the bare atomic-orbital projections proj_atom used
+   !! by dprojdtau_k to build the projector derivative without plane-wave
+   !! sums (see the comment right before the precompute below).
    !
    USE kinds,                ONLY : DP
    USE ions_base,            ONLY : nat, ntyp => nsp, ityp
@@ -23,7 +27,8 @@ SUBROUTINE force_hub( forceh )
                                     nwfcU, wfcU, is_hubbard, lda_plus_u_kind,    &
                                     offsetU, is_hubbard_back, ldim_back, ldmx_b, &
                                     ldmx_tot, v_nsg, max_num_neighbors,     &
-                                    ldim_u, Hubbard_V, at_sc, neighood, Hubbard_J
+                                    ldim_u, Hubbard_V, at_sc, neighood, Hubbard_J, &
+                                    eigenval, eigenvect, overlap_inv, proj_atom
    USE basis,                ONLY : natomwfc, wfcatom, swfcatom
    USE symme,                ONLY : symvector
    USE wvfct,                ONLY : nbnd, npwx
@@ -40,7 +45,6 @@ SUBROUTINE force_hub( forceh )
    USE buffers,              ONLY : get_buffer
    USE mp_bands,             ONLY : use_bgrp_in_hpsi
    USE noncollin_module,     ONLY : noncolin, npol
-   USE force_mod,            ONLY : eigenval, eigenvect, overlap_inv
    USE uspp_init,            ONLY : init_us_2
    USE mp_bands,             ONLY : intra_bgrp_comm
    USE constants,            ONLY : eps16
@@ -114,7 +118,8 @@ SUBROUTINE force_hub( forceh )
       ALLOCATE( eigenval(natomwfc) )
       ALLOCATE( eigenvect(natomwfc,natomwfc) )
       ALLOCATE( overlap_inv(natomwfc,natomwfc) )
-      !$acc enter data create(swfcatom,eigenval, eigenvect, overlap_inv)
+      ALLOCATE( proj_atom(natomwfc,nbnd) )
+      !$acc enter data create(swfcatom,eigenval, eigenvect, overlap_inv, proj_atom)
    ENDIF
    !
    IF (noncolin) THEN
@@ -174,9 +179,28 @@ SUBROUTINE force_hub( forceh )
       ENDIF
       !
       IF ( gamma_only ) THEN
-         !$acc update self(proj%r) 
+         !$acc update self(proj%r)
       ELSE
          !$acc update self(proj%k)
+      ENDIF
+      !
+      ! ... In the 'ortho-atomic' case, precompute the bare atomic-orbital
+      ! ... projections proj_atom = <phi_J|S|psi_n> once per k-point. After
+      ! ... orthoUwfc_k(...,.TRUE.) the array wfcatom holds the bare atomic
+      ! ... orbitals phi (the orthogonalized ones are stored in wfcU). These
+      ! ... projections let dprojdtau_k evaluate the O^{-1/2}-derivative term
+      ! ... of the projector derivative without any plane-wave sum.
+      ! ... NOTE: dprojdtau_k only reads proj_atom when .NOT.noncolin, so for
+      ! ... noncollinear runs this GEMM is computed but never used; harmless,
+      ! ... just wasted work.
+      !
+      IF (Hubbard_projectors.EQ."ortho-atomic" .AND. .NOT.gamma_only) THEN
+         !$acc host_data use_device(wfcatom, spsi, proj_atom)
+         CALL MYZGEMM( 'C', 'N', natomwfc, nbnd, npwx*npol, (1.0_DP,0.0_DP), &
+                       wfcatom, npwx*npol, spsi, npwx*npol, (0.0_DP,0.0_DP), &
+                       proj_atom, natomwfc )
+         CALL mp_sum( proj_atom, intra_bgrp_comm )
+         !$acc end host_data
       ENDIF
       !
       ! ... now we need the first derivative of proj with respect to tau(alpha,ipol)
@@ -352,11 +376,12 @@ SUBROUTINE force_hub( forceh )
    DEALLOCATE( spsi )
    DEALLOCATE( wfcatom )
    IF (Hubbard_projectors.EQ."ortho-atomic") THEN
-      !$acc exit data delete(swfcatom,eigenval,eigenvect,overlap_inv) 
+      !$acc exit data delete(swfcatom,eigenval,eigenvect,overlap_inv,proj_atom)
       DEALLOCATE( overlap_inv )
       DEALLOCATE( swfcatom )
       DEALLOCATE( eigenval )
       DEALLOCATE( eigenvect )
+      DEALLOCATE( proj_atom )
    ENDIF
    !
    IF (nspin == 1) forceh(:,:) = 2.d0 * forceh(:,:)
@@ -377,7 +402,9 @@ SUBROUTINE force_hub( forceh )
    CALL print_clock( 'dndtau' )
    CALL print_clock( 'dndgtau' )
    CALL print_clock( 'dprojdtau' )
-   CALL print_clock( 'calc_doverlap' )
+   CALL print_clock( 'calcdoverlp' )
+   CALL print_clock( 'lyapunov' )
+   CALL print_clock( 'dprojat' )
    CALL print_clock( 'matel_dSdtau' )
    !
    RETURN
@@ -399,10 +426,9 @@ SUBROUTINE dndtau_k( ldim, proj, spsi, alpha, jkb0, ipol, ik, nb_s, &
    USE ldaU,                 ONLY : nwfcU, offsetU, is_hubbard_back, offsetU_back, &
                                     ldim_u, offsetU_back1, ldim_back, Hubbard_l2,  &
                                     backall, Hubbard_projectors, wfcU, is_hubbard, &
-                                    Hubbard_l
+                                    Hubbard_l, doverlap_inv, dproj_atom
    USE wvfct,                ONLY : nbnd, npwx, wg
    USE uspp,                 ONLY : okvan
-   USE force_mod,            ONLY : doverlap_inv
    USE basis,                ONLY : natomwfc
    USE wavefunctions,        ONLY : evc
    USE mp_pools,             ONLY : intra_pool_comm, me_pool, nproc_pool
@@ -432,7 +458,7 @@ SUBROUTINE dndtau_k( ldim, proj, spsi, alpha, jkb0, ipol, ik, nb_s, &
    !! If each band appears more than once
    !! compute its contribution only once (i.e. when mykey=0)
    INTEGER, INTENT(IN) :: lpuk
-   !! index to control the standard (lpuk=1) or 
+   !! index to control the standard (lpuk=1) or
    !! background (lpuk=2) contribution to the force
    REAL(DP), INTENT(OUT) :: dns(ldim,ldim,nspin,nat)
    !! the derivative of the atomic occupations
@@ -467,6 +493,7 @@ SUBROUTINE dndtau_k( ldim, proj, spsi, alpha, jkb0, ipol, ik, nb_s, &
    IF (Hubbard_projectors.EQ."ortho-atomic") THEN
       ALLOCATE( doverlap_inv(natomwfc,natomwfc) )
       CALL calc_doverlap_inv( alpha, ipol, ik, jkb0 )
+      CALL compute_dproj_atom( alpha, ipol, ik, spsi )
    ENDIF
    !
    ! ... Band parallelization. If each band appears more than once
@@ -549,6 +576,10 @@ SUBROUTINE dndtau_k( ldim, proj, spsi, alpha, jkb0, ipol, ik, nb_s, &
    !$acc end data
    DEALLOCATE( dproj )
    IF (ALLOCATED(doverlap_inv)) DEALLOCATE( doverlap_inv )
+   IF (ALLOCATED(dproj_atom)) THEN
+      !$acc exit data delete(dproj_atom)
+      DEALLOCATE( dproj_atom )
+   ENDIF
    IF (okvan) DEALLOCATE( dproj_us )
    !
    CALL mp_sum( dns, intra_pool_comm )
@@ -589,15 +620,14 @@ SUBROUTINE dndtau_k_nc ( ldim, proj, spsi, alpha, jkb0, ipol, ik, nb_s, &
    USE ldaU,                 ONLY : is_hubbard, Hubbard_l, nwfcU, offsetU, &
                                     is_hubbard_back, offsetU_back, ldim_u, &
                                     offsetU_back1, ldim_back, Hubbard_l2, &
-                                    backall, Hubbard_projectors, wfcU
-   USE noncollin_module,     ONLY : npol                            
+                                    backall, Hubbard_projectors, wfcU, doverlap_inv
+   USE noncollin_module,     ONLY : npol
    USE wvfct,                ONLY : nbnd, npwx, wg
    USE mp_pools,             ONLY : intra_pool_comm, me_pool, nproc_pool
    USE mp_bands,             ONLY : intra_bgrp_comm
    USE mp,                   ONLY : mp_sum
    USE wavefunctions,        ONLY : evc
    USE uspp,                 ONLY : okvan
-   USE force_mod,            ONLY : doverlap_inv
    USE basis,                ONLY : natomwfc
    !
    IMPLICIT NONE
@@ -908,10 +938,10 @@ SUBROUTINE dngdtau_k( ldim, proj, spsi, alpha, jkb0, ipol, ik, nb_s, &
    USE ldaU,                 ONLY : is_hubbard, Hubbard_l, nwfcU, offsetU, at_sc,  &
                                     offsetU_back, offsetU_back1, Hubbard_l2,   &
                                     backall, max_num_neighbors, phase_fac, ldim_u, &
-                                    neighood, Hubbard_projectors, wfcU
+                                    neighood, Hubbard_projectors, wfcU, &
+                                    doverlap_inv, dproj_atom
    USE wvfct,                ONLY : nbnd, npwx, npw, wg
    USE uspp,                 ONLY : okvan
-   USE force_mod,            ONLY : doverlap_inv
    USE basis,                ONLY : natomwfc
    USE wavefunctions,        ONLY : evc
    USE mp_pools,             ONLY : intra_pool_comm, me_pool, nproc_pool
@@ -998,6 +1028,8 @@ SUBROUTINE dngdtau_k( ldim, proj, spsi, alpha, jkb0, ipol, ik, nb_s, &
       ! ... In the 'ortho-atomic' case calculate d[(O^{-1/2})^T]
       ALLOCATE( doverlap_inv(natomwfc,natomwfc) )
       CALL calc_doverlap_inv( alpha, ipol, ik, jkb0 )
+      ! ... Precompute dproj_atom to enable the fast path in dprojdtau_k
+      CALL compute_dproj_atom( alpha, ipol, ik, spsi )
    ENDIF
    !
    ! ... Band parallelization. If each band appears more than once
@@ -1083,6 +1115,10 @@ SUBROUTINE dngdtau_k( ldim, proj, spsi, alpha, jkb0, ipol, ik, nb_s, &
    DEALLOCATE( dproj1 )
    DEALLOCATE( dproj2 )
    IF (ALLOCATED(doverlap_inv)) DEALLOCATE( doverlap_inv )
+   IF (ALLOCATED(dproj_atom)) THEN
+      !$acc exit data delete(dproj_atom)
+      DEALLOCATE( dproj_atom )
+   ENDIF
    IF (okvan) DEALLOCATE( dproj_us )
    !
    CALL mp_sum( dnsg, intra_pool_comm )
@@ -1138,13 +1174,12 @@ SUBROUTINE dngdtau_k_nc ( ldim, proj, spsi, alpha, jkb0, ipol, ik, nb_s, &
    USE ldaU,                 ONLY : is_hubbard, Hubbard_l, nwfcU, offsetU, at_sc,  &
                   offsetU_back, offsetU_back1, Hubbard_l2,   &
                   backall, max_num_neighbors, phase_fac, ldim_u, &
-                  neighood, Hubbard_projectors, wfcU
+                  neighood, Hubbard_projectors, wfcU, doverlap_inv
    USE wvfct,                ONLY : nbnd, npwx, npw, wg
    USE mp_pools,             ONLY : intra_pool_comm, me_pool, nproc_pool
    USE mp,                   ONLY : mp_sum
    USE wavefunctions,        ONLY : evc
    USE uspp,                 ONLY : okvan
-   USE force_mod,            ONLY : doverlap_inv
    USE basis,                ONLY : natomwfc
    USE noncollin_module,     ONLY : npol 
    USE io_global,  ONLY : stdout
@@ -1520,11 +1555,15 @@ END SUBROUTINE dngdtau_gamma
 SUBROUTINE dprojdtau_k( spsi, alpha, na, ijkb0, ipol, ik, nb_s, nb_e, mykey, dproj )
    !-----------------------------------------------------------------------------
    !! This routine computes the first derivative of the projection
-   !! \(\langle\phi^{at}_{I,m1}|S|\psi_{k,v,s}\rangle\) with respect to 
+   !! \(\langle\phi^{at}_{I,m1}|S|\psi_{k,v,s}\rangle\) with respect to
    !! the atomic displacement \(u(\text{alpha,ipol})\). We remind that:
    !! $$ \text{ns}_{I,s,m1,m2} = \sum_{k,v}
    !!    f_{kv} \langle\phi^{at}_{I,m1}|S|\psi_{k,v,s}\rangle
    !!           \langle\psi_{k,v,s}|S|\phi^{at}_{I,m2}\rangle $$
+   !! In the 'ortho-atomic' collinear case, this routine builds the result
+   !! from proj_atom/dproj_atom (precomputed once in force_hub/
+   !! compute_dproj_atom) instead of an explicit plane-wave sum; noncollinear
+   !! calculations use the original plane-wave-based construction below.
    !
    USE kinds,                ONLY : DP
    USE ions_base,            ONLY : nat, ntyp => nsp, ityp
@@ -1534,16 +1573,15 @@ SUBROUTINE dprojdtau_k( spsi, alpha, na, ijkb0, ipol, ik, nb_s, nb_e, mykey, dpr
    USE ldaU,                 ONLY : is_hubbard, Hubbard_l, nwfcU, wfcU, offsetU, &
                                     is_hubbard_back, Hubbard_l2, offsetU_back, &
                                     offsetU_back1, ldim_u, backall, lda_plus_u_kind, &
-                                    Hubbard_projectors, oatwfc
-   USE noncollin_module,     ONLY : noncolin, npol                         
+                                    Hubbard_projectors, oatwfc, overlap_inv, &
+                                    doverlap_inv, proj_atom, dproj_atom
+   USE noncollin_module,     ONLY : noncolin, npol
    USE wvfct,                ONLY : nbnd, npwx, wg
    USE uspp,                 ONLY : okvan, nkb
    USE uspp_param,           ONLY : nh
    USE basis,                ONLY : natomwfc, wfcatom
    USE mp_bands,             ONLY : intra_bgrp_comm
    USE mp,                   ONLY : mp_sum
-   USE force_mod,            ONLY : overlap_inv, doverlap_inv
-   USE ldaU,                 ONLY : is_hubbard, Hubbard_l, offsetU
    !
    IMPLICIT NONE
    !
@@ -1687,6 +1725,60 @@ SUBROUTINE dprojdtau_k( spsi, alpha, na, ijkb0, ipol, ik, nb_s, nb_e, mykey, dpr
       IF (is_hubbard_back(nt)) CALL errore( "dprojdtau_k", &
                  " Forces with background and  ortho-atomic are not supported", 1 )
       !
+      IF (ALLOCATED(dproj_atom) .AND. .NOT.noncolin) THEN
+         !
+         !*************** ORTHO-ATOMIC CASE (fast, plane-wave-free) ************
+         !
+         ! ... The projector derivative is the sum of two contributions:
+         ! ...   1. \sum_{J in alpha} O^{-1/2}_JI <dphi_J/dtau|S|psi_n>
+         ! ...   2. \sum_J dO^{-1/2}_JI/dtau <phi_J|S|psi_n>
+         ! ... Both inner products are k-point quantities that no longer depend
+         ! ... on 'na', so they were precomputed once (dproj_atom and proj_atom).
+         ! ... Here we only contract them with the (small) O^{-1/2} blocks, which
+         ! ... avoids the per-'na' plane-wave matrix products of the slow path.
+         !
+         CALL natomwfc_per_atom( alpha, m_start, m_end )
+         offpm = oatwfc(na)   ! offset of na's orbitals in the atomic-wfc list
+         !
+         ALLOCATE( dproj0(ldim,nbnd) )
+         !$acc data create(dproj0) present(overlap_inv,proj_atom,dproj_atom)
+         !
+         ! ... Contribution 2: dproj0(m1,n) = \sum_J conj(doverlap_inv(J,offpm+m1)) proj_atom(J,n)
+         ! ...   (doverlap_inv = d(O^{-1/2}) not transposed, hence the 'C' op)
+         !$acc host_data use_device(doverlap_inv,proj_atom,dproj0)
+         CALL MYZGEMM( 'C','N', ldim, nbnd, natomwfc, (1.d0,0.d0), &
+                       doverlap_inv(1,offpm+1), natomwfc, proj_atom, natomwfc, &
+                       (0.d0,0.d0), dproj0, ldim )
+         !$acc end host_data
+         !
+         ! ... Contribution 1: add \sum_{J in alpha} conj(overlap_inv(offpm+m1,J)) dproj_atom(J,n).
+         ! ...   overlap_inv = (O^{-1/2})^T is Hermitian, so
+         ! ...   conj(overlap_inv(offpm+m1,J)) = overlap_inv(J,offpm+m1), turning this into a
+         ! ...   plain 'T' product over the orbitals J of the displaced atom alpha.
+         !$acc host_data use_device(overlap_inv,dproj_atom,dproj0)
+         CALL MYZGEMM( 'T','N', ldim, nbnd, m_end-m_start+1, (1.d0,0.d0), &
+                       overlap_inv(m_start,offpm+1), natomwfc, &
+                       dproj_atom(m_start,1), natomwfc, (1.d0,0.d0), dproj0, ldim )
+         !$acc end host_data
+         !
+         ! ... Copy to dproj for the bands treated by this processor
+         offpm = offsetU(na)
+         IF (mykey==0) THEN
+            !$acc parallel loop collapse(2)
+            DO ibnd = nb_s, nb_e
+               DO m1 = 1, ldim
+                  dproj(offpm+m1,ibnd) = dproj0(m1,ibnd)
+               ENDDO
+            ENDDO
+         ENDIF
+         !
+         !$acc end data
+         DEALLOCATE( dproj0 )
+         !
+      ELSE
+      !
+      !*************** ORTHO-ATOMIC CASE (slow, plane-wave based) ***********
+      !
       ALLOCATE( dwfc(npwx*npol,ldim*npol) )
       !$acc data create(dwfc) present(wfcatom,overlap_inv)
       !
@@ -1773,6 +1865,8 @@ SUBROUTINE dprojdtau_k( spsi, alpha, na, ijkb0, ipol, ik, nb_s, nb_e, mykey, dpr
       DEALLOCATE( dproj0 )
       DEALLOCATE( dwfc )
       !
+      ENDIF
+      !
    ENDIF
    !
    !$acc end data
@@ -1842,9 +1936,81 @@ SUBROUTINE natomwfc_per_atom( alpha, m_start, m_end )
 END SUBROUTINE natomwfc_per_atom
 !
 !--------------------------------------------------------------------
+SUBROUTINE compute_dproj_atom( alpha, ipol, ik, spsi )
+   !-----------------------------------------------------------------
+   !! Precompute \(\text{dproj_atom}(J,n) = \langle d\phi_J/d\tau(\alpha,\text{ipol})
+   !! | S | \psi_n\rangle\), which is nonzero only for the atomic orbitals \(J\)
+   !! of the displaced atom \(\alpha\). Together with \(\text{proj_atom}\) this
+   !! lets \(\texttt{dprojdtau_k}\) build the ortho-atomic projector derivative
+   !! for every Hubbard atom with small matrix products instead of plane-wave
+   !! sums. Allocating \(\text{dproj_atom}\) also flags that fast path.
+   !! Collinear ortho-atomic only.
+   !
+   USE kinds,     ONLY : DP
+   USE wvfct,     ONLY : nbnd, npwx
+   USE cell_base, ONLY : tpiba
+   USE gvect,     ONLY : g
+   USE klist,     ONLY : xk, ngk, igk_k
+   USE basis,     ONLY : natomwfc, wfcatom
+   USE ldaU,      ONLY : dproj_atom
+   USE mp_bands,  ONLY : intra_bgrp_comm
+   USE mp,        ONLY : mp_sum
+   !
+   IMPLICIT NONE
+   !
+   INTEGER, INTENT(IN) :: alpha, ipol, ik
+   COMPLEX(DP), INTENT(IN) :: spsi(npwx,nbnd)
+   !
+   INTEGER :: npw, ig, m1, m_start, m_end
+   REAL(DP) :: gvec, xki
+   COMPLEX(DP), ALLOCATABLE :: dwfcatom(:,:)
+   !$acc declare device_resident(dwfcatom)
+   !
+   CALL start_clock( 'dprojat' )
+   npw = ngk(ik)
+   xki = xk(ipol,ik)
+   CALL natomwfc_per_atom( alpha, m_start, m_end )
+   ALLOCATE( dproj_atom(natomwfc,nbnd) )
+   ALLOCATE( dwfcatom(npwx,m_start:m_end) )
+   !$acc enter data create(dproj_atom)
+   !$acc data present(wfcatom,spsi,dproj_atom)
+   !$acc parallel loop collapse(2)
+   DO m1 = m_start, m_end
+      DO ig = 1, npwx
+         IF ( ig <= npw ) THEN
+            gvec = (g(ipol,igk_k(ig,ik)) + xki) * tpiba
+         ELSE
+            gvec = 0.0_dp
+         ENDIF
+         dwfcatom(ig,m1) = CMPLX(0.0_dp,-1.0_dp,KIND=DP) * gvec * wfcatom(ig,m1)
+      ENDDO
+   ENDDO
+   !$acc kernels
+   dproj_atom(:,:) = (0.0_dp,0.0_dp)
+   !$acc end kernels
+   !$acc host_data use_device(dwfcatom,spsi,dproj_atom)
+   CALL MYZGEMM( 'C','N', m_end-m_start+1, nbnd, npwx, (1.0_dp,0.0_dp), &
+                 dwfcatom, npwx, spsi, npwx, (0.0_dp,0.0_dp), &
+                 dproj_atom(m_start,1), natomwfc )
+   CALL mp_sum( dproj_atom, intra_bgrp_comm )
+   !$acc end host_data
+   !$acc end data
+   DEALLOCATE( dwfcatom )
+   CALL stop_clock( 'dprojat' )
+   !
+END SUBROUTINE compute_dproj_atom
+!
+!--------------------------------------------------------------------
 SUBROUTINE calc_doverlap_inv( alpha, ipol, ik, ijkb0 )
    !-----------------------------------------------------------------
    !! This routine computes the derivative of \(O^{-1/2}\) transposed.
+   !! Since \(dO/d\tau(\alpha,\text{ipol})\) is nonzero only in the rows/
+   !! columns of the displaced atom \(\alpha\) (plus a low-rank USPP/PAW
+   !! term), the collinear case delegates to the low-rank, Hubbard-column-
+   !! restricted solver \(\texttt{calculate_doverlap_inv_lr}\) instead of
+   !! forming the full dense \(dO\) matrix, avoiding its \(O(\text{natomwfc}^3)\)
+   !! solve. The noncollinear case still assembles the dense \(dO\) and calls
+   !! the original dense \(\texttt{calculate_doverlap_inv}\).
    !
    USE kinds,            ONLY : DP
    USE wvfct,            ONLY : npwx
@@ -1852,10 +2018,12 @@ SUBROUTINE calc_doverlap_inv( alpha, ipol, ik, ijkb0 )
    USE cell_base,        ONLY : tpiba
    USE gvect,            ONLY : g
    USE uspp,             ONLY : okvan
+   USE uspp_param,       ONLY : nh
+   USE ions_base,        ONLY : ityp
    USE klist,            ONLY : xk, ngk, igk_k
    USE basis,            ONLY : natomwfc, wfcatom, swfcatom
-   USE force_mod,        ONLY : eigenval, eigenvect, overlap_inv, doverlap_inv
-   USE ldaU,             ONLY : Hubbard_projectors
+   USE ldaU,             ONLY : Hubbard_projectors, eigenval, eigenvect, &
+                                overlap_inv, doverlap_inv
    USE mp_bands,         ONLY : intra_bgrp_comm
    USE mp,               ONLY : mp_sum
    !
@@ -1872,17 +2040,19 @@ SUBROUTINE calc_doverlap_inv( alpha, ipol, ik, ijkb0 )
    !
    ! ... local variables
    !
-   INTEGER :: ig, m1, m2, npw, m_start, m_end
+   INTEGER :: ig, m1, m2, npw, m_start, m_end, nh_alpha
    REAL(DP) :: gvec, xki
    COMPLEX(DP), ALLOCATABLE :: dwfcatom(:,:)
    ! auxiliary array for fast calculation
    !$acc declare device_resident(dwfcatom)
    COMPLEX(DP), ALLOCATABLE :: doverlap(:,:)
-   ! derivative of the overlap matrix  
+   ! derivative of the overlap matrix
    COMPLEX(DP), ALLOCATABLE :: doverlap_us(:,:)
    ! derivative of the overlap matrix, auxiliary array
+   COMPLEX(DP), ALLOCATABLE :: dS_Lfac(:,:), dS_Rfac(:,:)
+   ! low-rank factors of the USPP/PAW dS term: dO_us = dS_Lfac*dS_Rfac + h.c.
    !
-   CALL start_clock( 'calc_doverlap' )
+   CALL start_clock( 'calcdoverlp' )
    !
    IF (Hubbard_projectors.NE."ortho-atomic") RETURN
    !
@@ -1919,7 +2089,7 @@ SUBROUTINE calc_doverlap_inv( alpha, ipol, ik, ijkb0 )
          ELSE
             gvec =  0.0_dp
          END IF
-         dwfcatom(ig,m1) = (0.0_dp,-1.0_dp) * gvec * wfcatom(ig,m1)
+         dwfcatom(ig,m1) = CMPLX(0.0_dp,-1.0_dp,KIND=DP) * gvec * wfcatom(ig,m1)
       END DO
    END DO
    !$acc host_data use_device(dwfcatom, swfcatom, doverlap_us)
@@ -1929,50 +2099,339 @@ SUBROUTINE calc_doverlap_inv( alpha, ipol, ik, ijkb0 )
         doverlap_us(m_start,1), natomwfc )
    !$acc end host_data
    DEALLOCATE ( dwfcatom )
-   ! ... Calculate < phi_I | S | dphi_J/d\tau(alpha,ipol) >
-   ! ... (use hermitian conjugate of previously computed matrix)
-   !$acc kernels
-   doverlap(:,:) = doverlap_us(:,:)
-   !$acc end kernels
-   !$acc parallel loop collapse(2)
-   DO m1 = 1, natomwfc
-      DO m2 = m_start, m_end
-         doverlap(m1,m2) = doverlap(m1,m2) + CONJG(doverlap_us(m2,m1))
-      END DO
-   END DO
    !
-   ! ... Sum over G vectors
-   !
-   !$acc host_data use_device(doverlap)
-   CALL mp_sum( doverlap, intra_bgrp_comm )
-   !$acc end host_data 
-   !
-   ! ... Add the USPP term in dO_IJ/d\tau(alpha,ipol):
-   ! ... < phi_I | dS/d\tau(alpha,ipol) | phi_J >
-   !
-   IF (okvan) THEN
-      ! ... Calculate doverlap_us = < phi_I | dS/d\tau(alpha,ipol) | phi_J >
-      CALL matrix_element_of_dSdtau( alpha, ipol, ik, ijkb0, natomwfc, &
-                                     wfcatom, natomwfc, wfcatom,       &
-                                     doverlap_us, 1, natomwfc, 0, .true. )
+   IF (noncolin) THEN
+      !
+      ! ... Noncollinear case: assemble the full dO and use the dense solver.
+      ! ... Calculate < phi_I | S | dphi_J/d\tau(alpha,ipol) >
+      ! ... (use hermitian conjugate of previously computed matrix)
       !$acc kernels
-      doverlap(:,:) = doverlap(:,:) + doverlap_us(:,:)
+      doverlap(:,:) = doverlap_us(:,:)
       !$acc end kernels
+      !$acc parallel loop collapse(2)
+      DO m1 = 1, natomwfc
+         DO m2 = m_start, m_end
+            doverlap(m1,m2) = doverlap(m1,m2) + CONJG(doverlap_us(m2,m1))
+         END DO
+      END DO
+      !
+      ! ... Sum over G vectors
+      !
+      !$acc host_data use_device(doverlap)
+      CALL mp_sum( doverlap, intra_bgrp_comm )
+      !$acc end host_data
+      !
+      ! ... Add the USPP term in dO_IJ/d\tau(alpha,ipol):
+      ! ... < phi_I | dS/d\tau(alpha,ipol) | phi_J >
+      !
+      IF (okvan) THEN
+         CALL matrix_element_of_dSdtau( alpha, ipol, ik, ijkb0, natomwfc, &
+                                        wfcatom, natomwfc, wfcatom,       &
+                                        doverlap_us, 1, natomwfc, 0, .true. )
+         !$acc kernels
+         doverlap(:,:) = doverlap(:,:) + doverlap_us(:,:)
+         !$acc end kernels
+      ENDIF
+      !
+      CALL start_clock( 'lyapunov' )
+      CALL calculate_doverlap_inv( natomwfc, eigenval, eigenvect, &
+                                   doverlap, doverlap_inv )
+      CALL stop_clock( 'lyapunov' )
+      !
+   ELSE
+      !
+      ! ... Collinear case: keep dO in low-rank factored form and solve only
+      ! ... for the Hubbard-manifold columns of d(O^{-1/2}). dO/d\tau is the
+      ! ... sum of an "orbital" part (doverlap_us, nonzero only in the rows of
+      ! ... the displaced atom) and, for USPP/PAW, a "dS" part that factorizes
+      ! ... as dS_Lfac*dS_Rfac + h.c. Both are low rank.
+      !
+      ! ... G-sum the orbital factor (only its m_start:m_end rows are nonzero)
+      !$acc host_data use_device(doverlap_us)
+      CALL mp_sum( doverlap_us, intra_bgrp_comm )
+      !$acc end host_data
+      !
+      IF (okvan) THEN
+         nh_alpha = nh(ityp(alpha))
+      ELSE
+         nh_alpha = 1
+      ENDIF
+      ALLOCATE( dS_Lfac(natomwfc,nh_alpha), dS_Rfac(nh_alpha,natomwfc) )
+      !$acc enter data create(dS_Lfac,dS_Rfac)
+      !
+      IF (okvan) THEN
+         ! ... Get the low-rank factors of < phi_I | dS/d\tau | phi_J >
+         CALL dS_lowrank_factors( alpha, ipol, ik, ijkb0, natomwfc, wfcatom, &
+                                  nh_alpha, dS_Lfac, dS_Rfac )
+      ENDIF
+      !
+      CALL start_clock( 'lyapunov' )
+      CALL calculate_doverlap_inv_lr( natomwfc, eigenval, eigenvect, doverlap_us, &
+                                      m_start, m_end, okvan, dS_Lfac, dS_Rfac,    &
+                                      nh_alpha, doverlap_inv )
+      CALL stop_clock( 'lyapunov' )
+      !
+      !$acc exit data delete(dS_Lfac,dS_Rfac)
+      DEALLOCATE( dS_Lfac, dS_Rfac )
+      !
    ENDIF
-   !
-   !
-   ! ... Now compute dO^{-1/2}_JI/d\tau(alpha,ipol) using dO_IJ/d\tau(alpha,ipol)
-   ! ... Note the transposition!
-   !
-   CALL calculate_doverlap_inv( natomwfc, eigenval, eigenvect, &
-                                doverlap, doverlap_inv )
    !
    !$acc end data
    DEALLOCATE( doverlap_us )
    DEALLOCATE( doverlap )
-   CALL stop_clock( 'calc_doverlap' )
+   CALL stop_clock( 'calcdoverlp' )
    !
 END SUBROUTINE calc_doverlap_inv
+!
+!
+!----------------------------------------------------------------------
+SUBROUTINE calculate_doverlap_inv_lr( m, e, U, dO_orb, m_start, m_end, &
+                                      okvan, Lfac, Rfac, nh_a, doverlap_inv )
+   !-------------------------------------------------------------------
+   !! Low-rank, Hubbard-column-restricted solver for \(d(O^{-1/2})\).
+   !! It returns the same result as \(\texttt{calculate_doverlap_inv}\),
+   !! \(d(O^{-1/2}) = -U\,D\,U^H\) with \(D_{ij} = (U^H dO\,U)_{ij} /
+   !! (e_i\sqrt{e_j}+e_j\sqrt{e_i})\), but
+   !!   1. evaluates the forward transform \(U^H dO\,U\) from the low-rank
+   !!      factors of \(dO\) (the orbital part is nonzero only in the rows of
+   !!      the displaced atom; the USPP/PAW dS part is \(L R + (LR)^H\)),
+   !!   2. computes only the Hubbard-manifold columns actually used by
+   !!      \(\texttt{dprojdtau_k}\) (the others are left zero).
+   !! This avoids the \(O(m^3)\) dense transforms of the original solver.
+   !
+   USE kinds,     ONLY : DP
+   USE ions_base, ONLY : nat, ityp
+   USE ldaU,      ONLY : is_hubbard, oatwfc, ldim_u
+   !
+   IMPLICIT NONE
+   !
+   INTEGER,     INTENT(IN)  :: m
+   !! number of atomic wavefunctions (natomwfc)
+   REAL(DP),    INTENT(IN)  :: e(m)
+   !! eigenvalues of the overlap matrix
+   COMPLEX(DP), INTENT(IN)  :: U(m,m)
+   !! eigenvectors of the overlap matrix
+   COMPLEX(DP), INTENT(IN)  :: dO_orb(m,m)
+   !! orbital part of dO: only rows m_start:m_end are nonzero (= the factor M)
+   INTEGER,     INTENT(IN)  :: m_start, m_end
+   !! range of atomic wavefunctions belonging to the displaced atom
+   LOGICAL,     INTENT(IN)  :: okvan
+   !! whether the USPP/PAW dS contribution is present
+   INTEGER,     INTENT(IN)  :: nh_a
+   !! number of beta projectors of the displaced atom (1 if .NOT.okvan)
+   COMPLEX(DP), INTENT(IN)  :: Lfac(m,nh_a), Rfac(nh_a,m)
+   !! low-rank factors of the dS part: dO_us = Lfac*Rfac + (Lfac*Rfac)^H
+   COMPLEX(DP), INTENT(OUT) :: doverlap_inv(m,m)
+   !! d(O^{-1/2}) (not transposed), Hubbard-manifold columns only
+   !
+   INTEGER :: nR, i, j, na, nt, offpm, ld, nwfcU, kc
+   COMPLEX(DP), ALLOCATABLE :: C(:,:), D(:,:), MU(:,:), P(:,:), RU(:,:)
+   COMPLEX(DP), ALLOCATABLE :: Uhub(:,:), DUhub(:,:), dinvhub(:,:)
+   !$acc declare device_resident(C,D,MU,P,RU,Uhub,DUhub,dinvhub)
+   !
+   nR = m_end - m_start + 1
+   !
+   ALLOCATE( C(m,m), D(m,m), MU(nR,m) )
+   !
+   ! ... Orbital part of the forward transform: U^H dO_orb U = U_R^H (M U) + h.c.
+   ! ...   M = dO_orb(m_start:m_end,:),  U_R = U(m_start:m_end,:)
+   !$acc host_data use_device(dO_orb, U, MU)
+   CALL MYZGEMM( 'N','N', nR, m, m, (1.d0,0.d0), dO_orb(m_start,1), m, U, m, &
+                 (0.d0,0.d0), MU, nR )
+   !$acc end host_data
+   !$acc host_data use_device(U, MU, C)
+   CALL MYZGEMM( 'C','N', m, m, nR, (1.d0,0.d0), U(m_start,1), m, MU, nR, &
+                 (0.d0,0.d0), C, m )
+   !$acc end host_data
+   DEALLOCATE( MU )
+   !
+   !$acc parallel loop collapse(2) present(C,D)
+   DO j = 1, m
+      DO i = 1, m
+         D(i,j) = C(i,j) + CONJG(C(j,i))
+      ENDDO
+   ENDDO
+   !
+   ! ... dS (USPP/PAW) part: add U^H dO_us U = P*RU + (P*RU)^H,
+   ! ...   P = U^H Lfac,  RU = Rfac U
+   IF (okvan) THEN
+      ALLOCATE( P(m,nh_a), RU(nh_a,m) )
+      !$acc host_data use_device(U, Lfac, P)
+      CALL MYZGEMM( 'C','N', m, nh_a, m, (1.d0,0.d0), U, m, Lfac, m, &
+                    (0.d0,0.d0), P, m )
+      !$acc end host_data
+      !$acc host_data use_device(Rfac, U, RU)
+      CALL MYZGEMM( 'N','N', nh_a, m, m, (1.d0,0.d0), Rfac, nh_a, U, m, &
+                    (0.d0,0.d0), RU, nh_a )
+      !$acc end host_data
+      ! ... reuse C as the P*RU buffer
+      !$acc host_data use_device(P, RU, C)
+      CALL MYZGEMM( 'N','N', m, m, nh_a, (1.d0,0.d0), P, m, RU, nh_a, &
+                    (0.d0,0.d0), C, m )
+      !$acc end host_data
+      !$acc parallel loop collapse(2) present(C,D)
+      DO j = 1, m
+         DO i = 1, m
+            D(i,j) = D(i,j) + C(i,j) + CONJG(C(j,i))
+         ENDDO
+      ENDDO
+      DEALLOCATE( P, RU )
+   ENDIF
+   !
+   ! ... Divide by the eigenvalue denominator: D = (U^H dO U) ./ denom
+   !$acc parallel loop collapse(2) present(D,e)
+   DO j = 1, m
+      DO i = 1, m
+         D(i,j) = D(i,j) / ( e(i)*DSQRT(e(j)) + e(j)*DSQRT(e(i)) )
+      ENDDO
+   ENDDO
+   !
+   ! ... Back transform for the Hubbard-manifold columns only:
+   ! ...   doverlap_inv(:,cols) = -U * ( D * U(cols,:)^H )
+   ! ... The Hubbard columns are gathered into a single contiguous block so the
+   ! ... two transforms are well-shaped GEMMs (instead of one tall-skinny GEMM
+   ! ... per Hubbard atom), then scattered back.
+   !$acc kernels present(doverlap_inv)
+   doverlap_inv(:,:) = (0.d0,0.d0)
+   !$acc end kernels
+   !
+   nwfcU = 0
+   DO na = 1, nat
+      IF (is_hubbard(ityp(na))) nwfcU = nwfcU + ldim_u(ityp(na))
+   ENDDO
+   !
+   ALLOCATE( Uhub(nwfcU,m), DUhub(m,nwfcU), dinvhub(m,nwfcU) )
+   !
+   ! ... Gather the Hubbard rows of U into Uhub
+   kc = 0
+   DO na = 1, nat
+      nt = ityp(na)
+      IF (.NOT.is_hubbard(nt)) CYCLE
+      offpm = oatwfc(na)
+      ld    = ldim_u(nt)
+      !$acc parallel loop collapse(2) present(Uhub,U)
+      DO j = 1, m
+         DO i = 1, ld
+            Uhub(kc+i,j) = U(offpm+i,j)
+         ENDDO
+      ENDDO
+      kc = kc + ld
+   ENDDO
+   !
+   ! ... DUhub = D * Uhub^H ;  dinvhub = -U * DUhub
+   !$acc host_data use_device(D, Uhub, DUhub)
+   CALL MYZGEMM( 'N','C', m, nwfcU, m, (1.d0,0.d0), D, m, Uhub, nwfcU, &
+                 (0.d0,0.d0), DUhub, m )
+   !$acc end host_data
+   !$acc host_data use_device(U, DUhub, dinvhub)
+   CALL MYZGEMM( 'N','N', m, nwfcU, m, (-1.d0,0.d0), U, m, DUhub, m, &
+                 (0.d0,0.d0), dinvhub, m )
+   !$acc end host_data
+   !
+   ! ... Scatter the result back into the Hubbard columns of doverlap_inv
+   kc = 0
+   DO na = 1, nat
+      nt = ityp(na)
+      IF (.NOT.is_hubbard(nt)) CYCLE
+      offpm = oatwfc(na)
+      ld    = ldim_u(nt)
+      !$acc parallel loop collapse(2) present(doverlap_inv,dinvhub)
+      DO j = 1, ld
+         DO i = 1, m
+            doverlap_inv(i,offpm+j) = dinvhub(i,kc+j)
+         ENDDO
+      ENDDO
+      kc = kc + ld
+   ENDDO
+   !
+   DEALLOCATE( Uhub, DUhub, dinvhub, C, D )
+   !
+END SUBROUTINE calculate_doverlap_inv_lr
+!
+!
+!----------------------------------------------------------------------
+SUBROUTINE dS_lowrank_factors( alpha, ipol, ik, ijkb0, lA, A, nh_a, Lfac, Rfac )
+   !-------------------------------------------------------------------
+   !! Low-rank factors of the USPP/PAW contribution to the overlap-matrix
+   !! derivative, \(\langle A | dS/d\tau(\alpha,\text{ipol}) | A\rangle =
+   !! L R + (L R)^H\), with \(L = \langle A|d\beta_\alpha\rangle\) and
+   !! \(R = qq\,\langle\beta_\alpha|A\rangle\). Collinear only. This is the
+   !! factored counterpart of \(\texttt{matrix_element_of_dSdtau}\) used by
+   !! the fast (low-rank) ortho-atomic solver.
+   !
+   USE kinds,            ONLY : DP
+   USE cell_base,        ONLY : tpiba
+   USE wvfct,            ONLY : npwx
+   USE uspp,             ONLY : vkb, qq_at
+   USE uspp_param,       ONLY : nh
+   USE klist,            ONLY : igk_k, ngk
+   USE becmod,           ONLY : calbec
+   USE gvect,            ONLY : g
+   USE control_flags,    ONLY : offload_type
+   !
+   IMPLICIT NONE
+   !
+   INTEGER,     INTENT(IN)  :: alpha, ipol, ik, ijkb0, lA, nh_a
+   COMPLEX(DP), INTENT(IN)  :: A(npwx,lA)
+   COMPLEX(DP), INTENT(OUT) :: Lfac(lA,nh_a)
+   !! L = <A|dbeta_alpha>
+   COMPLEX(DP), INTENT(OUT) :: Rfac(nh_a,lA)
+   !! R = qq * <beta_alpha|A>
+   !
+   INTEGER :: npw, ih, jh, ig
+   REAL(DP) :: gvec
+   COMPLEX(DP), ALLOCATABLE :: aux(:,:), betaB(:,:), qq(:,:)
+   !
+   npw = ngk(ik)
+   !
+   ALLOCATE( aux(npwx,nh_a), betaB(nh_a,lA), qq(nh_a,nh_a) )
+   !$acc data create(aux,betaB,qq) present_or_copyin(A) present(Lfac,Rfac)
+   !
+   ! ... qq matrix of the displaced atom
+   !$acc parallel loop collapse(2) present(qq_at)
+   DO jh = 1, nh_a
+      DO ih = 1, nh_a
+         qq(ih,jh) = CMPLX(qq_at(ih,jh,alpha), 0.0_dp, KIND=DP)
+      ENDDO
+   ENDDO
+   !
+   ! ... beta functions of the displaced atom
+   !$acc parallel loop collapse(2) present(vkb)
+   DO ih = 1, nh_a
+      DO ig = 1, npwx
+         IF (ig <= npw) THEN
+            aux(ig,ih) = vkb(ig,ijkb0+ih)
+         ELSE
+            aux(ig,ih) = (0.0_dp,0.0_dp)
+         ENDIF
+      ENDDO
+   ENDDO
+   !
+   ! ... betaB = <beta|A>
+   CALL calbec( offload_type, npw, aux, A, betaB )
+   !
+   ! ... derivative of the beta functions: dbeta = -i G beta
+   !$acc parallel loop collapse(2)
+   DO ih = 1, nh_a
+      DO ig = 1, npw
+         gvec = g(ipol,igk_k(ig,ik)) * tpiba
+         aux(ig,ih) = (0.0_dp,-1.0_dp) * aux(ig,ih) * gvec
+      ENDDO
+   ENDDO
+   !
+   ! ... Lfac = <A|dbeta>
+   CALL calbec( offload_type, npw, A, aux, Lfac )
+   !
+   ! ... Rfac = qq * betaB
+   !$acc host_data use_device(qq,betaB,Rfac)
+   CALL MYZGEMM( 'N','N', nh_a, lA, nh_a, (1.0_dp,0.0_dp), qq, nh_a, &
+                 betaB, nh_a, (0.0_dp,0.0_dp), Rfac, nh_a )
+   !$acc end host_data
+   !
+   !$acc end data
+   DEALLOCATE( aux, betaB, qq )
+   !
+END SUBROUTINE dS_lowrank_factors
 !
 !
 !----------------------------------------------------------------------
@@ -2222,7 +2681,7 @@ SUBROUTINE matrix_element_of_dSdtau( alpha, ipol, ik, ijkb0, lA, A, &
    DEALLOCATE( aux )
    !
    ! ... A_dS_B(iA,iB) = \sum_ih [Adbeta(iA,ih) * betaB(ih,iB) +
-   ! ...                          Abeta(iA,ih)  * dbetaB(ih,iB)] 
+   ! ...                          Abeta(iA,ih)  * dbetaB(ih,iB)]
    ! ... Only A_dS_B(:,lB_s:lB_e) are calculated
    !
    IF ( mykey == 0 ) THEN

@@ -43,6 +43,7 @@ subroutine zstar_eu_us
   USE ldaU,             ONLY : lda_plus_u
   USE dv_of_drho_lr
   USE uspp_init,        ONLY : init_us_2
+  USE incdrhoscf_mod,   ONLY : incdrhoscf, incdrhoscf_nc
   !
   implicit none
   !
@@ -102,10 +103,10 @@ subroutine zstar_eu_us
         nrec = (jpol - 1) * nksq + ik
         call get_buffer(dpsi, lrdwf, iudwf, nrec)
         if (noncolin) then
-           call incdrhoscf_nc (dvscf(1,1,jpol),weight,ik, &
+           call incdrhoscf_nc (dvscf(:,:,jpol),weight,ik, &
                               dbecsum_nc(1,1,1,1,jpol), dpsi, 1.0d0)
         else
-           call incdrhoscf (dvscf(1,current_spin,jpol),weight,ik, &
+           call incdrhoscf (dvscf(:,current_spin,jpol),weight,ik, &
                             dbecsum(1,1,current_spin,jpol), dpsi)
         endif
      end do

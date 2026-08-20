@@ -211,13 +211,15 @@ CONTAINS
     !---------------------------------------------------------------------------------------------
     SUBROUTINE   qexsd_init_parallel_info(obj)
     !---------------------------------------------------------------------------------------------
+#if defined(_OPENMP)
+      USE omp_lib
+#endif
       TYPE ( parallel_info_type )           :: obj
       !
       INTEGER                               :: nthreads=1
-#if defined(__OMP) 
-      INTEGER,EXTERNAL                      :: omp_get_max
+#if defined(_OPENMP)
       !     
-      nthreads = omp_get_max()
+      nthreads = omp_get_max_threads()
 #endif      
       CALL qes_init (obj, "parallel_info", nproc, nthreads, ntask_groups, &
                                   nbgrp, npool, nproc_bgrp)

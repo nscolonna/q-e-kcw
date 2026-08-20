@@ -1,4 +1,5 @@
   !
+  ! Copyright (C) 2023-2026 EPW-Collaboration
   ! Copyright (C) 2016-2023 EPW-Collaboration
   ! Copyright (C) 2010-2016 Samuel Ponce', Roxana Margine, Carla Verdi, Feliciano Giustino
   ! Copyright (C) 2007-2009 Jesse Noffsinger, Brad Malone, Feliciano Giustino
@@ -792,9 +793,9 @@
   edos_max_plrn          = 0.0 ! eV
   pdos_max_plrn          = 0.0 ! meV
   edos_sigma_plrn        = 0.01d0 ! eV
-  pdos_sigma_plrn        = 0.1 ! meV
+  pdos_sigma_plrn        = 0.1_DP ! meV
   type_plrn              = -1
-  init_sigma_plrn        = 4.6
+  init_sigma_plrn        = 4.6_DP
   init_k0_plrn           = (/1000.d0, 1000.d0, 1000.d0/)
   ethrdg_plrn            = 1E-6
   time_rev_A_plrn        = .FALSE.
@@ -822,7 +823,7 @@
   DW                     = 0
   mode_res               = 0
   QD_bin                 = 0.0
-  QD_min                 = 0.005
+  QD_min                 = 0.005_DP
   lwfpt                  = .FALSE.
   ldfptu                 = .FALSE.
   compute_dmat           = .FALSE.
@@ -856,7 +857,7 @@
   twrite_tdbe            = 30
   temp_el_tdbe           = 1000.d0
   temp_ph_tdbe           = 100.d0
-  init_sigma_tdbe        = 0.1
+  init_sigma_tdbe        = 0.1_DP
   init_type_tdbe         = 'FD'
   solver_tdbe            = 'euler'
   ef_v_tdbe              = -9999.0
@@ -1514,10 +1515,16 @@
     WRITE(stdout, '(21x,a)') 'In this case, use the EPW results at your own risk.'
   ENDIF
   !
-  IF (lda_plus_u) THEN
-    IF (lda_plus_u_kind /= 0) CALL errore('ep_coarse_unfolding', 'Current &
-      lda_plus_u_kind is not implemented', 1)
+  ! S.Tiwari: This is a patch work to prevent a crash/should be fixed asap
+  IF (.NOT. epwread) THEN
+    IF (lda_plus_u) THEN
+      IF (lda_plus_u_kind /= 0) THEN !CALL errore('readin', 'Current &
+        !lda_plus_u_kind is not implemented', 1)
+        WRITE(stdout,'(/,5x,a)') 'Warning: lda_plus_u_kind not 0; check results &
+        carefully'
+      ENDIF
       ldfptu = .TRUE.
+    ENDIF
   ENDIF
   !   There might be other variables in the input file which describe
   !   partial computation of the dynamical matrix. Read them here
