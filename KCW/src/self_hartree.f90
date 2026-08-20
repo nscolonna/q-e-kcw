@@ -87,7 +87,6 @@ SUBROUTINE self_hartree (iwann, sh)
       END DO
       sh = sh + 0.5D0 * zpom*weight(iq)*omega
     ENDIF
-    !
     ! 
   ENDDO ! qpoints
   !$acc exit data delete(rhor, rhog , delta_vg, vh_rhog, delta_vg_ )

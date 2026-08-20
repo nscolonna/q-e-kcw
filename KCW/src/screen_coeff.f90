@@ -63,7 +63,7 @@ SUBROUTINE screen_coeff ()
   !
   LOGICAL :: do_band 
   !
-  COMPLEX(DP) :: wann_c(dffts%nnr,num_wann,nrho)
+!  COMPLEX(DP) :: phase(dffts%nnr), wann_c(dffts%nnr,num_wann,nrho), rho_c(dffts%nnr,num_wann,nrho)
   !! The phase associated to the hift k+q-> k'
   !
   COMPLEX(DP) :: pi_q_unrelax, pi_q_unrelax_, sh_q, pi_q_relax, pi_q_relax_rs
@@ -634,7 +634,8 @@ SUBROUTINE check_density (rhowann)
        CALL errore ('check_density','\int dr [rho - rho_PWSCF] > 1e-8; SOMETHING WRONG',1)
     ENDIF
     DEALLOCATE (rhoup, rhodw)
-    ENDIF
+  ENDIF
+  !
   DEALLOCATE(density )
   !
 END SUBROUTINE check_density
