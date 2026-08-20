@@ -121,6 +121,9 @@ SUBROUTINE dH_ki_full (ik, dH_wann)
   INTEGER :: segno
   INTEGER :: lrrho
   !
+  COMPLEX(DP) :: zpom
+  INTEGER :: ii
+  !
   !
   ALLOCATE (vpsi_r(dffts%nnr), vpsi_g(npwx))
   ALLOCATE ( delta_vg(ngms,nspin), vh_rhog(ngms), delta_vg_(ngms,nspin) )
@@ -178,6 +181,7 @@ SUBROUTINE dH_ki_full (ik, dH_wann)
      IF (gamma_only) psic(dffts%nlm(igk_k(1:npw,ik))) = CONJG(evc0(1:npw,ibnd))
      CALL invfft ('Wave', psic, dffts)
      !
+     sh              = 0.D0
      !$acc kernels present(rhog, delta_vg, vh_rhog, rhor)
      rhog(:)         = CMPLX(0.D0,0.D0,kind=DP)
      delta_vg(:,:)   = CMPLX(0.D0,0.D0,kind=DP)
@@ -192,12 +196,20 @@ SUBROUTINE dH_ki_full (ik, dH_wann)
      !! The periodic part of the perturbation DeltaV_q(G)
      !
      deltah_scal = - 0.5D0 * SUM (CONJG(rhog (:)) * delta_vg(:,spin_component) ) * omega
+     zpom  = (0.0_dp, 0.0_dp)
      IF (gamma_only) THEN
-        sh       =     DBLE (SUM (CONJG(rhog (:)) * vh_rhog(:))                ) * omega
-        IF (gstart == 2) & 
-              sh = sh - 0.5D0 * DBLE ( CONJG(rhog (1)) * vh_rhog(1)            ) * omega
+        !$acc parallel loop reduction(+:zpom) present(rhog, vh_rhog)
+        DO ii =1, ngms
+           zpom  = zpom  + DBLE( CONJG(rhog (ii)) * vh_rhog(ii) )
+        END DO
+        sh = sh + DBLE(zpom) * omega
+        IF (gstart == 2) sh = sh - 0.5D0*DBLE(CONJG(rhog (1)) * vh_rhog(1)) * omega
      ELSE
-        sh       =   0.5D0 * SUM (CONJG(rhog (:)) * vh_rhog(:)                 ) * omega
+        !$acc parallel loop reduction(+:zpom) present(rhog, vh_rhog)
+        DO ii =1, ngms
+           zpom  = zpom  + CONJG(rhog (ii)) * vh_rhog(ii)
+        END DO
+        sh  = sh  + 0.5D0 * zpom * omega
      ENDIF
      CALL mp_sum (sh, intra_bgrp_comm)
      !WRITE(stdout,'(8x, "self_hatree", 2i5, 1F15.8)') ibnd, current_spin, sh
