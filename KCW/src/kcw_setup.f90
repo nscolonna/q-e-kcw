@@ -33,7 +33,7 @@ subroutine kcw_setup
   USE fft_base,          ONLY : dfftp, dffts
   USE gvecs,             ONLY : doublegrid, ngms
   USE noncollin_module,  ONLY : domag, noncolin, m_loc, angle1, angle2, ux, nspin_lsda, nspin_gga, nspin_mag, npol
-  USE gvect,             ONLY : ig_l2g, mill
+  USE gvect,             ONLY : ig_l2g, mill !!, ngm
   USE wvfct,             ONLY : nbnd
   USE xc_lib,            ONLY : xclib_dft_is
   !
@@ -88,28 +88,36 @@ subroutine kcw_setup
   CHARACTER (LEN=256) :: filename, file_base
   CHARACTER (LEN=6), EXTERNAL :: int_to_char
   !
-  INTEGER :: &
-       igk_k_all(npwx,nkstot),&    ! index of G corresponding to a given index of k+G
-       ngk_all(nkstot)             ! number of plane waves for each k point
+!!  INTEGER :: &
+!!       igk_k_all(npwx,nkstot),&    ! index of G corresponding to a given index of k+G
+!!       ngk_all(nkstot)             ! number of plane waves for each k point
+
+  INTEGER, ALLOCATABLE :: igk_k_all(:,:), ngk_all(:)
   !
   ! Auxiliary variables for SH calculation
   COMPLEX(DP), ALLOCATABLE  :: rhog(:,:), delta_vg(:,:), vh_rhog(:), delta_vg_(:,:), sh(:),rhor(:,:), rhog_aux(:)
   ! The periodic part of the wannier orbital density
   COMPLEX(DP), ALLOCATABLE  :: rhowann_g(:,:,:)
-  COMPLEX(DP) :: delta_vr(dffts%nnr,nspin_mag), delta_vr_(dffts%nnr,nspin_mag)
+  !!COMPLEX(DP) :: delta_vr(dffts%nnr,nspin_mag), delta_vr_(dffts%nnr,nspin_mag)
+  COMPLEX(DP), ALLOCATABLE :: delta_vr(:,:), delta_vr_(:,:)
   !
   ! The weight of each q point
   REAL(DP), ALLOCATABLE :: weight(:)
   LOGICAL :: lrpa_save
   REAL(DP) :: xq_(3)
   INTEGER  :: lrrho
-  COMPLEX(DP) :: struct_fact, int_wann, int_rho
+  COMPLEX(DP) :: struct_fact, int_wann, int_rho, zpom
   COMPLEX(DP), ALLOCATABLE :: rho_c(:,:,:),wann_c(:,:,:)
   COMPLEX(DP) :: phase(dffts%nnr)
-  INTEGER :: iwann
+  INTEGER :: iwann, ii
   COMPLEX (DP) :: sh_q
   !
   ALLOCATE ( delta_vg(ngms,nspin_mag), vh_rhog(ngms), delta_vg_(ngms,nspin_mag) )
+  
+  ALLOCATE ( delta_vr(dffts%nnr,nspin_mag), delta_vr_(dffts%nnr,nspin_mag) )
+
+  ALLOCATE (igk_k_all(npwx,nkstot), ngk_all(nkstot))
+
   !WRITE(*,*), 'NGMS', ngms
   !
   call start_clock ('kcw_setup')
@@ -278,6 +286,8 @@ subroutine kcw_setup
   !
   rho_c = ZERO
   wann_c = ZERO
+
+  !$acc enter data create(rhor, rhog, vh_rhog, delta_vr, delta_vr_, delta_vg, delta_vg_)
   DO iq = 1, nqs
     !! For each q in the mesh 
     !
@@ -298,7 +308,7 @@ subroutine kcw_setup
     ! The results are stored in the global variable map_ikq and shift_1bz (used inside rho_of_q) 
     ! can (should) be moved inside rho_of_q ( )
     !
-    rhowann(:,:,:)=ZERO
+    !!JA rhowann(:,:,:)=ZERO  in rho_of_q do
     !! Initialize the periodic part of the wannier orbtal density at this q
     !
     CALL rho_of_q (rhowann, ngk_all, igk_k_all)
@@ -340,19 +350,30 @@ subroutine kcw_setup
     !
     DO i = 1, num_wann
       !
+      !$acc kernels present(rhog, delta_vg, vh_rhog, rhor)
       rhog(:,:)       = CMPLX(0.D0,0.D0,kind=DP)
       delta_vg(:,:)   = CMPLX(0.D0,0.D0,kind=DP)
       vh_rhog(:)      = CMPLX(0.D0,0.D0,kind=DP)
       rhor(:,:)       = CMPLX(0.D0,0.D0,kind=DP)
+      !$acc end kernels
       !
       rhor(:,:) = rhowann(:,i,:) 
+      !$acc update device(rhor)
       !! The periodic part of the orbital density in real space
       !
       CALL bare_pot ( rhor, rhog, vh_rhog, delta_vr, delta_vg, iq, delta_vr_, delta_vg_ )
+      !$acc update self(rhog)
       rhowann_g(:,i,:) = rhog
       !! The periodic part of the perturbation DeltaV_q(G)
       ! 
-      sh(i) = sh(i) + 0.5D0 * sum (CONJG(rhog (:,1)) * vh_rhog(:) )*weight(iq)*omega
+     !! sh(i) = sh(i) + 0.5D0 * sum (CONJG(rhog (:,1)) * vh_rhog(:) )*weight(iq)*omega
+      zpom = (0.0_dp, 0.0_dp)
+      !$acc parallel loop reduction(+:zpom) present(rhog, vh_rhog)
+      DO ii =1, ngms
+          zpom = zpom + CONJG(rhog (ii,1)) * vh_rhog(ii) 
+      END DO   
+      sh(i) = sh(i) + 0.5D0 * zpom*weight(iq)*omega
+
 #ifdef DEBUG
       sh_q  = sum (0.5D0*CONJG(rhog (:,1)) * vh_rhog(:) )*omega
       CALL mp_sum (sh_q,    intra_bgrp_comm)
@@ -386,11 +407,21 @@ subroutine kcw_setup
         DO ip = 1, nrho
           rhog_aux = rhowann_g(:,i, ip)
           file_base=TRIM(tmp_dir_kcwq)//'rhowann_g_iwann_'//TRIM(int_to_char((i-1)*nrho+ip))
-          IF ( my_pool_id == 0 .AND. my_bgrp_id == root_bgrp_id ) &
+          IF ( my_pool_id == 0 .AND. my_bgrp_id == root_bgrp_id ) THEN 
+            !   print*,'Wywoluje write_rhowann_g'
+            !   print*,'czy doublegrid ',doublegrid
+            !   print*,'dfftp%nnr = ', dfftp%nnr
+            !   print*,'dffts%nnr = ',dffts%nnr
+            !   print*,'Size rhog = ',size(rhog_aux)
+            !   print*,'ngms = ',ngms,'   == rhog, smooth?'
+            !   print*,' ngm = ',ngm,'   DENSE?'
+            !   print*,'size mill = ',size(mill,2)
+            !   print*,'szie ig2_l2g =',size(ig_l2g, 1)
                CALL write_rhowann_g( file_base, &
                root_bgrp, intra_bgrp_comm, &
                bg(:,1)*tpiba, bg(:,2)*tpiba, bg(:,3)*tpiba, &
                gamma_only, mill, ig_l2g, rhog_aux(:), .FALSE. )
+          END IF     
         ENDDO
         !
       ELSE  
@@ -407,6 +438,8 @@ subroutine kcw_setup
     tmp_dir=tmp_dir_save
     !
   ENDDO
+  !$acc exit data delete(rhor, rhog, delta_vg, vh_rhog, delta_vg_, delta_vr, delta_vr_)
+
   !
   IF (kcw_iverbosity .gt. 1) THEN
   !  write(*,'(/,"DEBUG")')
@@ -461,6 +494,7 @@ subroutine kcw_setup
     !
     ! Compute self - Hartree with the IBZ and the weights  
     !
+    !$acc enter data create(rhor, rhog, vh_rhog, delta_vr, delta_vr_, delta_vg, delta_vg_)
     sh=0 
     DO iq = 1, nqs
       DO i = 1, num_wann
@@ -500,18 +534,28 @@ subroutine kcw_setup
         lrpa_save=lrpa
         lrpa = .true.
         !
-        rhog(:,:)       = CMPLX(0.D0,0.D0,kind=DP)
-        delta_vg(:,:)   = CMPLX(0.D0,0.D0,kind=DP)
-        vh_rhog(:)      = CMPLX(0.D0,0.D0,kind=DP)
-        rhor(:,:)       = CMPLX(0.D0,0.D0,kind=DP)
+        !$acc kernels present(rhog, delta_vg, vh_rhog, rhor)
+        rhog(:,:)       = (0.0_dp, 0.0_dp)
+        delta_vg(:,:)   = (0.0_dp, 0.0_dp)
+        vh_rhog(:)      = (0.0_dp, 0.0_dp)
+        rhor(:,:)       = (0.0_dp, 0.0_dp)
+        !$acc end kernels
         !
         rhor(:,1) = rhowann_aux(:)
+        !$acc update device(rhor)
         !! The periodic part of the orbital desity in real space
         !
         CALL bare_pot ( rhor, rhog, vh_rhog, delta_vr, delta_vg, iq, delta_vr_, delta_vg_ )
         !! The periodic part of the perturbation DeltaV_q(G)
         ! 
-        sh(i) = sh(i) + 0.5D0 * sum (CONJG(rhog (:,1)) * vh_rhog(:) )*wq_ibz(iq_ibz, i)*omega
+       !! sh(i) = sh(i) + 0.5D0 * sum (CONJG(rhog (:,1)) * vh_rhog(:) )*wq_ibz(iq_ibz, i)*omega
+        zpom = (0.0_dp, 0.0_dp)
+        !$acc parallel loop reduction(+:zpom) present(rhog, vh_rhog)
+        DO ii =1, ngms
+            zpom = zpom + CONJG(rhog (ii,1)) * vh_rhog(ii) 
+        END DO   
+        sh(i) = sh(i) + 0.5D0 * zpom*wq_ibz(iq_ibz, i)*omega
+
 #ifdef DEBUG
         sh_q  =sum (0.5D0*CONJG(rhog (:,1)) * vh_rhog(:) )*omega
         CALL mp_sum (sh_q,    intra_bgrp_comm)
@@ -521,6 +565,7 @@ subroutine kcw_setup
 #endif
       END DO!iwann
     END DO!iq
+    !$acc exit data delete(rhor, rhog, delta_vg, vh_rhog, delta_vg_, delta_vr, delta_vr_)
 
     ! Print on output the self-Hatree
     CALL mp_sum (sh, intra_bgrp_comm)

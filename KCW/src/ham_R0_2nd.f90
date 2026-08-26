@@ -50,7 +50,8 @@ SUBROUTINE ham_R0_2nd ()
   INTEGER :: iwann, jwann, lrrho
   ! ... Band counters, leght of the rho record
   !
-  COMPLEX(DP) :: rhowann(dffts%nnr, num_wann), rhor(dffts%nnr), delta_vr(dffts%nnr,nspin_mag), delta_vr_(dffts%nnr,nspin_mag)
+  !!COMPLEX(DP) :: rhowann(dffts%nnr, num_wann), rhor(dffts%nnr), delta_vr(dffts%nnr,nspin_mag), delta_vr_(dffts%nnr,nspin_mag)
+  COMPLEX(DP), ALLOCATABLE :: rhowann(:, :), rhor(:), delta_vr(:,:), delta_vr_(:,:)
   ! The periodic part of the wannier orbital density and potential 
   !
   COMPLEX(DP), ALLOCATABLE  :: rhog(:), delta_vg(:,:), vh_rhog(:), drhog_scf(:,:), delta_vg_(:,:) 
@@ -61,7 +62,7 @@ SUBROUTINE ham_R0_2nd ()
   COMPLEX(DP), ALLOCATABLE :: deltaHR(:,:,:)
   !
   !
-  COMPLEX(DP) :: drho_zero
+  COMPLEX(DP) :: drho_zero, zpom
   !
   REAL(DP) :: weight(nkstot)
   !
@@ -70,7 +71,7 @@ SUBROUTINE ham_R0_2nd ()
   !
   CHARACTER(LEN=9)  :: cdate, ctime
   CHARACTER(LEN=33) :: header
-  INTEGER :: i
+  INTEGER :: i, ii
   !
   nqs = nkstot/nspin_mag
   !
@@ -97,6 +98,10 @@ SUBROUTINE ham_R0_2nd ()
   !
   WRITE( stdout, '(5X,"INFO: KI[2nd, (R=0,i=j)] CALCULATION ...")')
   !
+  ALLOCATE ( rhog (ngms) , delta_vg(ngms,nspin_mag), vh_rhog(ngms), delta_vg_(ngms,nspin_mag) )
+  ALLOCATE( rhowann(dffts%nnr, num_wann), rhor(dffts%nnr), delta_vr(dffts%nnr,nspin_mag), delta_vr_(dffts%nnr,nspin_mag) )
+  !$acc enter data create(rhor, rhog, vh_rhog, delta_vr, delta_vr_, delta_vg, delta_vg_)
+
   DO iq = 1, nqs
     !! For each q in the mesh 
     !
@@ -108,7 +113,6 @@ SUBROUTINE ham_R0_2nd ()
     !! Retrive the rho_wann_q(r) from buffer in REAL space
     IF (kcw_iverbosity .gt. 1 ) WRITE(stdout,'(8X, "INFO: rhowan_q(r) RETRIEVED")') 
     !
-    ALLOCATE ( rhog (ngms) , delta_vg(ngms,nspin_mag), vh_rhog(ngms), drhog_scf (ngms, nspin_mag), delta_vg_(ngms,nspin_mag) )
     !
     IF ( lgamma ) CALL check_density (rhowann) 
     !! CHECK: For q==0 the sum over k and v should give the density. If not something wrong...
@@ -120,28 +124,37 @@ SUBROUTINE ham_R0_2nd ()
     !DO iwann = 1, num_wann  ! for each band, that is actually the perturbation
     DO iwann = iorb_start, iorb_end 
        !
-       drhog_scf (:,:) = ZERO
+       !$acc kernels present(rhog, delta_vg, vh_rhog, rhor)
+      !!JA no nedded  drhog_scf (:,:) = ZERO
        rhog(:)         = ZERO
        delta_vg(:,:)   = ZERO
        vh_rhog(:)      = ZERO
        rhor(:)         =ZERO
+       !$acc end kernels
        !
        rhor(:) = rhowann(:,iwann)
+       !$acc update device(rhor)
        !! The periodic part of the orbital desity in real space
        !
        CALL bare_pot ( rhor, rhog, vh_rhog, delta_vr, delta_vg, iq, delta_vr_, delta_vg_ ) 
        !! The periodic part of the perturbation DeltaV_q(G)
        ! 
-       deltaHq(iwann, iwann, iq) = sum (CONJG(rhog (:)) * delta_vg(:,spin_component))*weight(iq)*omega
+       !!deltaHq(iwann, iwann, iq) = sum (CONJG(rhog (:)) * delta_vg(:,spin_component))*weight(iq)*omega
+       zpom = (0.0_dp, 0.0_dp)
+       !$acc parallel loop reduction(+:zpom) present(rhog, delta_vg)
+       DO ii =1, ngms
+         zpom  = zpom + CONJG(rhog (ii)) * delta_vg(ii,spin_component)
+       END DO
+       deltaHq(iwann, iwann, iq) = zpom*weight(iq)*omega
        !
        !
     ENDDO
     ! 
-    !
-    DEALLOCATE ( rhog , delta_vg, vh_rhog, drhog_scf, delta_vg_ )
-    !
     !    
   ENDDO ! qpoints
+  !$acc exit data delete(rhor, rhog, delta_vg, vh_rhog, delta_vg_, delta_vr, delta_vr_)
+  DEALLOCATE ( rhog , delta_vg, vh_rhog, delta_vg_ )
+  DEALLOCATE( rhowann, rhor, delta_vr, delta_vr_)
   !
   CALL mp_sum (deltaHq, intra_bgrp_comm)
   ! ... Sum over different processes (G vectors) 
