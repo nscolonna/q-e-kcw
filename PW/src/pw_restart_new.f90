@@ -1243,6 +1243,8 @@ MODULE pw_restart_new
                                   Hubbard_U, Hubbard_U2, Hubbard_J, Hubbard_V, Hubbard_alpha, Hubbard_occ, &
                                   Hubbard_alpha_back, Hubbard_J0, Hubbard_beta, Hubbard_projectors, Hubbard_Um, & 
                                   Hubbard_Um_nc, apply_u, Hubbard_alpha_m, Hubbard_alpha_m_nc
+      USE parameters,      ONLY : sc_size
+
       USE funct,           ONLY : enforce_input_dft, get_dft_short
       USE xc_lib,          ONLY : start_exx, exx_is_active,xclib_dft_is,      &
                                   set_screening_parameter, set_gau_parameter, &
@@ -1358,6 +1360,12 @@ MODULE pw_restart_new
       CALL recips ( at(1,1), at(1,2), at(1,3), bg(1,1), bg(1,2), bg(1,3) )
       !!
       !! DFT section
+      ! FIXME: Hubbard_V should be allocated in qexsd_copy_dft if needed,
+      !        but this is not possible because dimensions are not available
+      !        in xml file, so it is allocated and deallocated if unused
+      ALLOCATE ( Hubbard_V (nat, nat*(2*sc_size+1)**3, 4) )
+      Hubbard_V = 0.0_dp
+      !
       CALL qexsd_copy_dft ( output_obj%dft, nsp, atm, &
            dft_name, nq1, nq2, nq3, ecutfock, exx_fraction, screening_parameter, &
            exxdiv_treatment, x_gamma_extrapolation, ecutvcut, local_thr, use_ace, nbndproj, &
@@ -1381,7 +1389,11 @@ MODULE pw_restart_new
         Hubbard_Um = 0.0_DP 
         Hubbard_alpha_m = 0.0_DP 
       END IF
-      IF( ALLOCATED(Hubbard_V) ) Hubbard_V          = Hubbard_V          * e2
+      IF( lda_plus_u_kind == 2 ) THEN
+         Hubbard_V       = Hubbard_V          * e2
+      ELSE
+         DEALLOCATE ( Hubbard_V )
+      END IF
       Hubbard_U2         = Hubbard_U2         * e2 
       Hubbard_J0         = Hubbard_J0         * e2 
       Hubbard_J          = Hubbard_J          * e2  
