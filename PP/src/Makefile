@@ -81,7 +81,8 @@ all : open_grid.x average.x bands.x band_interpolation.x dos.x epsilon.x initial
       wannier_ham.x wannier_plot.x molecularpdos.x \
       pw2bgw.x wfck2r.x fermi_velocity.x fermi_proj.x ppacf.x pprism.x \
       d3hess.x wannier2pw.x \
-      oscdft_pp.x oscdft_et.x
+      oscdft_pp.x oscdft_et.x \
+      sumpdos_d.x
 
 libpp.a : $(PPOBJS) 
 	$(AR) $(ARFLAGS) $@ $?
@@ -195,6 +196,10 @@ pw2gw.x : pw2gw.o libpp.a $(MODULES)
 
 sumpdos.x : sumpdos.o 
 	$(LD) $(LDFLAGS) -o $@ sumpdos.o $(MODULES) $(QELIBS)
+	- ( cd ../../bin ; ln -fs ../PP/src/$@ . )
+
+sumpdos_d.x : sumpdos_d.o 
+	$(LD) $(LDFLAGS) -o $@ sumpdos_d.o $(MODULES) $(QELIBS)
 	- ( cd ../../bin ; ln -fs ../PP/src/$@ . )
 
 epsilon.x : epsilon.o libpp.a $(MODULES) 

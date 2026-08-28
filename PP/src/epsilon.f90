@@ -45,6 +45,7 @@ CONTAINS
   USE wvfct,     ONLY : nbnd, wg
   USE klist,     ONLY : nks, wk, nelec
   USE lsda_mod,  ONLY : nspin
+  USE uspp,      ONLY : okvan
   !
   IMPLICIT NONE
   !

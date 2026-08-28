@@ -347,6 +347,14 @@ qe_add_executable(qe_pp_sumpdos_exe ${src_sumpdos_x})
 set_target_properties(qe_pp_sumpdos_exe PROPERTIES OUTPUT_NAME sumpdos.x)
 
 ###########################################################
+# sumpdos_d.x
+###########################################################
+set(src_sumpdos_d_x src/sumpdos_d.f90)
+qe_add_executable(qe_pp_sumpdos_d_exe ${src_sumpdos_d_x})
+set_target_properties(qe_pp_sumpdos_d_exe PROPERTIES OUTPUT_NAME sumpdos_d.x)
+
+
+###########################################################
 # epsilon.x
 ###########################################################
 set(src_epsilon_x src/epsilon.f90)
@@ -612,6 +620,7 @@ set(PP_EXE_TARGETS
     qe_pp_pw2gw_exe
     qe_pp_pw2gt_exe
     qe_pp_sumpdos_exe
+    qe_pp_sumpdos_d_exe
     qe_pp_epsilon_exe
     qe_pp_d3hess_exe
     qe_pp_wannierham_exe
