@@ -1,4 +1,5 @@
   !
+  ! Copyright (C) 2023-2026 EPW-Collaboration
   ! Copyright (C) 2016-2023 EPW-Collaboration
   ! Copyright (C) 2010-2016 Samuel Ponce', Roxana Margine, Carla Verdi, Feliciano Giustino
   ! Copyright (C) 2007-2009 Roxana Margine
@@ -27,7 +28,7 @@
     !!
     !! SH: Modified to allow for fbw calculations (Nov 2021).
     !! HM: Modified to allow for fbw calculation with sparse-ir sampling (May 2024)
-    !! 
+    !!
     USE kinds,         ONLY : DP
     USE control_flags, ONLY : iverbosity
     USE global_var,    ONLY : gtemp
@@ -124,7 +125,7 @@
     !
     IF (fbw .AND. (gridsamp == 2) .AND. (icoulomb > 0)) THEN
       !
-      ! HM: Because nkstot_cl can be quite small, 
+      ! HM: Because nkstot_cl can be quite small,
       !     we do a combined parallelization on band index and k point index.
       CALL para_bounds(is_start, is_stop, nbnd_cl * nkstot_cl)
       num_states = is_stop - is_start + 1
@@ -157,8 +158,8 @@
           WRITE(stdout, '(/5x, a/)') 'Finish reading ir object file'
         ELSE
           !
-          ! HM: In the current implementation, the same IR objects is used for all temperatures. 
-          !     If you want to use different IR object files depending on the temperature, 
+          ! HM: In the current implementation, the same IR objects is used for all temperatures.
+          !     If you want to use different IR object files depending on the temperature,
           !     please declare 'imatches' and make changes in the following IF statement.
           !
           !IF (.NOT. imatches(TRIM(filirobj), TRIM(filirobj_old))) THEN
@@ -174,10 +175,10 @@
               CLOSE(iunirobj)
             ENDIF
           ELSE
-            ! HM: If the same IR objects are used, 
+            ! HM: If the same IR objects are used,
             !     update the temperature using set_beta.
             CALL set_beta(ir_obj, beta)
-          ENDIF ! 
+          ENDIF !
         ENDIF ! itemp == 1
         !
         CALL gen_freqgrid_iaxis(itemp, ir_obj)
@@ -826,7 +827,7 @@
     !
     IF (fbw .AND. (gridsamp == 2) .AND. (icoulomb > 0)) THEN
       !
-      ! HM: Because nkstot_cl can be quite small, 
+      ! HM: Because nkstot_cl can be quite small,
       !     we do a combined parallelization on band index and k point index.
       CALL para_bounds(is_start, is_stop, nbnd_cl * nkstot_cl)
       num_states = is_stop - is_start + 1
@@ -959,7 +960,7 @@
           ALLOCATE(weight_q(siz_ir), STAT = ierr)
           IF (ierr /= 0) CALL errore('sum_eliashberg_aniso_iaxis_wrapper', 'Error allocating weight_q', 1)
           !
-          IF (positive_matsu) THEN            
+          IF (positive_matsu) THEN
             ! get the size of required memory for arrays related to IR (real)
             imelt = 7 * (ir_obj%size + ir_obj%ntau)
             imelt = imelt * siz_ir
@@ -1177,29 +1178,29 @@
       ENDDO ! ik
       !
       IF (fbw .AND. (gridsamp == 2) .AND. (icoulomb > 0)) THEN
-        linsidei = .true.
-        linsidei2 = .true.
-        linsidei3 = .true.
+        linsidei = .TRUE.
+        linsidei2 = .TRUE.
+        linsidei3 = .TRUE.
         DO ik_cl = 1, nkstot_cl
           !
           ! initilize linsidei
-          linsidei = .true.
-          IF (ik_cl_to_fs(ik_cl) == 0) linsidei = .false.
+          linsidei = .TRUE.
+          IF (ik_cl_to_fs(ik_cl) == 0) linsidei = .FALSE.
           DO ibnd_cl = 1, nbnd_cl
             ! initilize linsidei2
-            linsidei2 = .true.
-            IF (((ibnd_cl - nbnd_offset) < 1) .OR. ((ibnd_cl - nbnd_offset) > nbndfs_all)) linsidei2 = .false.
+            linsidei2 = .TRUE.
+            IF (((ibnd_cl - nbnd_offset) < 1) .OR. ((ibnd_cl - nbnd_offset) > nbndfs_all)) linsidei2 = .FALSE.
             !
             ! initilize linsidei3
-            linsidei3 = .true.
+            linsidei3 = .TRUE.
             IF (linsidei .AND. linsidei2) THEN
               ibndfs = ibnd_kfs_all_to_kfs(ibnd_cl - nbnd_offset, ik_cl_to_fs(ik_cl))
               IF ((ibndfs < 1) .OR. (ibndfs > nbndfs)) THEN
-                linsidei3 = .false.
+                linsidei3 = .FALSE.
               ELSE
                 ! Always use ekfs instead of ek_cl to determine
                 ! if the state (ibnd_cl, ik_cl) is outside the window.
-                IF (ABS(ekfs(ibndfs, ik_cl_to_fs(ik_cl)) - ef0) >= fsthick) linsidei3 = .false.
+                IF (ABS(ekfs(ibndfs, ik_cl_to_fs(ik_cl)) - ef0) >= fsthick) linsidei3 = .FALSE.
               ENDIF
             ENDIF
             !
@@ -1335,7 +1336,7 @@
         '   iter      ethr          znormi      deltai [meV]'
       IF (fbw) THEN
         IF (.NOT. positive_matsu) THEN
-          ! if positive_matsu = false, the index of the lowest frequency is not 1
+          ! if positive_matsu =.FALSE. the index of the lowest frequency is not 1
           n = nsiw(itemp)/2 + 1
         ELSE
           n = 1
@@ -1354,7 +1355,7 @@
       IF (conv .OR. iter == nsiter) THEN
         IF (fbw) THEN
           IF (.NOT. positive_matsu) THEN
-            ! if positive_matsu = false, the index of the lowest frequency is not 1
+            ! if positive_matsu =.FALSE. the index of the lowest frequency is not 1
             n = nsiw(itemp) / 2 + 1
             gap0 = deltai(n)
           ELSE
@@ -1425,7 +1426,7 @@
         ENDDO
       ENDDO
       IF (positive_matsu) THEN
-        ! HM: We multiply it by two to account for the contribution 
+        ! HM: We multiply it by two to account for the contribution
         ! from the negative Matsubara frequencies.
         dFE = dFE * 2.0d0
       ENDIF
@@ -1477,7 +1478,7 @@
     !! num_js1: the count of states (n',k') within fsthick window for each state (n, k) within fsthick window
     !! num_js2: the count of states (n',k') outside fsthick window for each state (n, k) within fsthick window
     !! num_js3: the count of states (n',k') outside fsthick window for each state (n, k) outside fsthick window
-    !! 
+    !!
     USE kinds,             ONLY : DP
     USE input,             ONLY : fsthick, icoulomb, emax_coulomb, emin_coulomb
     USE supercond_common,  ONLY : ixkqf, ixqfs, nkfs, nqfs, ekfs, nbndfs, &
@@ -1535,13 +1536,13 @@
     !
     CALL fkbounds(nkfs, lower_bnd, upper_bnd)
     !
-    ! HM: Because nkstot_cl can be quite small, 
+    ! HM: Because nkstot_cl can be quite small,
     !     we do a combined parallelization on band index and k point index.
     CALL para_bounds(is_start, is_stop, nbnd_cl * nkstot_cl)
     num_states = is_stop - is_start + 1
     !
-    ! HM: If sparse-ir sampling is employed, 
-    !     count the number of states (n',k') inside 
+    ! HM: If sparse-ir sampling is employed,
+    !     count the number of states (n',k') inside
     !     the fsthick window for each state (n, k).
     num_js1(:, :) = 0
     IF (icoulomb > 0) num_js2(:, :) = 0
@@ -1560,35 +1561,35 @@
             ENDDO
           ENDDO
           IF (icoulomb > 0) THEN
-            linsidej = .true.
-            linsidej2 = .true.
-            linsidej3 = .true.
+            linsidej = .TRUE.
+            linsidej2 = .TRUE.
+            linsidej3 = .TRUE.
             !nn = 0 ! DEBUG
             DO jk = 1, (nk1_cl * nk2_cl * nk3_cl)
               ! find the index of the irreducible k point corresponding to the current k point
               jk_cl = ik_bz_to_ibz_cl(jk)
               !
               ! initilize linsidej
-              linsidej = .true.
-              IF (ik_cl_to_fs(jk_cl) == 0) linsidej = .false.
+              linsidej = .TRUE.
+              IF (ik_cl_to_fs(jk_cl) == 0) linsidej = .FALSE.
               !IF (.NOT.(linsidej)) CYCLE ! DEBUG
               DO jbnd_cl = 1, nbnd_cl
                 ! initilize linsidej2
-                linsidej2 = .true.
+                linsidej2 = .TRUE.
                 IF (((jbnd_cl - nbnd_offset) < 1) .OR. ((jbnd_cl - nbnd_offset) > nbndfs_all)) &
-                  linsidej2 = .false.
+                  linsidej2 = .FALSE.
                 !
                 ! initilize linsidej3
-                linsidej3 = .true.
+                linsidej3 = .TRUE.
                 IF (linsidej .AND. linsidej2) THEN
                   jbndfs = ibnd_kfs_all_to_kfs(jbnd_cl - nbnd_offset, ik_cl_to_fs(jk_cl))
                   IF ((jbndfs < 1) .OR. (jbndfs > nbndfs)) THEN
-                    linsidej3 = .false.
+                    linsidej3 = .FALSE.
                   ELSE
                     ! Always use ekfs instead of ek_cl to determine
                     ! if the state (jbnd_cl, jk_cl) is outside the window.
                     IF (ABS(ekfs(jbndfs, ik_cl_to_fs(jk_cl)) - ef0) >= fsthick) &
-                      linsidej3 = .false.
+                      linsidej3 = .FALSE.
                   ENDIF
                 ENDIF
                 !
@@ -1613,11 +1614,11 @@
     IF (icoulomb > 0) THEN
       ! HM: Count the number of states (n',k') between
       !     emin_coulomb and emax_coulomb for each istate corresponding to (n, k).
-      !     Note that if a state of istate lies in the fsthick window, no need to 
-      !     count the number because adeltai_cl is will not calculated for 
+      !     Note that if a state of istate lies in the fsthick window, no need to
+      !     count the number because adeltai_cl is will not calculated for
       !     the corresponding istate.
-      !     In other words, what we have to count here is the number of final states 
-      !     inside of [emin_coulomb: emax_coulomb] for each initial state being 
+      !     In other words, what we have to count here is the number of final states
+      !     inside of [emin_coulomb: emax_coulomb] for each initial state being
       !     outside of the fsthick window and inside of [emin_coulomb: emax_coulomb].
       !
       IF (num_states > 0) THEN
@@ -1627,24 +1628,24 @@
           ibnd_cl = MOD(istate - 1, nbnd_cl) + 1
           !
           ! initilize linsidei
-          linsidei = .true.
-          IF (ik_cl_to_fs(ik_cl) == 0) linsidei = .false.
+          linsidei = .TRUE.
+          IF (ik_cl_to_fs(ik_cl) == 0) linsidei = .FALSE.
           ! initilize linsidei2
-          linsidei2 = .true.
+          linsidei2 = .TRUE.
           IF (((ibnd_cl - nbnd_offset) < 1) .OR. ((ibnd_cl - nbnd_offset) > nbndfs_all)) &
-            linsidei2 = .false.
+            linsidei2 = .FALSE.
           !
           ! initilize linsidei3
-          linsidei3 = .true.
+          linsidei3 = .TRUE.
           IF (linsidei .AND. linsidei2) THEN
             ibndfs = ibnd_kfs_all_to_kfs(ibnd_cl - nbnd_offset, ik_cl_to_fs(ik_cl))
             IF ((ibndfs < 1) .OR. (ibndfs > nbndfs)) THEN
-              linsidei3 = .false.
+              linsidei3 = .FALSE.
             ELSE
               ! Always use ekfs instead of ek_cl to determine
               ! if the state (ibnd_cl, ik_cl) is outside the window.
               IF (ABS(ekfs(ibndfs, ik_cl_to_fs(ik_cl)) - ef0) >= fsthick) &
-                linsidei3 = .false.
+                linsidei3 = .FALSE.
             ENDIF
           ENDIF
           !
@@ -1659,25 +1660,25 @@
               jk_cl = ik_bz_to_ibz_cl(jk)
               !
               ! initilize linsidej
-              linsidej = .true.
-              IF (ik_cl_to_fs(jk_cl) == 0) linsidej = .false.
+              linsidej = .TRUE.
+              IF (ik_cl_to_fs(jk_cl) == 0) linsidej = .FALSE.
               DO jbnd_cl = 1, nbnd_cl
                 ! initilize linsidej2
-                linsidej2 = .true.
+                linsidej2 = .TRUE.
                 IF (((jbnd_cl - nbnd_offset) < 1) .OR. ((jbnd_cl - nbnd_offset) > nbndfs_all)) &
-                  linsidej2 = .false.
+                  linsidej2 = .FALSE.
                 !
                 ! initilize linsidej3
-                linsidej3 = .true.
+                linsidej3 = .TRUE.
                 IF (linsidej .AND. linsidej2) THEN
                   jbndfs = ibnd_kfs_all_to_kfs(jbnd_cl - nbnd_offset, ik_cl_to_fs(jk_cl))
                   IF ((jbndfs < 1) .OR. (jbndfs > nbndfs)) THEN
-                    linsidej3 = .false.
+                    linsidej3 = .FALSE.
                   ELSE
                     ! Always use ekfs instead of ek_cl to determine
                     ! if the state (jbnd_cl, jk_cl) is outside the window.
                     IF (ABS(ekfs(jbndfs, ik_cl_to_fs(jk_cl)) - ef0) >= fsthick) &
-                      linsidej3 = .false.
+                      linsidej3 = .FALSE.
                   ENDIF
                 ENDIF
                 !
@@ -1712,8 +1713,8 @@
     USE global_var,        ONLY : wqf
     USE input,             ONLY : muc, fsthick
     USE supercond_common,  ONLY : ixkqf, ixqfs, nqfs, w0g, ekfs, nkfs, nbndfs, spin_fac, &
-                                  dosef, ef0, nsiw, wsn, wsi, akeri, limag_fly, adeltai, &
-                                  adeltaip, aznormi, naznormi
+                                  dosef, ef0, nsiw, wsn, wsi, dwsi, akeri, limag_fly,    &
+                                  adeltai, adeltaip, aznormi, naznormi
     USE parallelism,       ONLY : fkbounds
     USE low_lvl,           ONLY : mem_size_eliashberg
     USE ep_constants,      ONLY : pi, zero, one
@@ -1787,7 +1788,8 @@
               IF (ABS(ekfs(jbnd, ixkqf(ik, iq0)) - ef0) < fsthick) THEN
                 weight = wqf(iq) * w0g(jbnd, ixkqf(ik, iq0)) * inv_dos
                 DO iwp = 1, nsiw(itemp) ! loop over omega_prime
-                  esqrt  = weight / DSQRT(wsi(iwp)**2.d0 + adeltaip(iwp, jbnd, ixkqf(ik, iq0))**2.d0)
+                  ! SM: Include frequency weight dwsi(iwp) for sparse sampling
+                  esqrt  = weight * dwsi(iwp) / DSQRT(wsi(iwp)**2.d0 + adeltaip(iwp, jbnd, ixkqf(ik, iq0))**2.d0)
                   zesqrt = esqrt * wsi(iwp)
                   desqrt = esqrt * adeltaip(iwp, jbnd, ixkqf(ik, iq0))
                   !
@@ -1804,7 +1806,8 @@
                     ! Eq. (4.4) in Picket, PRB 26, 1186 (1982)
                     kernelm = lambdam - lambdap
                     kernelp = lambdam + lambdap
-                    naznormi(iw, ibnd, ik) = naznormi(iw, ibnd, ik) + weight * kernelm
+                    ! SM: Include frequency weight dwsi(iwp) for sparse sampling
+                    naznormi(iw, ibnd, ik) = naznormi(iw, ibnd, ik) + weight * dwsi(iwp) * kernelm
                     ! Eqs.(21)-(22) in Margine and Giustino, PRB 87, 024505 (2013)
                     ! using kernelm and kernelp the sum over |wp| < wscut in Eqs. (21)-(22)
                     ! is rewritten as a sum over iwp = 1, nsiw(itemp)
@@ -1941,11 +1944,11 @@
                   !!   iw =   1,   2,   3,   4,   5,...
                   !! wsnx =   1,   3,   5,   7,   9,...
                   !! iw_f =   1,   2,   3,   4,   5,...
-                  !! 
+                  !!
                   !!   iw = ...,  N-1,    N,   N+1,   N+2,   N+3,...
                   !! wsnx = ..., 2N-3, 2N-1, -2N+1, -2N+3, -2N+5,...
                   !! iw_f = ...,  N-1,    N,     N,   N-1,   N-2,...
-                  !! 
+                  !!
                   !!   iw = ..., 2N-3, 2N-2, 2N-1,   2N
                   !! wsnx = ...,   -7,   -5,   -3,   -1
                   !! iw_f = ...,    4,    3,    2,    1
@@ -1981,11 +1984,11 @@
                   !!   iw = 1, 2, 3, 4, 5,...
                   !! wsnx = 0, 2, 4, 6, 8,...
                   !! iw_b = 1, 2, 3, 4, 5,...
-                  !! 
+                  !!
                   !!   iw = ...,  N-1,    N, N+1,   N+2,   N+3,...
                   !! wsnx = ..., 2N-4, 2N-2, -2N, -2N+2, -2N+4,...
                   !! iw_b = ...,  N-1,    N, N+1,     N,   N-1,...
-                  !! 
+                  !!
                   !!   iw = ..., 2N-3, 2N-2, 2N-1,   2N
                   !! wsnx = ...,   -8,   -6,   -4,   -2
                   !! iw_b = ...,    5,    4,    3,    2
@@ -2070,7 +2073,7 @@
     USE global_var,        ONLY : wqf
     USE input,             ONLY : muc, fsthick, muchem, positive_matsu
     USE supercond_common,  ONLY : ixkqf, ixqfs, nqfs, ekfs, nkfs, nbndfs, spin_fac, &
-                                  dosef, ef0, nsiw, wsn, wsi, akeri, limag_fly, adeltai, &
+                                  dosef, ef0, nsiw, wsn, wsi, dwsi, akeri, limag_fly, adeltai, &
                                   adeltaip, aznormi, aznormip, naznormi, ashifti, &
                                   ashiftip, muintr
     USE parallelism,       ONLY : fkbounds
@@ -2159,13 +2162,14 @@
                 !! this is for FBW case
                 weight = wqf(iq) * inv_dos
                 DO iwp = 1, nsiw(itemp) ! loop over omega_prime
-                  esqrt = weight / ((wsi(iwp) * aznormip(iwp, jbnd, ixkqf(ik, iq0)))**2.d0 &
+                  ! SM: Include frequency weight dwsi(iwp) for sparse sampling
+                  esqrt = weight * dwsi(iwp) / ((wsi(iwp) * aznormip(iwp, jbnd, ixkqf(ik, iq0)))**2.d0 &
                             + (ekfs(jbnd, ixkqf(ik, iq0)) - muintr + ashiftip(iwp, jbnd, ixkqf(ik, iq0)))**2.d0 &
                             + (adeltaip(iwp, jbnd, ixkqf(ik, iq0)) * aznormip(iwp, jbnd, ixkqf(ik, iq0)))**2.d0)
                   zesqrt = esqrt * wsi(iwp) * aznormip(iwp, jbnd, ixkqf(ik, iq0))
                   desqrt = esqrt * adeltaip(iwp, jbnd, ixkqf(ik, iq0)) * aznormip(iwp, jbnd, ixkqf(ik, iq0))
                   sesqrt = esqrt * (ekfs(jbnd, ixkqf(ik, iq0)) - muintr + ashiftip(iwp, jbnd, ixkqf(ik, iq0)))
-                  esqrt0 = weight / ((wsi(iwp) * aznormip(iwp, jbnd, ixkqf(ik, iq0)))**2.d0 &
+                  esqrt0 = weight * dwsi(iwp) / ((wsi(iwp) * aznormip(iwp, jbnd, ixkqf(ik, iq0)))**2.d0 &
                             + (ekfs(jbnd, ixkqf(ik, iq0)) - muintr + ashiftip(iwp, jbnd, ixkqf(ik, iq0)))**2.d0)
                   zesqrt0 = esqrt0 * wsi(iwp) * aznormip(iwp, jbnd, ixkqf(ik, iq0))
                   DO iw = 1, nsiw(itemp) ! loop over omega
@@ -2349,11 +2353,11 @@
                     !!   iw =   1,   2,   3,   4,   5,...
                     !! wsnx =   1,   3,   5,   7,   9,...
                     !! iw_f =   1,   2,   3,   4,   5,...
-                    !! 
+                    !!
                     !!   iw = ...,  N-1,    N,   N+1,   N+2,   N+3,...
                     !! wsnx = ..., 2N-3, 2N-1, -2N+1, -2N+3, -2N+5,...
                     !! iw_f = ...,  N-1,    N,     N,   N-1,   N-2,...
-                    !! 
+                    !!
                     !!   iw = ..., 2N-3, 2N-2, 2N-1,   2N
                     !! wsnx = ...,   -7,   -5,   -3,   -1
                     !! iw_f = ...,    4,    3,    2,    1
@@ -2377,11 +2381,11 @@
                     !!   iw =   1,   2,   3,   4,   5,...
                     !! wsnx =   1,   3,   5,   7,   9,...
                     !! iw_f = N+1, N+2, N+3, N+4, N+5,...
-                    !! 
+                    !!
                     !!   iw = ...,  N-1,    N,   N+1,   N+2,   N+3,...
                     !! wsnx = ..., 2N-3, 2N-1, -2N+1, -2N+3, -2N+5,...
                     !! iw_f = ..., 2N-1,   2N,     1,     2,     3,...
-                    !! 
+                    !!
                     !!   iw = ..., 2N-3, 2N-2, 2N-1,   2N
                     !! wsnx = ...,   -7,   -5,   -3,   -1
                     !! iw_f = ...,  N-3,  N-2,  N-1,    N
@@ -2425,11 +2429,11 @@
                   !!   iw = 1, 2, 3, 4, 5,...
                   !! wsnx = 0, 2, 4, 6, 8,...
                   !! iw_b = 1, 2, 3, 4, 5,...
-                  !! 
+                  !!
                   !!   iw = ...,  N-1,    N, N+1,   N+2,   N+3,...
                   !! wsnx = ..., 2N-4, 2N-2, -2N, -2N+2, -2N+4,...
                   !! iw_b = ...,  N-1,    N, N+1,     N,   N-1,...
-                  !! 
+                  !!
                   !!   iw = ..., 2N-3, 2N-2, 2N-1,   2N
                   !! wsnx = ...,   -8,   -6,   -4,   -2
                   !! iw_b = ...,    5,    4,    3,    2
@@ -2535,10 +2539,10 @@
     !! using sparse-ir sampling.
     !! This is used for uniform sampling and sparse sampling (gridsamp == 2).
     !!
-    !! When considering only positive Matsubara frequencies, 
-    !! the data size of the Matsubara Green's function G(iw) is halved. 
+    !! When considering only positive Matsubara frequencies,
+    !! the data size of the Matsubara Green's function G(iw) is halved.
     !! Consequently, the imaginary-time Green's function G(tau)
-    !! and the IR coefficients G_l can be defined as real-valued functions. 
+    !! and the IR coefficients G_l can be defined as real-valued functions.
     !! The same applies to the kernel.
     !!
     USE kinds,             ONLY : DP
@@ -2687,7 +2691,7 @@
           IF ((iverbosity == 4) .AND. (iter <= 5 .OR. iter == 15 .OR. MOD(iter, 10) == 0)) THEN
             IF (iter == 1) knll_ratio_max = zero
             DO iw = 1, ir_obj%nfreq_f
-              ! ir_obj%nfreq_f == nsiw(itemp) 
+              ! ir_obj%nfreq_f == nsiw(itemp)
               !
               ! FOR Fermionic functions
               !
@@ -2722,7 +2726,7 @@
           ENDIF
           jstate = 0
           ! HM: jstate is the index combining iq and jbnd.
-          !     Each time jstate is divisible by siz_ir, 
+          !     Each time jstate is divisible by siz_ir,
           !     calculate the convolutions and add the partial
           !     summation for each array.
           DO iq = 1, nqfs(ik)
@@ -2735,7 +2739,7 @@
                 jx = MOD(jstate - 1, siz_ir) + 1
                 !
                 DO iw = 1, ir_obj%nfreq_f
-                  ! ir_obj%nfreq_f == nsiw(itemp) 
+                  ! ir_obj%nfreq_f == nsiw(itemp)
                   !
                   ! FOR Fermionic functions
                   !
@@ -2782,7 +2786,7 @@
                 weight_q(jx) = wqf(iq)
                 !
                 IF ((jx == siz_ir) .OR. (jstate == num_js1(ibnd, ik))) THEN
-                  ! To obtain expansion coefficients of Green's function 
+                  ! To obtain expansion coefficients of Green's function
                   ! and kernel in the IR basis
                   IF (positive_matsu) THEN
                     CALL fit_matsubara_f (ir_obj, ir_giw, ir_gl_d)
@@ -2923,7 +2927,7 @@
                     !
                     IF (ABS(muc) .GT. eps8) THEN
                       offset = siz_ir
-                      ! HM: IR cannot reproduce a constant function on frequencies, 
+                      ! HM: IR cannot reproduce a constant function on frequencies,
                       !     so we have to treat the term multiplied by muc separately.
                       !     Be careful so as not to mistake the sign!
                       IF (positive_matsu) THEN
@@ -2997,15 +3001,15 @@
     SUBROUTINE sum_eliash_aniso_iaxis_fbw_ir_coul(itemp, iter, ns, nel, nstate, ir_obj)
     !-----------------------------------------------------------------------
     !!
-    !! This routine solves the anisotropic FBW Eliashberg equations, 
-    !! which include the Coulomb contribution arising from outside fsthick window, 
+    !! This routine solves the anisotropic FBW Eliashberg equations,
+    !! which include the Coulomb contribution arising from outside fsthick window,
     !! on the imaginary-axis using sparse-ir sampling (icoulomb > 0).
     !! This is used for uniform sampling and sparse sampling (gridsamp == 2).
     !!
-    !! When considering only positive Matsubara frequencies, 
-    !! the data size of the Matsubara Green's function G(iw) is halved. 
+    !! When considering only positive Matsubara frequencies,
+    !! the data size of the Matsubara Green's function G(iw) is halved.
     !! Consequently, the imaginary-time Green's function G(tau)
-    !! and the IR coefficients G_l can be defined as real-valued functions. 
+    !! and the IR coefficients G_l can be defined as real-valued functions.
     !! The same applies to the kernel.
     !!
     USE kinds,             ONLY : DP
@@ -3141,7 +3145,7 @@
     !
     CALL fkbounds(nkfs, lower_bnd, upper_bnd)
     !
-    ! HM: Because nkstot_cl can be quite small, 
+    ! HM: Because nkstot_cl can be quite small,
     !     we do a combined parallelization on band index and k point index.
     CALL para_bounds(is_start, is_stop, nbnd_cl * nkstot_cl)
     num_states = is_stop - is_start + 1
@@ -3208,7 +3212,7 @@
           IF ((iverbosity == 4) .AND. (iter <= 5 .OR. iter == 15 .OR. MOD(iter, 10) == 0)) THEN
             IF (iter == 1) knll_ratio_max = zero
             DO iw = 1, ir_obj%nfreq_f
-              ! ir_obj%nfreq_f == nsiw(itemp) 
+              ! ir_obj%nfreq_f == nsiw(itemp)
               !
               ! FOR Fermionic functions
               !
@@ -3246,7 +3250,7 @@
           !nn = 0 ! DEBUG
           jstate = 0
           ! HM: jstate is the index combining iq and jbnd.
-          !     Each time jstate is divisible by siz_ir, 
+          !     Each time jstate is divisible by siz_ir,
           !     calculate the convolutions and add the partial
           !     summation for each array.
           DO iq = 1, nqfs(ik)
@@ -3259,7 +3263,7 @@
                 jx = MOD(jstate - 1, siz_ir) + 1
                 !nn = nn + 1 ! DEBUG
                 DO iw = 1, ir_obj%nfreq_f
-                  ! ir_obj%nfreq_f == nsiw(itemp) 
+                  ! ir_obj%nfreq_f == nsiw(itemp)
                   !
                   ! FOR Fermionic functions
                   !
@@ -3306,7 +3310,7 @@
                 weight_q(jx) = wqf(iq)
                 !
                 IF ((jx == siz_ir) .OR. (jstate == num_js1(ibnd, ik))) THEN
-                  ! To obtain expansion coefficients of green's function 
+                  ! To obtain expansion coefficients of green's function
                   ! and kernel in the IR basis
                   IF (positive_matsu) THEN
                     CALL fit_matsubara_f (ir_obj, ir_giw, ir_gl_d)
@@ -3476,38 +3480,38 @@
           !
           jstate = 0
           ! HM: jstate is the index combining jk_cl and jbnd_cl.
-          !     Each time jstate is divisible by siz_ir_cl, 
+          !     Each time jstate is divisible by siz_ir_cl,
           !     calculate the convolutions and add the partial
           !     summation for each array.
-          linsidej = .true.
-          linsidej2 = .true.
-          linsidej3 = .true.
+          linsidej = .TRUE.
+          linsidej2 = .TRUE.
+          linsidej3 = .TRUE.
           !nn = 0 ! DEBUG
           DO jk = 1, (nk1_cl * nk2_cl * nk3_cl)
             ! find the index of the irreducible k point corresponding to the current k point
             jk_cl = ik_bz_to_ibz_cl(jk)
             !
             ! initilize linsidej
-            linsidej = .true.
-            IF (ik_cl_to_fs(jk_cl) == 0) linsidej = .false.
+            linsidej = .TRUE.
+            IF (ik_cl_to_fs(jk_cl) == 0) linsidej = .FALSE.
             !IF (.NOT.(linsidej)) CYCLE ! DEBUG
             DO jbnd_cl = 1, nbnd_cl
               ! initilize linsidej2
-              linsidej2 = .true.
+              linsidej2 = .TRUE.
               IF (((jbnd_cl - nbnd_offset) < 1) .OR. ((jbnd_cl - nbnd_offset) > nbndfs_all)) &
-                linsidej2 = .false.
+                linsidej2 = .FALSE.
               !
               ! initilize linsidej3
-              linsidej3 = .true.
+              linsidej3 = .TRUE.
               IF (linsidej .AND. linsidej2) THEN
                 jbndfs = ibnd_kfs_all_to_kfs(jbnd_cl - nbnd_offset, ik_cl_to_fs(jk_cl))
                 IF ((jbndfs < 1) .OR. (jbndfs > nbndfs)) THEN
-                  linsidej3 = .false.
+                  linsidej3 = .FALSE.
                 ELSE
                   ! Always use ekfs instead of ek_cl to determine
                   ! if the state (jbnd_cl, jk_cl) is outside the window.
                   IF (ABS(ekfs(jbndfs, ik_cl_to_fs(jk_cl)) - ef0) >= fsthick) &
-                    linsidej3 = .false.
+                    linsidej3 = .FALSE.
                 ENDIF
               ENDIF
               !
@@ -3523,7 +3527,7 @@
               jstate = jstate + 1
               jx = MOD(jstate - 1, siz_ir_cl) + 1
               DO iw = 1, ir_obj%nfreq_f
-                ! ir_obj%nfreq_f == nsiw(itemp) 
+                ! ir_obj%nfreq_f == nsiw(itemp)
                 !
                 ! FOR Fermionic functions
                 !
@@ -3565,7 +3569,7 @@
               ENDIF
               !
               IF ((jx == siz_ir_cl) .OR. (jstate == num_js2(ibnd, ik))) THEN
-                ! To obtain expansion coefficients of green's function 
+                ! To obtain expansion coefficients of green's function
                 ! and kernel in the IR basis
                 IF (positive_matsu) THEN
                   CALL fit_matsubara_f (ir_obj, ir_giw_cl, ir_gl_cl_d)
@@ -3614,7 +3618,7 @@
                   ! from the corresponding expansion coefficients
                   CALL evaluate_tau (ir_obj, ir_gl_cl_d, ir_gtau_cl_d)
                   !!!!! Frequency dependence of Coulomb kernel !!!!!
-                  ! HM: We leave the following comments for when 
+                  ! HM: We leave the following comments for when
                   !     we incorporate the dynamic part of Coulomb kernel.
                   !CALL evaluate_tau (ir_obj, ir_knll_cl_d, ir_knltau_cl_d)
                   !
@@ -3633,7 +3637,7 @@
                   !
                   DO iw = 1, ir_obj%nfreq_f
                     !
-                    ! HM: IR cannot reproduce a constant function on frequencies, 
+                    ! HM: IR cannot reproduce a constant function on frequencies,
                     !     so we have to treat the term multiplied by muc separately.
                     !     Be careful so as not to mistake the sign!
                     !     ir_gtau_cl_d(1:jx, 1) is an anomalous Green's function of imaginary time at tau = 0+
@@ -3651,7 +3655,7 @@
                   ! from the corresponding expansion coefficients
                   CALL evaluate_tau (ir_obj, ir_gl_cl, ir_gtau_cl)
                   !!!!! Frequency dependence of Coulomb kernel !!!!!
-                  ! HM: We leave the following comments for when 
+                  ! HM: We leave the following comments for when
                   !     we incorporate the dynamic part of Coulomb kernel.
                   !CALL evaluate_tau (ir_obj, ir_knll_cl, ir_knltau_cl)
                   !
@@ -3670,7 +3674,7 @@
                   !
                   DO iw = 1, ir_obj%nfreq_f
                     !
-                    ! HM: IR cannot reproduce a constant function on frequencies, 
+                    ! HM: IR cannot reproduce a constant function on frequencies,
                     !     so we have to treat the term multiplied by muc separately.
                     !     Be careful so as not to mistake the sign!
                     !     ir_gtau_cl(1:jx, 1) is an anomalous Green's function of imaginary time at tau = 0+
@@ -3717,12 +3721,12 @@
       ir_gtau_cl(:, :) = czero
     ENDIF
     !
-    linsidei = .true.
-    linsidei2 = .true.
-    linsidei3 = .true.
-    linsidej = .true.
-    linsidej2 = .true.
-    linsidej3 = .true.
+    linsidei = .TRUE.
+    linsidei2 = .TRUE.
+    linsidei3 = .TRUE.
+    linsidej = .TRUE.
+    linsidej2 = .TRUE.
+    linsidej3 = .TRUE.
     !
     IF (num_states > 0) THEN
       DO istate = is_start, is_stop
@@ -3730,24 +3734,24 @@
         ibnd_cl = MOD(istate - 1, nbnd_cl) + 1
         !
         ! initilize linsidei
-        linsidei = .true.
-        IF (ik_cl_to_fs(ik_cl) == 0) linsidei = .false.
+        linsidei = .TRUE.
+        IF (ik_cl_to_fs(ik_cl) == 0) linsidei = .FALSE.
         ! initilize linsidei2
-        linsidei2 = .true.
+        linsidei2 = .TRUE.
         IF (((ibnd_cl - nbnd_offset) < 1) .OR. ((ibnd_cl - nbnd_offset) > nbndfs_all)) &
-          linsidei2 = .false.
+          linsidei2 = .FALSE.
         !
         ! initilize linsidei3
-        linsidei3 = .true.
+        linsidei3 = .TRUE.
         IF (linsidei .AND. linsidei2) THEN
           ibndfs = ibnd_kfs_all_to_kfs(ibnd_cl - nbnd_offset, ik_cl_to_fs(ik_cl))
           IF ((ibndfs < 1) .OR. (ibndfs > nbndfs)) THEN
-            linsidei3 = .false.
+            linsidei3 = .FALSE.
           ELSE
             ! Always use ekfs instead of ek_cl to determine
             ! if the state (ibnd_cl, ik_cl) is outside the window.
             IF (ABS(ekfs(ibndfs, ik_cl_to_fs(ik_cl)) - ef0) >= fsthick) &
-              linsidei3 = .false.
+              linsidei3 = .FALSE.
           ENDIF
         ENDIF
         !
@@ -3763,7 +3767,7 @@
         ELSE
           jstate = 0
           ! HM: jstate is the index combining jk_cl and jbnd_cl.
-          !     Each time jstate is divisible by siz_ir_cl, 
+          !     Each time jstate is divisible by siz_ir_cl,
           !     calculate the convolutions and add the partial
           !     summation for each array.
           DO jk = 1, (nk1_cl * nk2_cl * nk3_cl)
@@ -3771,25 +3775,25 @@
             jk_cl = ik_bz_to_ibz_cl(jk)
             !
             ! initilize linsidej
-            linsidej = .true.
-            IF (ik_cl_to_fs(jk_cl) == 0) linsidej = .false.
+            linsidej = .TRUE.
+            IF (ik_cl_to_fs(jk_cl) == 0) linsidej = .FALSE.
             DO jbnd_cl = 1, nbnd_cl
               ! initilize linsidej2
-              linsidej2 = .true.
+              linsidej2 = .TRUE.
               IF (((jbnd_cl - nbnd_offset) < 1) .OR. ((jbnd_cl - nbnd_offset) > nbndfs_all)) &
-                linsidej2 = .false.
+                linsidej2 = .FALSE.
               !
               ! initilize linsidej3
-              linsidej3 = .true.
+              linsidej3 = .TRUE.
               IF (linsidej .AND. linsidej2) THEN
                 jbndfs = ibnd_kfs_all_to_kfs(jbnd_cl - nbnd_offset, ik_cl_to_fs(jk_cl))
                 IF ((jbndfs < 1) .OR. (jbndfs > nbndfs)) THEN
-                  linsidej3 = .false.
+                  linsidej3 = .FALSE.
                 ELSE
                   ! Always use ekfs instead of ek_cl to determine
                   ! if the state (jbnd_cl, jk_cl) is outside the window.
                   IF (ABS(ekfs(jbndfs, ik_cl_to_fs(jk_cl)) - ef0) >= fsthick) &
-                    linsidej3 = .false.
+                    linsidej3 = .FALSE.
                 ENDIF
               ENDIF
               !
@@ -3803,7 +3807,7 @@
               jstate = jstate + 1
               jx = MOD(jstate - 1, siz_ir_cl) + 1
               DO iw = 1, ir_obj%nfreq_f
-                ! ir_obj%nfreq_f == nsiw(itemp) 
+                ! ir_obj%nfreq_f == nsiw(itemp)
                 !
                 ! FOR Fermionic functions
                 !
@@ -3845,7 +3849,7 @@
               ENDIF
               !
               IF ((jx == siz_ir_cl) .OR. (jstate == num_js3(istate))) THEN
-                ! To obtain expansion coefficients of green's function 
+                ! To obtain expansion coefficients of green's function
                 ! and kernel in the IR basis
                 IF (positive_matsu) THEN
                   CALL fit_matsubara_f (ir_obj, ir_giw_cl, ir_gl_cl_d)
@@ -3894,7 +3898,7 @@
                   ! from the corresponding expansion coefficients
                   CALL evaluate_tau (ir_obj, ir_gl_cl_d, ir_gtau_cl_d)
                   !!!!! Frequency dependence of Coulomb kernel !!!!!
-                  ! HM: We leave the following comments for when 
+                  ! HM: We leave the following comments for when
                   !     we incorporate the dynamic part of Coulomb kernel.
                   !CALL evaluate_tau (ir_obj, ir_knll_cl_d, ir_knltau_cl_d)
                   !
@@ -3913,7 +3917,7 @@
                   !
                   DO iw = 1, ir_obj%nfreq_f
                     !
-                    ! HM: IR cannot reproduce a constant function on frequencies, 
+                    ! HM: IR cannot reproduce a constant function on frequencies,
                     !     so we have to treat the term multiplied by muc separately.
                     !     Be careful so as not to mistake the sign!
                     !     ir_gtau_cl_d(1:jx, 1) is an anomalous Green's function of imaginary time at tau = 0+
@@ -3931,7 +3935,7 @@
                   ! from the corresponding expansion coefficients
                   CALL evaluate_tau (ir_obj, ir_gl_cl, ir_gtau_cl)
                   !!!!! Frequency dependence of Coulomb kernel !!!!!
-                  ! HM: We leave the following comments for when 
+                  ! HM: We leave the following comments for when
                   !     we incorporate the dynamic part of Coulomb kernel.
                   !CALL evaluate_tau (ir_obj, ir_knll_cl, ir_knltau_cl)
                   !
@@ -3950,7 +3954,7 @@
                   !
                   DO iw = 1, ir_obj%nfreq_f
                     !
-                    ! HM: IR cannot reproduce a constant function on frequencies, 
+                    ! HM: IR cannot reproduce a constant function on frequencies,
                     !     so we have to treat the term multiplied by muc separately.
                     !     Be careful so as not to mistake the sign!
                     !     ir_gtau_cl(1:jx, 1) is an anomalous Green's function of imaginary time at tau = 0+
@@ -4473,7 +4477,7 @@
             ELSE
               DO iw = 1, N
                 !
-                !! if positive_matsu = false,
+                !! if positive_matsu =.FALSE.
                 !! use the data only on the positive Matsubara frequencies.
                 !
                 z(iw) = ci * wsi(nsiw(itemp)/2 + iw)
@@ -4593,7 +4597,7 @@
     !! K_{-}(ik, iq, ibnd, jbnd; n, n', T) and store them in memory
     !!
     !! SH: Modified to allow for sparse sampling of Matsubara freq. (Nov 2021).
-    !! HM: It is assumed that this subroutine is not called when using sparse-ir sampling 
+    !! HM: It is assumed that this subroutine is not called when using sparse-ir sampling
     !!
     USE kinds,         ONLY : DP
     USE input,         ONLY : fsthick
@@ -4782,7 +4786,7 @@
     USE kinds,         ONLY : DP
     USE global_var,    ONLY : wqf
     USE input,         ONLY : muc, fsthick
-    USE supercond_common,     ONLY : nsw, nsiw, ws, wsi, adeltai, nkfs, nbndfs, &
+    USE supercond_common,     ONLY : nsw, nsiw, ws, wsi, dwsi, adeltai, nkfs, nbndfs, &
                               spin_fac, dosef, ixkqf, ixqfs, nqfs, &
                               w0g, ekfs, ef0, adsumi, azsumi
     USE ep_constants,  ONLY : zero, one
@@ -4873,7 +4877,8 @@
               IF (ABS(ekfs(jbnd, ixkqf(ik, iq0)) - ef0) < fsthick) THEN
                 weight = wqf(iq) * w0g(jbnd, ixkqf(ik, iq0)) * inv_dos
                 DO iwp = 1, nsiw(itemp) ! loop over iw_n
-                  esqrt = weight / DSQRT(wsi(iwp) * wsi(iwp) + &
+                  ! SM: Include frequency weight dwsi(iwp) for sparse sampling
+                  esqrt = weight * dwsi(iwp) / DSQRT(wsi(iwp) * wsi(iwp) + &
 !                          adeltai(iwp, jbnd, ixkqf(ik, iq0)) * adeltai(iwp, jbnd, ixkqf(ik, iq0)))
                           adeltai_tmp(iwp, jbnd, ixkqf(ik, iq0)) * adeltai_tmp(iwp, jbnd, ixkqf(ik, iq0)))
                   zesqrt =  esqrt * wsi(iwp)
@@ -5093,7 +5098,7 @@
     !!       using the Newton-Raphson method (Nov 2021).
     !!
     USE kinds,          ONLY : DP
-    USE supercond_common,      ONLY : ekfs, ef0, nkfs, nbndfs, wsi, nsiw, &
+    USE supercond_common,      ONLY : ekfs, ef0, nkfs, nbndfs, wsi, dwsi, nsiw, &
                                adeltaip, aznormip, ashiftip, wkfs
     USE global_var,     ONLY : gtemp
     USE input,          ONLY : fsthick, nsiter, broyden_beta, positive_matsu
@@ -5154,12 +5159,13 @@
               theta = (wsi(iw) * aznormip(iw, ibnd, ik))**2.d0 + &
                       (ekfs(ibnd, ik) - muin + ashiftip(iw, ibnd, ik))**2.d0 + &
                       (aznormip(iw, ibnd, ik) * adeltaip(iw, ibnd, ik))**2.d0
+              ! SM: dwsi(iw) is the frequency weight for sparse sampling (gridsamp=1)
               IF (positive_matsu) THEN
-                fmu = fmu + 2.d0 * wkfs(ik) * delta / theta
-                dmu = dmu + 2.d0 * wkfs(ik) * (2.d0 * delta**2.d0 - theta) / (theta**2.d0)
+                fmu = fmu + 2.d0 * wkfs(ik) * dwsi(iw) * delta / theta
+                dmu = dmu + 2.d0 * wkfs(ik) * dwsi(iw) * (2.d0 * delta**2.d0 - theta) / (theta**2.d0)
               ELSE
-                fmu = fmu + wkfs(ik) * delta / theta
-                dmu = dmu + wkfs(ik) * (2.d0 * delta**2.d0 - theta) / (theta**2.d0)
+                fmu = fmu + wkfs(ik) * dwsi(iw) * delta / theta
+                dmu = dmu + wkfs(ik) * dwsi(iw) * (2.d0 * delta**2.d0 - theta) / (theta**2.d0)
               ENDIF
             ENDDO ! iw
           ENDIF
@@ -5196,7 +5202,7 @@
     !-----------------------------------------------------------------------
     SUBROUTINE mu_inter_aniso(itemp, muintr, nel, nstate, ns, ir_obj)
     !-----------------------------------------------------------------------
-    !! HM: To find the superconducting state chemical potential 
+    !! HM: To find the superconducting state chemical potential
     !!     using Brent's method, which is similar to the bisection
     !!     method but more efficient for converging fastly.
     !
@@ -5417,7 +5423,7 @@
     !!  where fmu is the difference between the target nel and the calculated nel
     !
     USE kinds,          ONLY : DP
-    USE supercond_common,      ONLY : ekfs, ef0, nkfs, nbndfs, wsi, nsiw, &
+    USE supercond_common,      ONLY : ekfs, ef0, nkfs, nbndfs, wsi, dwsi, nsiw, &
                                adeltaip, aznormip, ashiftip, wkfs
     USE global_var,     ONLY : gtemp
     USE input,          ONLY : fsthick, broyden_beta, positive_matsu
@@ -5461,10 +5467,11 @@
             inv_theta = one / ((wsi(iw) * aznormip(iw, ibnd, ik))**2.d0 + &
                     (ekfs(ibnd, ik) - mu + ashiftip(iw, ibnd, ik))**2.d0 + &
                     (aznormip(iw, ibnd, ik) * adeltaip(iw, ibnd, ik))**2.d0)
+            ! SM: dwsi(iw) is the frequency weight for sparse sampling (gridsamp=1)
             IF (positive_matsu) THEN
-              fmu = fmu + 2.d0 * wkfs(ik) * delta * inv_theta
+              fmu = fmu + 2.d0 * wkfs(ik) * dwsi(iw) * delta * inv_theta
             ELSE
-              fmu = fmu + wkfs(ik) * delta * inv_theta
+              fmu = fmu + wkfs(ik) * dwsi(iw) * delta * inv_theta
             ENDIF
           ENDDO ! iw
         ENDIF
@@ -5578,13 +5585,13 @@
       ALLOCATE(gtau0p_d(ns), STAT = ierr)
       IF (ierr /= 0) CALL errore('calc_fmu_seq', 'Error allocating gtau0p', 1)
       !
-      ! To obtain expansion coefficients of Green's function 
+      ! To obtain expansion coefficients of Green's function
       ! and kernel in the IR basis
       CALL fit_matsubara_f(ir_obj, giw, gl_d)
       !
       !CALL evaluate_tau(ir_obj, gl_d, gtau_d)
-      !! execute 
-      !!   gtau = MATMUL(gl, transpose(ir_obj%u%a_real)) 
+      !! execute
+      !!   gtau = MATMUL(gl, transpose(ir_obj%u%a_real))
       !! in evaluate_tau
       !
       !gtau0p_d(:) = gtau_d(:, 1)
@@ -5623,13 +5630,13 @@
       ALLOCATE(gtau0p(ns), STAT = ierr)
       IF (ierr /= 0) CALL errore('calc_fmu_seq', 'Error allocating gtau0p', 1)
       !
-      ! To obtain expansion coefficients of green's function 
+      ! To obtain expansion coefficients of green's function
       ! and kernel in the IR basis
       CALL fit_matsubara_f (ir_obj, giw, gl)
       !
       !CALL evaluate_tau (ir_obj, gl, gtau)
-      !! execute 
-      !!   gtau = MATMUL(gl, transpose(ir_obj%u%a)) 
+      !! execute
+      !!   gtau = MATMUL(gl, transpose(ir_obj%u%a))
       !! in evaluate_tau
       !
       !gtau0p(:) = gtau(:, 1)
@@ -5679,7 +5686,7 @@
     !!  iset = 2 is for deallocating the remaining arrays that were not deallocated when iset = 1.
     !!           It should be used to avoid deallocating arrays not allocated when limag .AND. imag_read .AND. itemp == 1.
     !!  iset = 3 is for deallocating arrays that are deallocated when iset = 1 and 2 at once.
-    !!  iset = 4 is for deallocating the remaining arrays that were not deallocated when iset = 1, 
+    !!  iset = 4 is for deallocating the remaining arrays that were not deallocated when iset = 1,
     !!           which include the arrays skipped if iset = 2.
     !!  iset = 5 is for deallocating arrays that are deallocated when iset = 1 and 4 at once.
     !!
@@ -5687,7 +5694,7 @@
     !
     USE control_flags, ONLY : iverbosity
     USE input,         ONLY : fbw, icoulomb, gridsamp, positive_matsu
-    USE supercond_common,     ONLY : wsi, wsn, deltai, znormi, adeltai, adeltaip, &
+    USE supercond_common,     ONLY : wsi, wsn, dwsi, deltai, znormi, adeltai, adeltaip, &
                               aznormi, aznormip, shifti, ashifti, ashiftip, &
                               fft_in1, fft_out1, fft_in2, fft_out2, &
                               ir_giw, ir_gl, ir_gtau, ir_knliw, ir_knll, &
@@ -5732,8 +5739,10 @@
       DEALLOCATE(wsi, STAT = ierr)
       IF (ierr /= 0) CALL errore('deallocate_aniso_iaxis', 'Error deallocating wsi', 1)
       DEALLOCATE(wsn, STAT = ierr)
-      IF (ierr /= 0) CALL errore('deallocate_aniso_iaxis', 'Error deallocating wsn', 1)      
-      ! 
+      IF (ierr /= 0) CALL errore('deallocate_aniso_iaxis', 'Error deallocating wsn', 1)
+      DEALLOCATE(dwsi, STAT = ierr)
+      IF (ierr /= 0) CALL errore('deallocate_aniso_iaxis', 'Error deallocating dwsi', 1)
+      !
       ! sum_eliashberg_aniso_iaxis
       DEALLOCATE(adeltai, STAT = ierr)
       IF (ierr /= 0) CALL errore('deallocate_aniso_iaxis', 'Error deallocating adeltai', 1)
@@ -5748,7 +5757,7 @@
     ENDIF
     !
     IF  (iset == 4 .OR. iset == 5) THEN
-      ! If limag .AND. imag_read .AND. itemp == 1, 
+      ! If limag .AND. imag_read .AND. itemp == 1,
       ! the following arrays is not allocated where this subroutine is called.
       IF (gridsamp == 2) THEN
         ! HM: deallocate ir-related arrays in sum_eliashberg_aniso_iaxis
@@ -5933,7 +5942,7 @@
     !!
     USE global_var,       ONLY : wf, wqf, xqf, gtemp, bztoibz
     USE input,            ONLY : fbw, icoulomb, gridsamp
-    USE supercond_common, ONLY : ekfs, xkfs, wkfs, g2, w0g, a2f_iso, &
+    USE supercond_common, ONLY : ekfs, xkfs, wkfs, g2, w0g, a2f_tmp, &
                                  ixkff, ixkqf, ixqfs, nqfs, memlt_pool, &
                                  wsph, nsiw, agap, ibnd_kfs_all_to_kfs, &
                                  ibnd_kfs_to_kfs_all, ekfs_all, &
@@ -5999,8 +6008,8 @@
     ! read_a2f
     DEALLOCATE(wsph, STAT = ierr)
     IF (ierr /= 0) CALL errore('deallocate_aniso', 'Error deallocating wsph', 1)
-    DEALLOCATE(a2f_iso, STAT = ierr)
-    IF (ierr /= 0) CALL errore('deallocate_aniso', 'Error deallocating a2f_iso', 1)
+    DEALLOCATE(a2f_tmp, STAT = ierr)
+    IF (ierr /= 0) CALL errore('deallocate_aniso', 'Error deallocating a2f_tmp', 1)
     ! sum_eliashberg_aniso_iaxis
     DEALLOCATE(agap, STAT = ierr)
     IF (ierr /= 0) CALL errore('deallocate_aniso', 'Error deallocating agap', 1)

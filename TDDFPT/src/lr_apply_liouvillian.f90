@@ -38,7 +38,7 @@ SUBROUTINE lr_apply_liouvillian( evc1, evc1_new, interaction )
   USE gvect,                ONLY : ngm, gstart, g, gg
   USE io_global,            ONLY : stdout
   USE klist,                ONLY : nks, xk, ngk, igk_k
-  USE lr_variables,         ONLY : evc0, sevc0, revc0, rho_1, rho_1c, &
+  USE lr_variables,         ONLY : evc0, sevc0, rho_1, rho_1c, &
                                  & ltammd, size_evc, no_hxc, lr_exx, &
                                  & scissor, davidson, lr_verbosity
   USE lsda_mod,             ONLY : nspin
@@ -92,17 +92,17 @@ SUBROUTINE lr_apply_liouvillian( evc1, evc1_new, interaction )
      WRITE(stdout,'("<lr_apply_liouvillian>")')
   ENDIF
   !
-  CALL start_clock_gpu('lr_apply')
+  CALL start_clock('lr_apply')
   !
-  IF (interaction)      CALL start_clock_gpu('lr_apply_int')
-  IF (.not.interaction) CALL start_clock_gpu('lr_apply_no')
+  IF (interaction)      CALL start_clock('lr_apply_int')
+  IF (.not.interaction) CALL start_clock('lr_apply_no')
   !
   ALLOCATE( d_deeq(nhm, nhm, nat, nspin) )
   ALLOCATE( spsi1(npwx, nbnd) )
   ALLOCATE( sevc1_new(npwx*npol,nbnd,nks))
   !
   nnr_siz= dffts%nnr
-!$acc data present_or_copyin(evc1(1:npwx*npol,1:nbnd,1:nks)) present_or_copyout(evc1_new(1:npwx*npol,1:nbnd,1:nks)) create(sevc1_new(1:npwx*npol,1:nbnd,1:nks), spsi1(1:npwx, 1:nbnd)) present_or_copyin(revc0(1:nnr_siz,1:nbnd,1))
+!$acc data present_or_copyin(evc1(1:npwx*npol,1:nbnd,1:nks), evc0(1:npwx*npol,1:nbnd,1:nks)) present_or_copyout(evc1_new(1:npwx*npol,1:nbnd,1:nks)) create(sevc1_new(1:npwx*npol,1:nbnd,1:nks), spsi1(1:npwx, 1:nbnd)) 
   !
   d_deeq(:,:,:,:)=0.0d0
   !$acc kernels
@@ -118,8 +118,12 @@ SUBROUTINE lr_apply_liouvillian( evc1, evc1_new, interaction )
      IF (gamma_only) THEN
         ALLOCATE( dvrs(dfftp%nnr, nspin) )
         ALLOCATE( dvrss(dffts%nnr) )
+        !$acc enter data create(dvrs, dvrss)
+
+        !$acc kernels 
         dvrs(:,:)=0.0d0
         dvrss(:)=0.0d0
+        !$acc end kernels
      ELSE
         ALLOCATE( dvrsc(dfftp%nnr, nspin) )
         ALLOCATE( dvrssc(dffts%nnr) )
@@ -141,7 +145,9 @@ SUBROUTINE lr_apply_liouvillian( evc1, evc1_new, interaction )
         ! approximation, so we zero the interation.
         !
         IF (gamma_only) THEN
+           !$acc kernels     
            dvrs(:,1) = 0.0d0
+           !$acc end kernels
            CALL fft_interpolate (dfftp, dvrs(:,1), dffts, dvrss)
         ELSE
            dvrsc(:,1) = (0.0d0,0.0d0)
@@ -152,23 +158,27 @@ SUBROUTINE lr_apply_liouvillian( evc1, evc1_new, interaction )
         !
         IF (gamma_only) THEN
            !
+           !$acc kernels
            dvrs(:,1) = rho_1(:,1)
+           !$acc end kernels
            !
            ! In the gamma_only case dvrs is real, but dv_of_drho expects
            ! a complex array on input, hence this temporary variable.
            !
            ALLOCATE( dvrs_temp(dfftp%nnr, nspin) )
            !
-           dvrs_temp = CMPLX( dvrs, 0.0d0, kind=DP )
-           !
-           DEALLOCATE ( dvrs )  ! to save memory
+           !$acc enter data create(dvrs_temp)
+           !$acc kernels
+           dvrs_temp(:,:) = CMPLX( dvrs(:,:), 0.0d0, kind=DP )
+           !$acc end kernels
            !
            CALL dv_of_drho(dvrs_temp)
            !
-           ALLOCATE ( dvrs(dfftp%nnr, nspin) )
+           !$acc kernels 
+           dvrs(:,:) = DBLE(dvrs_temp(:,:))
+           !$acc end kernels
            !
-           dvrs = DBLE(dvrs_temp)
-           !
+           !$acc exit data delete(dvrs_temp)
            DEALLOCATE(dvrs_temp)
            !
 #if defined (__ENVIRON)
@@ -220,14 +230,16 @@ SUBROUTINE lr_apply_liouvillian( evc1, evc1_new, interaction )
   !
   ! S. Binnie: Make sure the psic workspace is availible.
   !
-  ALLOCATE ( psic (dffts%nnr) )
+  ALLOCATE ( psic (dffts%nnr) ) 
   !
   IF ( gamma_only ) THEN
+     !$acc enter data create(psic)     
      CALL lr_apply_liouvillian_gamma()
+     !$acc exit data delete(psic)
   ELSE
      CALL lr_apply_liouvillian_k()
   ENDIF
-  !
+  ! 
   DEALLOCATE ( psic )
   !
   IF ( (interaction .or. lr_exx) .and. (.not.ltammd)  ) THEN
@@ -303,7 +315,6 @@ SUBROUTINE lr_apply_liouvillian( evc1, evc1_new, interaction )
   ! [H(k) - E(k)] * evc1(k). Keep this in mind if you want to
   ! generalize this subroutine to metals. 
   !
-  !$acc data copyin(evc0)
   DO ik = 1, nks
      !
 
@@ -314,7 +325,6 @@ SUBROUTINE lr_apply_liouvillian( evc1, evc1_new, interaction )
      !$acc end kernels
      !
   ENDDO 
-  !$acc end data
   !
   !
   ! Here we apply the S^{-1} operator.
@@ -329,17 +339,27 @@ SUBROUTINE lr_apply_liouvillian( evc1, evc1_new, interaction )
                        & sevc1_new(1,1,ik), evc1_new(1,1,ik))
   ENDDO
   !
+  IF ( interaction ) THEN  
+     IF (gamma_only) THEN
+        !$acc exit data delete(dvrs, dvrss)     
+        DEALLOCATE(dvrs)
+        DEALLOCATE(dvrss)
+     ELSE
+        DEALLOCATE(dvrsc)
+        DEALLOCATE(dvrssc)               
+     ENDIF
+  ENDIF   
+
   !$acc end data
-  IF (allocated(dvrs)) DEALLOCATE(dvrs)
-  IF (allocated(dvrss)) DEALLOCATE(dvrss)
   DEALLOCATE(d_deeq)
   DEALLOCATE(spsi1)
   DEALLOCATE(sevc1_new)
   !
-  IF (interaction)      CALL stop_clock_gpu('lr_apply_int')
-  IF (.not.interaction) CALL stop_clock_gpu('lr_apply_no')
+  !$acc wait
+  IF (interaction)      CALL stop_clock('lr_apply_int')
+  IF (.not.interaction) CALL stop_clock('lr_apply_no')
   !
-  CALL stop_clock_gpu('lr_apply')
+  CALL stop_clock('lr_apply')
   !
   RETURN
   !
@@ -349,7 +369,7 @@ CONTAINS
     !
     ! Gamma only case 
     !
-    USE lr_variables,             ONLY : becp_1, tg_revc0
+    USE lr_variables,             ONLY : becp_1
     USE realus,                   ONLY : tg_psic
     USE mp_global,                ONLY : me_bgrp
     USE mp_global,                ONLY : ibnd_start, ibnd_end, inter_bgrp_comm
@@ -379,13 +399,12 @@ CONTAINS
     ! Now apply to the ground state wavefunctions
     ! and convert to real space
     !
-    nnr_siz= dffts%nnr
-    !$acc data create (psic(1:nnr_siz))
+    nnr_siz= dffts%nnr 
     !
     IF ( interaction ) THEN
        !
-       !
-       CALL start_clock_gpu('interaction')
+       ! 
+       CALL start_clock('interaction')
        !
        IF (nkb > 0 .and. okvan) THEN
           ! calculation of becp2
@@ -452,34 +471,34 @@ CONTAINS
        !
        IF (lr_exx) CALL lr_exx_sum_int()
        !
-       !$acc enter data copyin(dvrss(1:nnr_siz))
        DO ibnd = ibnd_start_gamma ,ibnd_end_gamma, incr
           !
           ! Product with the potential vrs = (vltot+vr)
           ! revc0 is on smooth grid. psic is used up to smooth grid
           !
+          CALL invfft_orbital_gamma(evc0(:,:,1),ibnd,nbnd)
+          !
           IF (dffts%has_task_groups) THEN
              !
              DO ir=1, dffts%nr1x*dffts%nr2x*dffts%my_nr3p
                 !
-                tg_psic(ir) = tg_revc0(ir,ibnd,1)*CMPLX(tg_dvrss(ir),0.0d0,DP)
+                tg_psic(ir) = tg_psic(ir)*CMPLX(tg_dvrss(ir),0.0d0,DP)
                 !
              ENDDO
              !
           ELSE
              !
-             !DO ir = 1,dffts%nnr
              !$acc parallel loop
              DO ir = 1, nnr_siz
                 !
-                psic(ir) = revc0(ir,ibnd,1)*CMPLX(dvrss(ir),0.0d0,DP)
+                psic(ir) = psic(ir)*CMPLX(dvrss(ir),0.0d0,DP)
                 !
              ENDDO
              !
           ENDIF
           !
-          IF (lr_exx) THEN
-             CALL lr_exx_apply_revc_int(psic, ibnd, nbnd,1)
+          IF (lr_exx) THEN 
+             CALL lr_exx_apply_revc_int(psic, ibnd, nbnd,1) 
           ENDIF
           !
           IF (real_space .and. okvan .and. nkb > 0) THEN
@@ -550,8 +569,6 @@ CONTAINS
           !
        ENDDO
        !
-       !$acc exit data delete (dvrss)
-       !
 #if defined(__MPI)
        !$acc host_data use_device(evc1_new)
        CALL mp_sum( evc1_new(:,:,1), inter_bgrp_comm )
@@ -566,28 +583,21 @@ CONTAINS
           !
        ENDIF
        !
-       CALL stop_clock_gpu('interaction')
+       !$acc wait
+       CALL stop_clock('interaction')
        !
     ENDIF
     !
-    IF (lr_exx .AND. .NOT.interaction) CALL lr_exx_kernel_noint(evc1,evc1_new)
+    IF (lr_exx .AND. .NOT.interaction) THEN
+            CALL lr_exx_kernel_noint(evc1,evc1_new) 
+    ENDIF
     !
     ! The kinetic energy g2kin was already computed when
     ! calling the routine lr_solve_e.
     !
-    ! vexx is already computed in lr_exx_kernel
-    !
-    IF (lr_exx) CALL stop_exx()
-    !
     ! Compute sevc1_new = H*evc1
     !
-#if defined(__CUDA)
-    CALL h_psi_gpu (npwx,ngk(1),nbnd,evc1(1,1,1),sevc1_new(1,1,1))
-#else
     CALL h_psi(npwx,ngk(1),nbnd,evc1(1,1,1),sevc1_new(1,1,1))
-#endif
-    !
-    IF (lr_exx) CALL start_exx()
     !
     ! Compute spsi1 = S*evc1 
     !
@@ -598,11 +608,7 @@ CONTAINS
            CALL fwfft_orbital_gamma(spsi1,ibnd,nbnd)
         ENDDO
     ELSE
-#if defined(__CUDA)
-       CALL s_psi_acc (npwx,ngk(1),nbnd,evc1(1,1,1),spsi1)
-#else            
-       CALL s_psi(npwx,ngk(1),nbnd,evc1(1,1,1),spsi1)
-#endif
+    CALL s_psi(npwx,ngk(1),nbnd,evc1(1,1,1),spsi1)
     ENDIF
     !
     !   Subtract the eigenvalues
@@ -616,8 +622,6 @@ CONTAINS
        !$acc end host_data       
        !
     ENDDO
-    !
-    !$acc end data 
     !
     IF ( nkb > 0 .and. okvan ) DEALLOCATE(becp2)
     !
@@ -661,9 +665,16 @@ SUBROUTINE lr_apply_liouvillian_k()
              !
              !   Product with the potential vrs = (vltot+vr)
              !
+             psic(:) = (0.0d0,0.0d0)
+             !
+             DO ig = 1, ngk(ik)
+                psic(dffts%nl(igk_k(ig,ik)))=evc0(ig,ibnd,ik)
+             ENDDO
+             CALL invfft ('Wave', psic, dffts)
+             !
              DO ir = 1,dffts%nnr
                 !
-                psic(ir) = revc0(ir,ibnd,ik)*dvrssc(ir)
+                psic(ir) = psic(ir)*dvrssc(ir)
                 !
              ENDDO
              !

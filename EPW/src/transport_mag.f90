@@ -1,4 +1,5 @@
   !
+  ! Copyright (C) 2023-2026 EPW-Collaboration
   ! Copyright (C) 2016-2023 EPW-Collaboration
   !
   !---------------------------------------------------------------------
@@ -90,7 +91,7 @@
     !-----------------------------------------------------------------------
     USE kinds,       ONLY : DP
     USE input,       ONLY : nstemp, lfast_kmesh, nkf1, nkf2, nkf3
-    USE symm_base,   ONLY : nsym
+    USE symmetry,    ONLY : nsym => nsym_k
     USE global_var,  ONLY : nktotf, nkpt_ibztau, kpt_ibztau2ibz,       &
                             nkpt_bzfst, kpt_bztau2bz, kpt_bz2bztau,&
                             nkpt_bztau_max, kpt_ibztau2bz
@@ -186,17 +187,15 @@
     !! Samuel Ponce & Francesco Macheda
     !-----------------------------------------------------------------------
     USE kinds,              ONLY : DP
-    USE input,              ONLY : nstemp, nkf1, nkf2, nkf3
+    USE input,              ONLY : nstemp, nkf1, nkf2, nkf3, lsda
     USE ep_constants,       ONLY : zero
-    USE noncollin_module,   ONLY : noncolin
     USE cell_base,          ONLY : at, bg
-    USE symm_base,          ONLY : s, nsym
+    USE symmetry,           ONLY : s => s_k, nsym => nsym_k
     USE global_var,         ONLY : s_bztoibz, nbndfst, nktotf,      &
                                    nkpt_bztau_max, etf_all_b, vkk_all_b, &
                                    wkf_all_b, df_in_b, f_serta_b, f_in_b,    &
-                                   f_out_b, inv_tau_b,   &
-                                   kpt_bz2bztau, nkpt_ibztau, &
-                                   kpt_ibztau2ibz, kpt_ibztau2bz
+                                   f_out_b, inv_tau_b, kpt_bz2bztau, nkpt_ibztau, &
+                                   kpt_ibztau2ibz, kpt_ibztau2bz, spin_fac
     !
     IMPLICIT NONE
     !
@@ -230,7 +229,6 @@
     !! Symmetry matrix (intermediate step)
     REAL(KIND = DP) :: sr(3, 3)
     !! Symmetry matrix in cartesian coordinate
-
     !
     ALLOCATE(etf_all_b(nbndfst, nkpt_bztau_max, nstemp), STAT = ierr)
     IF (ierr /= 0) CALL errore('unfold_all', 'Error allocating etf_all_b', 1)
@@ -258,11 +256,7 @@
     inv_tau_b(:, :, :)    = zero
     df_in_b(:, :, :, :, :) = zero
     !
-    IF (noncolin) THEN
-      wkf_all_b = 1.0d0 / (nkf1 * nkf2 * nkf3)
-    ELSE
-      wkf_all_b = 2.0d0 / (nkf1 * nkf2 * nkf3)
-    ENDIF
+    wkf_all_b = spin_fac / (nkf1 * nkf2 * nkf3)
     !
     DO itemp = 1, nstemp
       DO ik_ibz = 1, nkpt_ibztau(itemp)
@@ -305,12 +299,11 @@
     !-----------------------------------------------------------------------
     USE kinds,              ONLY : DP
     USE ep_constants,       ONLY : zero
-    USE noncollin_module,   ONLY : noncolin
-    USE input,              ONLY : nstemp, nkf1, nkf2, nkf3
+    USE input,              ONLY : nstemp, nkf1, nkf2, nkf3, lsda
     USE global_var,         ONLY : nbndfst, nktotf, nkpt_ibztau,  &
                                    nkpt_bztau_max, etf_all_b, vkk_all_b, &
                                    wkf_all_b, df_in_b, f_serta_b, f_in_b,    &
-                                   f_out_b, inv_tau_b, kpt_ibztau2ibz
+                                   f_out_b, inv_tau_b, kpt_ibztau2ibz, spin_fac
     !
     IMPLICIT NONE
     !
@@ -371,11 +364,7 @@
       ENDDO !ik
     ENDDO !itemp
     !
-    IF (noncolin) THEN
-      wkf_all_b = 1.0d0 / (nkf1 * nkf2 * nkf3)
-    ELSE
-      wkf_all_b = 2.0d0 / (nkf1 * nkf2 * nkf3)
-    ENDIF
+    wkf_all_b = spin_fac / (nkf1 * nkf2 * nkf3)
     !
     !-----------------------------------------------------------------------
     END SUBROUTINE create_all
@@ -407,7 +396,7 @@
     USE ep_constants,     ONLY : zero, eps160
     USE io_global,        ONLY : stdout
     USE cell_base,        ONLY : at, bg
-    USE symm_base,        ONLY : s, nsym
+    USE symmetry,         ONLY : s => s_k, nsym => nsym_k
     USE input,            ONLY : nstemp, lfast_kmesh
     USE global_var,       ONLY : s_bztoibz, nbndfst, nktotf, &
                                  xkf_bz, kpt_bz2bztau, xqf, map_fst
@@ -420,7 +409,7 @@
     !! Total number of elements per cpu
     INTEGER, INTENT(in) :: nb_sp
     !! Total number of special points
-    INTEGER, INTENT(in) :: xkf_sp(49, nb_sp)
+    INTEGER, INTENT(in) :: xkf_sp(97, nb_sp)
     !! Special points indexes and symmetries
     INTEGER, INTENT(in) :: bztoibz_mat(nsym, nktotf)
     !! For a given k-point in the IBZ gives the k-point index of all the
@@ -491,7 +480,7 @@
     !! Symmetry matrix in crystal for special points
     REAL(KIND = DP) :: sa_tot(3, 3)
     !! Symmetry matrix in crystal
-    REAL(KIND = DP) :: S_xq(3)
+    REAL(KIND = DP) :: s_xq(3)
     !! Rotated q-point
     !
     ! Note 1: To find if a k+q point is within the fsthick we need to obtain the mapping
@@ -512,6 +501,9 @@
     ENDIF
     !
     nkpt_max = 0
+    !$omp parallel do reduction(+:nkpt_max) &
+    !$omp private(iq,ik,ibnd,jbnd,itemp,special,sp,index_sp,nb,ikbz) &
+    !$omp private(xq,xk,sa,sa_sp,sa_tot,sb,sr,s_xq,nkq_abs,ind1,ind2)
     DO ind = 1, nind
       iq    = sparse_q(ind)
       ik    = sparse_k(ind)
@@ -557,9 +549,9 @@
                   sb         = MATMUL(bg, sa_tot)
                   sr(:, :)   = MATMUL(at, TRANSPOSE(sb))
                   sr         = TRANSPOSE(sr)
-                  CALL DGEMV('n', 3, 3, 1.d0, sr, 3, xq(:), 1, 0.d0, S_xq(:), 1)
-                  CALL cryst_to_cart(1, S_xq(:), at, -1)
-                  CALL kpmq_map(xk, S_xq, 1, nkq_abs)
+                  CALL DGEMV('n', 3, 3, 1.d0, sr, 3, xq(:), 1, 0.d0, s_xq(:), 1)
+                  CALL cryst_to_cart(1, s_xq(:), at, -1)
+                  CALL kpmq_map(xk, s_xq, 1, nkq_abs)
                   IF (lfast_kmesh) THEN
                     CALL bisection(SIZE(map_fst, 1), map_fst, nkq_abs, n_intval, val_intval, pos_intval)
                     IF (nkq_abs == 0) CYCLE ! The point is not within the fsthick
@@ -600,9 +592,9 @@
               sb         = MATMUL(bg, sa)
               sr(:, :)   = MATMUL(at, TRANSPOSE(sb))
               sr         = TRANSPOSE(sr)
-              CALL DGEMV('n', 3, 3, 1.d0, sr, 3, xq(:), 1, 0.d0, S_xq(:), 1)
-              CALL cryst_to_cart(1, S_xq(:), at, -1)
-              CALL kpmq_map(xk, S_xq, 1, nkq_abs)
+              CALL DGEMV('n', 3, 3, 1.d0, sr, 3, xq(:), 1, 0.d0, s_xq(:), 1)
+              CALL cryst_to_cart(1, s_xq(:), at, -1)
+              CALL kpmq_map(xk, s_xq, 1, nkq_abs)
               IF (lfast_kmesh) THEN
                 CALL bisection(SIZE(map_fst, 1), map_fst, nkq_abs, n_intval, val_intval, pos_intval)
                 IF (nkq_abs == 0) CYCLE ! The point is not within the fsthick
@@ -620,6 +612,7 @@
         ENDDO ! nb
       ENDIF ! special
     ENDDO ! ind
+    !$omp end parallel do
     !
     WRITE(stdout, '(5x,a,i10)') 'Number of contributing elements for the master core ', nkpt_max
     !
@@ -653,7 +646,7 @@
     USE kinds,            ONLY : DP
     USE ep_constants,     ONLY : zero, eps160
     USE cell_base,        ONLY : at, bg
-    USE symm_base,        ONLY : s, nsym
+    USE symmetry,         ONLY : s => s_k, nsym => nsym_k
     USE input,            ONLY : nstemp, lfast_kmesh
     USE global_var,       ONLY : s_bztoibz, nbndfst, nktotf, map_fst, xkf_bz, xqf, &
                                  kpt_bz2bztau, nsym_sp, ind_map
@@ -670,7 +663,7 @@
     !! At exit, is .true. if the k-point corresponding to the index "ind" is a special point
     INTEGER, INTENT(in) :: nb_sp
     !! Total number of special points
-    INTEGER, INTENT(in) :: xkf_sp(49, nb_sp)
+    INTEGER, INTENT(in) :: xkf_sp(97, nb_sp)
     !! Special points indexes and symmetries
     INTEGER, INTENT(in) :: bztoibz_mat(nsym, nktotf)
     !! For a given k-point in the IBZ gives the k-point index of all the
@@ -749,7 +742,7 @@
     !! Symmetry matrix in crystal for special points
     REAL(KIND = DP) :: sa_tot(3, 3)
     !! Symmetry matrix in crystal
-    REAL(KIND = DP) :: S_xq(3)
+    REAL(KIND = DP) :: s_xq(3)
     !! Rotated q-point
     !
     ! Note 1: To find if a k+q point is within the fsthick we need to obtain the mapping
@@ -769,7 +762,7 @@
       CALL create_interval(SIZE(map_fst, 1), map_fst, n_intval, val_intval, pos_intval)
     ENDIF
     !
-    ALLOCATE(ind_map(2, nkpt_max), STAT = ierr)
+    ALLOCATE(ind_map(3, nkpt_max), STAT = ierr)
     IF (ierr /= 0) CALL errore('create_indkq', 'Error allocating ind_map', 1)
     ALLOCATE(nsym_sp(nkpt_max), STAT = ierr)
     IF (ierr /= 0) CALL errore('create_indkq', 'Error allocating nsym_sp', 1)
@@ -827,9 +820,9 @@
                   sb         = MATMUL(bg, sa_tot)
                   sr(:, :)   = MATMUL(at, TRANSPOSE(sb))
                   sr         = TRANSPOSE(sr)
-                  CALL DGEMV('n', 3, 3, 1.d0, sr, 3, xq(:), 1, 0.d0, S_xq(:), 1)
-                  CALL cryst_to_cart(1, S_xq(:), at, -1)
-                  CALL kpmq_map(xk, S_xq, 1, nkq_abs)
+                  CALL DGEMV('n', 3, 3, 1.d0, sr, 3, xq(:), 1, 0.d0, s_xq(:), 1)
+                  CALL cryst_to_cart(1, s_xq(:), at, -1)
+                  CALL kpmq_map(xk, s_xq, 1, nkq_abs)
                   IF (lfast_kmesh) THEN
                     CALL bisection(SIZE(map_fst, 1), map_fst, nkq_abs, n_intval, val_intval, pos_intval)
                     IF (nkq_abs == 0) CYCLE ! The point is not within the fsthick
@@ -844,6 +837,7 @@
                       ikpt = ikpt + 1
                       ind_map(1, ikpt) = ind1
                       ind_map(2, ikpt) = ind2
+                      ind_map(3, ikpt) = ind
                     ENDIF
                   ENDIF ! inv_tau
                 ENDIF ! xkf_sp
@@ -880,9 +874,9 @@
               sb         = MATMUL(bg, sa)
               sr(:, :)   = MATMUL(at, TRANSPOSE(sb))
               sr         = TRANSPOSE(sr)
-              CALL DGEMV('n', 3, 3, 1.d0, sr, 3, xq(:), 1, 0.d0, S_xq(:), 1)
-              CALL cryst_to_cart(1, S_xq(:), at, -1)
-              CALL kpmq_map(xk, S_xq, 1, nkq_abs)
+              CALL DGEMV('n', 3, 3, 1.d0, sr, 3, xq(:), 1, 0.d0, s_xq(:), 1)
+              CALL cryst_to_cart(1, s_xq(:), at, -1)
+              CALL kpmq_map(xk, s_xq, 1, nkq_abs)
               IF (lfast_kmesh) THEN
                 CALL bisection(SIZE(map_fst, 1), map_fst, nkq_abs, n_intval, val_intval, pos_intval)
                 IF (nkq_abs == 0) CYCLE ! The point is not within the fsthick
@@ -896,6 +890,7 @@
                   ikpt = ikpt + 1
                   ind_map(1, ikpt) = ind1
                   ind_map(2, ikpt) = ind2
+                  ind_map(3, ikpt) = ind
                 ENDIF
               ENDIF ! inv_tau
             ENDIF ! kpt_bztau2bz

@@ -1,4 +1,5 @@
   !
+  ! Copyright (C) 2023-2026 EPW-Collaboration
   ! Copyright (C) 2016-2023 EPW-Collaboration
   ! Copyright (C) 2010-2016 Samuel Ponce', Roxana Margine, Carla Verdi, Feliciano Giustino
   ! Copyright (C) 2007-2009 Jesse Noffsinger, Brad Malone, Feliciano Giustino
@@ -24,18 +25,23 @@
   USE io_global,     ONLY : stdout
   USE cell_base,     ONLY : at, bg, ibrav, alat, omega, celldm
   USE klist,         ONLY : lgauss, degauss, ngauss, nkstot, wk
-  USE input,         ONLY : xk_all
+  USE input,         ONLY : xk_all, lsda
   USE gvect,         ONLY : gcutm, ngm
   USE gvecs,         ONLY : dual, doublegrid, gcutms, ngms
   USE gvecw,         ONLY : ecutwfc
   USE symm_base,     ONLY : s, sname, ft, sr, t_rev
   USE noncollin_module, ONLY : noncolin, domag, lspinorb
   USE funct,         ONLY : write_dft_name
-  USE input,         ONLY : title
+  USE input,         ONLY : title, laniso, plrn, epbwrite, epwwrite, &
+                            ephwrite
   USE lr_symm_base,  ONLY : irotmq, minus_q, nsymq
   USE control_flags, ONLY : iverbosity
   USE fft_base,      ONLY : dfftp, dffts
   USE constants,     ONLY : amu_ry
+  USE mp_images,     ONLY : nimage
+  USE stop,          ONLY : stop_epw
+  USE global_var,    ONLY : nkpts
+  USE environment,   ONLY : print_cuda_info
 #if defined(__NAG)
   USE f90_unix_io,   ONLY : flush
 #endif
@@ -64,6 +70,51 @@
   REAL(KIND = DP) :: xkg(3)
   !! k point in crystal coordinates
   !
+  ! S. Tiwari: Here we add the warning regarding image parallelization
+  !   
+  IF ((nimage > 1) .AND. ((.NOT. laniso))) THEN
+    WRITE(stdout, '(/5x,"+============================================================+")')
+    WRITE(stdout, '( 5x,"|                           INFO                             |")')
+    WRITE(stdout, '( 5x,"+============================================================+")')
+    WRITE(stdout, '( 5x,"| Image parallelization is enabled.                          |")')
+    WRITE(stdout, '( 5x,"| Tested for optics, transport, self-energies, polaron,      |")')
+    WRITE(stdout, '( 5x,"| and isotropic Eliashberg calculations.                     |")')
+    WRITE(stdout, '( 5x,"| See benchmarks at:                                         |")')
+    WRITE(stdout, '( 5x,"| https://docs.epw-code.org/doc/Benchmarks.html              |")')
+    WRITE(stdout, '( 5x,"+============================================================+")')
+  ELSEIF ((nimage > 1) .AND. (laniso)) THEN
+    WRITE(stdout, '(/5x,"+============================================================+")')
+    WRITE(stdout, '( 5x,"|                          ERROR                             |")')
+    WRITE(stdout, '( 5x,"+============================================================+")')
+    WRITE(stdout, '( 5x,"| Image parallelization over the q-grid is enabled.          |")')
+    WRITE(stdout, '( 5x,"| This is not supported for anisotropic Eliashberg or        |")')
+    WRITE(stdout, '( 5x,"| polaron calculations.                                      |")')
+    WRITE(stdout, '( 5x,"| Please restart using pool parallelization only.            |")')
+    WRITE(stdout, '( 5x,"| The calculation will now stop.                             |")')
+    WRITE(stdout, '( 5x,"+============================================================+")')
+    CALL stop_epw() 
+  ENDIF
+  !
+  IF ((nimage > 1) .AND. (epwwrite)) THEN
+    WRITE(stdout, '(/5x,"+============================================================+")')
+    WRITE(stdout, '( 5x,"|                           INFO                             |")')
+    WRITE(stdout, '( 5x,"+============================================================+")')
+    WRITE(stdout, '( 5x,"| Image parallelization over the q-grid is enabled.          |")')
+    WRITE(stdout, '( 5x,"| Irreducible q-points are distributed across images.        |")')
+    WRITE(stdout, '( 5x,"+============================================================+")')
+  ENDIF 
+  IF ((nimage > 1) .AND. (ephwrite)) THEN
+    WRITE(stdout, '(/5x,"+============================================================+")')
+    WRITE(stdout, '( 5x,"|                          ERROR                             |")')
+    WRITE(stdout, '( 5x,"+============================================================+")')
+    WRITE(stdout, '( 5x,"| Image parallelization over the q-grid is enabled.          |")')
+    WRITE(stdout, '( 5x,"| This is not supported when ephwrite = .true..              |")')
+    WRITE(stdout, '( 5x,"| Please restart using pool parallelization only.            |")')
+    WRITE(stdout, '( 5x,"| The calculation will now stop.                             |")')
+    WRITE(stdout, '( 5x,"+============================================================+")')
+    CALL stop_epw() 
+  ENDIF
+  ! 
   WRITE(stdout, 100) title, ibrav, alat, omega, nat, ntyp, ecutwfc, ecutwfc * dual
 100 FORMAT(/,5x,a75,/,/,5x, &
        &     'bravais-lattice index     = ',i12,/,5x, &
@@ -88,6 +139,9 @@
     ELSE
       WRITE(stdout, '(5x,"Noncollinear calculation without spin-orbit",/)')
     ENDIF
+  ELSE IF (TRIM(lsda) /= 'none') THEN
+    WRITE(stdout,'(5X,"Collinear magnetic calculation without spin-orbit",/)')
+    WRITE(stdout,'(5A,/)') '     SPIN CHANNEL: ' // lsda
   ELSE
     WRITE(stdout, '(/)')
   ENDIF
@@ -116,6 +170,10 @@
        &                              ") = (",3f11.5,"  )")')  &
        & (na,atm(ityp(na)), amass(ityp(na))/amu_ry, na,  &
        & (tau(ipol,na), ipol = 1, 3), na = 1, nat)
+  !
+  ! ... CUDA
+  !
+  CALL print_cuda_info(check_use_gpu = .TRUE.)
   !
   ! Description of symmetries
   !
@@ -202,14 +260,14 @@
   ENDIF
   IF (iverbosity == 1 .OR. nkstot < 10000) THEN
      WRITE(stdout, '(23x,"cart. coord. in units 2pi/a_0")')
-     DO ik = 1, nkstot
+     DO ik = 1, nkpts
         WRITE(stdout, '(8x,"k(",i5,") = (",3f12.7,"), wk =",f12.7)') ik, &
              (xk_all(ipol, ik) , ipol = 1, 3), wk(ik)
      ENDDO
   ENDIF
   IF (iverbosity == 1) THEN
      WRITE(stdout, '(/23x,"cryst. coord.")')
-     DO ik = 1, nkstot
+     DO ik = 1, nkpts
         DO ipol = 1, 3
            xkg(ipol) = at(1, ipol) * xk_all(1, ik) + at(2, ipol) * xk_all(2, ik) &
                      + at(3, ipol) * xk_all(3, ik)

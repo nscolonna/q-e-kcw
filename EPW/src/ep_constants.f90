@@ -1,4 +1,5 @@
   !
+  ! Copyright (C) 2023-2026 EPW-Collaboration
   ! Copyright (C) 2016-2023 EPW-Collaboration
   ! Copyright (C) 2010-2016 Samuel Ponce', Roxana Margine, Carla Verdi, Feliciano Giustino
   ! Copyright (C) 2007-2009 Jesse Noffsinger, Brad Malone, Feliciano Giustino
@@ -72,6 +73,7 @@
   REAL(KIND = DP), PARAMETER :: echg     = ELECTRON_SI                ! 1.602176634E-19_DP  C
   REAL(KIND = DP), PARAMETER :: amu      = AMU_SI                     ! 1.66053906660E-27_DP  kg
   REAL(KIND = DP), PARAMETER :: sm1toryd = h_planck_si / echg / rytoev    ! convert frequencies in s-1 to Ry
+  REAL(KIND = DP), PARAMETER :: ry2thz_sr  = ryd2ghz / 1.0E3_DP * twopi  ! 20670.598952748 Convert rydberg to THz for scattering rates.
   !
   ! ... zero up to a given accuracy
   !

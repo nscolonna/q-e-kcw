@@ -138,18 +138,16 @@ CONTAINS
     !
   end subroutine xml_addattribute_r
   !
-  subroutine xml_addattribute_rv( xf, name, value )
+  subroutine xml_addattribute_rv ( xf, name, value )
     !
     type(xmlf_t), intent(in) :: xf
     character(len=*), intent(in) :: name
     real(DP_XML), intent(in) :: value(:)
-    character(len=80) :: cvalue
     !
     if ( xf%unit == -1 ) then
        print *, 'xml file not opened'
     else
-       write(cvalue,*) value
-       call add_attr(name, cvalue)
+       call add_attr(name, value)
     end if
     !
   end subroutine xml_addattribute_rv
@@ -159,13 +157,11 @@ CONTAINS
     type(xmlf_t), intent(in) :: xf
     character(len=*), intent(in) :: name
     integer, intent(in) :: value(:)
-    character(len=80) :: cvalue
     !
     if ( xf%unit == -1 ) then
        print *, 'xml file not opened'
     else
-       write(cvalue,*) value
-       call add_attr(name, cvalue)
+       call add_attr(name, value)
     end if
     !
   end subroutine xml_addattribute_iv

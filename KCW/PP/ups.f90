@@ -204,7 +204,7 @@ PROGRAM ups
   shift        = 0.0d0
   CALL get_environment_variable( 'ESPRESSO_TMPDIR', outdir )
   IF ( trim( outdir ) == ' ' ) outdir = './'
-  intersmear   = 0.136
+  intersmear   = 0.136_DP
   wmin         = 0.0d0
   wmax         = 30.0d0
   nbndmin      = 1
@@ -339,7 +339,7 @@ PROGRAM ups
   !
   CALL grid_destroy()
   !
-  CALL environment_end ( 'ups' )
+  CALL environment_end( )
   !
 #if defined(__MPI)
   CALL mp_global_end()

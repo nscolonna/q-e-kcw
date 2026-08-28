@@ -182,7 +182,7 @@ program test
   kmax    = HUGE(0.d0)   !not set
   ecutwfc = 80.0d0
   ecutrho = 0.d0
-  alat_in = 18.65
+  alat_in = 18.65_DP
   ntgs    = 1
   nbnd    = 1
   many_fft= 1
@@ -1294,18 +1294,6 @@ subroutine print_clock(mype, npes, ncount)
 1021  FORMAT(' |fft_scatt_many_yz   | ',    D14.5, ' | ',   D14.5,  '  | ', D14.5 ,  ' |')
 1022  FORMAT(' |fft_scatt_many_xy   | ',    D14.5, ' | ',   D14.5,  '  | ', D14.5 ,  ' |')
 
-end subroutine
-
-subroutine start_clock_gpu(label)
-  implicit none
-  character(len=*) :: label
-  call start_clock(label)
-end subroutine
-
-subroutine stop_clock_gpu(label)
-  implicit none
-  character(len=*) :: label
-  call stop_clock(label)
 end subroutine
 !
 ! Copyright (C) 2001 PWSCF group

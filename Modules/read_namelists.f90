@@ -241,6 +241,7 @@ MODULE read_namelists_module
        ! ... EXX
        !
        ace=.TRUE.
+       exx_type = 'band_pairs'
        n_proj = 0    
        localization_thr = 0.0_dp
        scdm=.FALSE.
@@ -258,8 +259,8 @@ MODULE read_namelists_module
        zgate = 0.5
        relaxz = .false.
        block = .false.
-       block_1 = 0.45
-       block_2 = 0.55
+       block_1 = 0.45_DP
+       block_2 = 0.55_DP
        block_height = 0.0
        !
        !  ... postprocessing of DOS & phonons & el-ph
@@ -974,6 +975,7 @@ MODULE read_namelists_module
        ! ... EXX
 
        CALL mp_bcast( ace,                 ionode_id, intra_image_comm )
+       CALL mp_bcast( exx_type,            ionode_id, intra_image_comm )
        CALL mp_bcast( localization_thr,    ionode_id, intra_image_comm )
        CALL mp_bcast( scdm,                ionode_id, intra_image_comm )
        CALL mp_bcast( scdmden,             ionode_id, intra_image_comm )

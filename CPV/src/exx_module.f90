@@ -19,6 +19,9 @@ MODULE exx_module
   ! to find related changes made in other files look for the string 'exx_wf related'
   !----------------------------------------------------------------------------------------------------------------
   !
+#if defined(_OPENMP)
+  USE omp_lib
+#endif
   USE cell_base,          ONLY: h                  !cell at time t (current time step), also used in r = h s
   USE cell_base,          ONLY: ainv               !h^-1 matrix for converting between r and s coordinates via s = h^-1 r)
   USE cell_base,          ONLY: omega              !cell volume (in au^3)
@@ -28,10 +31,10 @@ MODULE exx_module
   USE command_line_options, ONLY : ndiag_          !-ndiag indicator; =0 -ndiag not specified; = N if -ndiag N specified  
   USE constants,          ONLY: pi                 !pi in double-precision
   USE constants,          ONLY: fpi                !4.0*pi in double-precision
-  USE control_flags,      ONLY: lwfnscf            !
-  USE control_flags,      ONLY: lwfpbe0nscf        !non selfconsitent pbe0 calculation for empty bands .. 
-  USE control_flags,      ONLY: nbeg               !nbeg<0 in from_scratch calculations ...
-  USE control_flags,      ONLY: thdyn              !if .TRUE. then variable cell calculation is turned on ..   
+  USE cp_control,         ONLY: lwfnscf            !
+  USE cp_control,         ONLY: lwfpbe0nscf        !non selfconsitent pbe0 calculation for empty bands .. 
+  USE cp_control,         ONLY: nbeg               !nbeg<0 in from_scratch calculations ...
+  USE cp_control,         ONLY: thdyn              !if .TRUE. then variable cell calculation is turned on ..   
   USE cp_main_variables,  ONLY: idesc              !descriptor type
   USE electrons_base,     ONLY: nbsp               !number of electronic bands/states ...
   USE electrons_base,     ONLY: nspin              !spin unpolarized (npsin=1) vs. spin polarized (nspin=2) specification
@@ -159,9 +162,6 @@ MODULE exx_module
   !! the first dimension is the (flattened) 1d local grid index; the second is the jth neighbor orbital index;
   !! the third is the ith local orbital index of the current MPI process
   !
-#if defined(_OPENMP)
-  INTEGER, EXTERNAL                   :: omp_get_max_threads
-#endif
 #if defined __CUDA
   REAL(DP), ALLOCATABLE, PUBLIC, DEVICE       :: coe_1st_derv_d(:,:)      ! coe_1st_derv(neighbor, d/di)
   REAL(DP), ALLOCATABLE, PUBLIC, DEVICE       :: coeke_d(:,:,:)           ! coeke(neighbor, d/di, d/dj)

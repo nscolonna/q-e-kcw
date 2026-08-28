@@ -39,6 +39,7 @@ SUBROUTINE kcw_readin()
   USE exx_base,           ONLY : x_gamma_extrapolation
   USE mp_pools,           ONLY : npool
   USE xc_lib,             ONLY : xclib_dft_is
+  USE upf_utils,          ONLY : imatches
   !
   IMPLICIT NONE
   !
@@ -48,7 +49,6 @@ SUBROUTINE kcw_readin()
   !
   INTEGER, EXTERNAL   :: atomic_number
   REAL(DP), EXTERNAL  :: atom_weight
-  LOGICAL, EXTERNAL   :: imatches
   LOGICAL, EXTERNAL   :: has_xml
   LOGICAL             :: exst, parallelfs
   LOGICAL             :: do_comp_mt_kcw
@@ -151,7 +151,7 @@ SUBROUTINE kcw_readin()
   kcw_at_ks           =.TRUE.
   lrpa                =.FALSE.
   fix_orb             =.FALSE.
-  spread_thr          = 0.001 !(Rydberg)
+  spread_thr          = 0.001_DP !(Rydberg)
   homo_only           =.FALSE.
   read_unitary_matrix =.FALSE.
   qp_symm             =.FALSE.
@@ -166,7 +166,7 @@ SUBROUTINE kcw_readin()
   spin_component      = 1
   niter               = maxter 
   alpha_mix(:)        = 0.D0
-  alpha_mix(1)        = 0.7
+  alpha_mix(1)        = 0.7_DP
   nmix                = 4
   tr2                = 1.0d-14
   i_orb               = -1

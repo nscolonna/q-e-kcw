@@ -35,15 +35,11 @@ PROGRAM kcw
   USE mp_global,         ONLY : mp_startup
   USE check_stop,        ONLY : check_stop_init
   USE coulomb,           ONLY : setup_coulomb
-  USE control_flags,     ONLY : use_gpu
   !
   IMPLICIT NONE
   !
   CHARACTER(LEN=9) :: code='KCW'
-  LOGICAL,EXTERNAL :: check_gpu_support 
   !
-  use_gpu = check_gpu_support()
-  IF(use_gpu) Call errore('KCW', 'KCW with GPU NYI', 1)
   !
   ! 1) Initialize MPI, clocks, print initial messages
   CALL mp_startup ( )
@@ -66,7 +62,7 @@ PROGRAM kcw
   !
   ! 5) Clean and Close 
   CALL mp_global_end()
-  CALL environment_end( code )
+  CALL environment_end( )
   !
 END PROGRAM kcw
 
@@ -76,23 +72,32 @@ SUBROUTINE header
   !-----------------------------------------------------------------
   !
   USE io_global,         ONLY : stdout, ionode
+  USE control_flags,     ONLY : use_gpu
+  !
   IMPLICIT NONE
- 
+  LOGICAL,EXTERNAL :: check_gpu_support 
+  !
+  use_gpu = check_gpu_support()
+  !
   IF (ionode) THEN 
-  WRITE( stdout, '(/5x,"=--------------------------------------------------------------------------------=")')
-  WRITE( stdout,*) "                     :::    :::           ::::::::         :::       ::: "
-  WRITE( stdout,*) "                    :+:   :+:           :+:    :+:        :+:       :+:  "
-  WRITE( stdout,*) "                   +:+  +:+            +:+               +:+       +:+   "
-  WRITE( stdout,*) "                  +#++:++             +#+               +#+  +:+  +#+    "
-  WRITE( stdout,*) "                 +#+  +#+            +#+               +#+ +#+#+ +#+     "
-  WRITE( stdout,*) "                #+#   #+#           #+#    #+#         #+#+# #+#+#       " 
-  WRITE( stdout,*) "               ###    ###           ########           ###   ###         "
-  WRITE( stdout, '(/5x,"  Koopmans functional implementation based on DFPT; please cite this program as")')
-  WRITE( stdout, '(/5x,"   N.Colonna, R. De Gennaro, E. Linscott, and N. Marzari, JCTC 18, 5435 (2022) ")')
-  WRITE( stdout, '(/5x,"                                                                               ")')
-  WRITE( stdout, '(/5x,"  If you use the non-collinear mode (with/without spin-orbit coupling) please cite")')
-  WRITE( stdout, '(/5x,"   A. Marrazzo and N. Colonna, Phys. Rev. Research 6, 033085 (2024)  ")')
-  WRITE( stdout, '( 5x,"=--------------------------------------------------------------------------------=")')  
+    WRITE( stdout, '(/5x,"=--------------------------------------------------------------------------------=")')
+    WRITE( stdout,*) "                     :::    :::           ::::::::         :::       ::: "
+    WRITE( stdout,*) "                    :+:   :+:           :+:    :+:        :+:       :+:  "
+    WRITE( stdout,*) "                   +:+  +:+            +:+               +:+       +:+   "
+    WRITE( stdout,*) "                  +#++:++             +#+               +#+  +:+  +#+    "
+    WRITE( stdout,*) "                 +#+  +#+            +#+               +#+ +#+#+ +#+     "
+    WRITE( stdout,*) "                #+#   #+#           #+#    #+#         #+#+# #+#+#       " 
+    WRITE( stdout,*) "               ###    ###           ########           ###   ###         "
+    WRITE( stdout, '(/5x,"  Koopmans functional implementation based on DFPT; please cite this program as")')
+    WRITE( stdout, '(/5x,"   N.Colonna, R. De Gennaro, E. Linscott, and N. Marzari, JCTC 18, 5435 (2022) ")')
+    WRITE( stdout, '(/5x,"                                                                               ")')
+    WRITE( stdout, '(/5x,"  If you use the non-collinear mode (with/without spin-orbit coupling) please cite")')
+    WRITE( stdout, '(/5x,"   A. Marrazzo and N. Colonna, Phys. Rev. Research 6, 033085 (2024)  ")')
+    WRITE( stdout, '( 5x,"=--------------------------------------------------------------------------------=")')  
+    !
+    IF(use_gpu) THEN
+       WRITE(stdout, '(/5X, "GPU acceleration is ACTIVE")')
+    END IF   
   ENDIF
   !
 END SUBROUTINE header

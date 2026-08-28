@@ -57,24 +57,30 @@ lambda=`grep "     lambda___(" $fname | awk '{print $4}'`
 lambda_tr=`grep "  lambda_tr(" $fname | awk '{print $4}'`
 gamma=`grep " gamma___=" $fname | awk '{print $6}'`
 omega=`grep " omega=" $fname | awk '{print $9}'`
+on_shell_Omega=`grep " on_shell_Omega=" $fname | awk '{print $12}'`
+off_shell_Omega=`grep " off_shell_Omega=" $fname | awk '{print $15}'`
 lam_tot=`grep " lambda :" $fname | awk '{print $3}'`
 lam_tr=`grep " lambda_tr :" $fname | awk '{print $3}'`
 logavg=`grep " logavg =" $fname | awk '{print $3}'`
 l_a2f=`grep "l_a2f =" $fname | awk '{print $6}'`
 efm=`grep "at Ef=" $fname | awk '{print $8}'`
 elph=`grep "Electron-phonon coupling strength =" $fname | awk '{print $5}'`
-allDyn=`grep "Estimated Allen-Dynes Tc =" $fname | awk '{print $5}'`
-bcsgap=`grep "Estimated BCS superconducting gap =" $fname | awk '{print $6}'`
+mcmillan=`grep "Estimated Tc using McMillan expression =" $fname | awk '{print $9}'`
+allDyn=`grep "Estimated Tc using Allen-Dynes modified McMillan expression =" $fname | awk '{print $9}'`
+bcsgap=`grep "Estimated BCS superconducting gap using McMillan Tc =" $fname | awk '{print $10}'`
 max_eigenvalue=`grep -A 47 "Max. eigenvalue close to 1" $fname | grep 35.00 | awk '{print $2}'`
 pi=`grep "Re[Pi]=" $fname | awk '{print $4; print $7; print $10}'`
-mobvb=`grep "Mobility VB Fermi level" $fname | awk '{print $5}'`
-mobcb=`grep "Mobility CB Fermi level" $fname | awk '{print $5}'`
+mobvb=`grep "Mobility VB Fermi level" $fname | awk '{print $6}'`
+mobcb=`grep "Mobility CB Fermi level" $fname | awk '{print $6}'`
 density=`grep " x-axis" $fname | awk '{print $1; print $2; print $3}'`
 mobxZ=`grep " x-axis [Z]" $fname | awk '{print $1; print $2; print $3; print $4}'`
 indabs=`grep "  (cm-1)" $fname | awk '{print $1; print $2; print $3; print $4}'`
-mobnewx=`sed -n -e "/       Temp    / {n;n;n;n;p}" $fname | awk '{print $1; print $2; print $5}'`
-mobnewy=`sed -n -e "/       Temp    / {n;n;n;n;n;p}" $fname | awk '{print $3}'`
-mobnewz=`sed -n -e "/       Temp    / {n;n;n;n;n;n;p}" $fname | awk '{print $4}'`
+mobnewxx=`sed -n -e "/       Drift / {n;n;n;n;p}" $fname | awk '{print $1; print $2; print $5}'`
+mobnewyy=`sed -n -e "/       Drift / {n;n;n;n;n;p}" $fname | awk '{print $3}'`
+mobnewzz=`sed -n -e "/       Drift / {n;n;n;n;n;n;p}" $fname | awk '{print $4}'`
+condnewxx=`sed -n -e "/SR                 Conductivity/ {n;n;n;n;p}" $fname | awk '{print $1; print $2; print $5}'`
+condnewyy=`sed -n -e "/SR                 Conductivity/ {n;n;n;n;n;p}" $fname | awk '{print $3}'`
+condnewzz=`sed -n -e "/SR                 Conductivity/ {n;n;n;n;n;n;p}" $fname | awk '{print $4}'`
 ratmax=`grep "Maximum Im/Re Ratio =" $fname | awk '{print $9}'`
 hall=`sed -n -e "/     Hall factor/ {n;p}" $fname | awk '{print $2}'`
 eplrn=`grep 'Formation Energy (eV):' $fname | awk '{print $4}'`
@@ -92,6 +98,11 @@ fi
 if test "$elph" != ""; then
         echo elph
         echo $elph
+fi
+
+if test "$mcmillan" != ""; then
+        echo mcmillan
+        echo $mcmillan
 fi
 
 if test "$allDyn" != ""; then
@@ -119,19 +130,34 @@ if test "$mobcb" != ""; then
         for x in $mobcb; do echo $x; done
 fi
 
-if test "$mobnewx" != ""; then
-        echo mobnewx
-        for x in $mobnewx; do echo $x; done
+if test "$mobnewxx" != ""; then
+        echo mobnewxx
+        for x in $mobnewxx; do echo $x; done
 fi
 
-if test "$mobnewy" != ""; then
-        echo mobnewy
-        for x in $mobnewy; do echo $x; done
+if test "$mobnewyy" != ""; then
+        echo mobnewyy
+        for x in $mobnewyy; do echo $x; done
 fi
 
-if test "$mobnewz" != ""; then
-        echo mobnewz
-        for x in $mobnewz; do echo $x; done
+if test "$mobnewzz" != ""; then
+        echo mobnewzz
+        for x in $mobnewzz; do echo $x; done
+fi
+
+if test "$condnewxx" != ""; then
+        echo condnewxx
+        for x in $condnewxx; do echo $x; done
+fi
+
+if test "$condnewyy" != ""; then
+        echo condnewyy
+        for x in $condnewyy; do echo $x; done
+fi
+
+if test "$condnewzz" != ""; then
+        echo condnewzz
+        for x in $condnewzz; do echo $x; done
 fi
 
 if test "$hall" != ""; then
@@ -224,6 +250,15 @@ if test "$omega" != ""; then
         for x in $omega; do echo $x; done
 fi
 
+if test "$on_shell_Omega" != ""; then
+        echo on_shell_Omega
+        for x in $on_shell_Omega; do echo $x; done
+fi
+
+if test "$off_shell_Omega" != ""; then
+        echo off_shell_Omega
+        for x in $off_shell_Omega; do echo $x; done
+fi
 
 if test "$lam_tot" != ""; then
         echo lam_tot

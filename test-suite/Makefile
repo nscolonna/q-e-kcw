@@ -29,6 +29,10 @@ default :
 prolog :
 	@sed "s|XXXXXX|$(ESPRESSO_ROOT)|g" < userconfig.tmp > userconfig
 	@if ! test -d $(ESPRESSO_TMPDIR); then mkdir $(ESPRESSO_TMPDIR); fi
+	@if ! test -f ph_multipole/ph.in.01; then touch ph_multipole/ph.in.01 ; fi
+	@if ! test -f ph_multipole/ph.in.02; then touch ph_multipole/ph.in.02 ; fi
+	@if ! test -f ph_multipole/ph.in.03; then touch ph_multipole/ph.in.03 ; fi
+	@if ! test -f ph_multipole/ph.in.04; then touch ph_multipole/ph.in.04 ; fi
 
 pseudo :
 	@./check_pseudo.sh pw_
@@ -161,6 +165,7 @@ clean:
 	        ph_U_metal_us/iron.* ph_U_insulator_us/bn.* ph_U_metal_paw/nickel.* ph_U_insulator_paw/bn.*
 	@rm -rf ph_*/*.wfc* ph_*/*.hub*
 	@rm -rf ph_1d/dynmat.axsf ph_1d/dynmat.mold
+	@rm -rf ph_raman/dynmat.axsf ph_raman/dynmat.mold
 	@rm -rf ph_2d/bn.frc ph_2d/bn.frq ph_2d/bn.frq.gp
 	@rm -rf ph_twochem/dynq1
 	@rm -rf ph_multipole/*npz ph_multipole/*fmt ph_multipole/*dat* ph_multipole/*pkl ph_multipole/*processing*
@@ -171,13 +176,13 @@ clean:
 		ph_ahc*/*.fc ph_ahc*/ahc_dir*
 # Cleaning HP final files
 	@rm -rf hp_*/HP hp_*/*hub* hp_*/*.xml hp_*/*.wfc* hp_*/*.save hp_*/*Hubbard_parameters* \
-		hp_*/*HubbardV* hp_*/*mix* hp_*/*parameters.out
+		hp_*/*HubbardV* hp_*/*mix* hp_*/*parameters.out hp_*/HUBBARD.dat
 # Cleaning KCW final files
 	@rm -rf	kcw_*/out kcw_*/*.nnkp kcw_*/*.wout kcw_*/*.amn kcw_*/*.mmn kcw_*/*.eig kcw_*/*band* kcw_*/*chk \
                 kcw_*/*.dat kcw_*/*.xyz kcw_*/*.mat 
 # Cleaning EPW final files
 	@rm -rf epw_*/_ph0 epw_*/*.save epw_*/*.wfc* epw_*/*.dyn* \
-		epw_*/*.qdos_* epw_*/*.P epw_*/*.wout epw_*/crystal.fmt epw_*/*.pade* \
+		epw_*/*.qdos_* epw_*/*.P epw_*/*.wout epw_*/crystal*.fmt epw_*/*.pade* \
 		epw_*/*.epmat_wanep epw_*/*.kgmap epw_*/*.nnkp epw_*/*.epmatwp* \
 		epw_*/*.acon_iso_* epw_*/*.a2f* epw_*/*.phdos* epw_*/*.lambda \
 		epw_*/*.kmap epw_*/*.lambda_k_pairs epw_*/*.ukk epw_*/*.imag_aniso* \
@@ -191,24 +196,25 @@ clean:
 		epw_*/*.mmn epw_*/*.epmatkq* epw_*/*.epmatkqcb* epw_*/sparse* \
 		epw_*/*.Fin_restart* epw_*/*.Fin_restartcb* epw_*/*.acon_iso_* \
 		epw_*/*.bvec epw_*/*.fc epw_*/*.xml epw_*/*.labelinfo.dat \
-		epw_*/Fepmatkq1 epw_*/Fepmatkqcb1 epw_*/Fsparse epw_*/Fsparsecb \
-		epw_*/inv_taucb_tmp epw_*/inv_tau_tmp epw_*/*.cube epw_*/EPW.bib \
-		epw_*/*_hr.dat epw_*/*_wsvec.dat epw_*/epwdata.fmt epw_*/IBTEvel_sup.fmt \
-		epw_*/inv_taucb.fmt epw_*/inv_tau.fmt epw_*/restart.fmt epw_*/vmedata.fmt \
-		epw_*/selecq.fmt epw_*/dmedata.fmt epw_*/band.eig epw_*/ksdata.fmt \
-		epw_*/inv_tau_freq.fmt epw_*/inv_taucb_freq.fmt epw_*/inv_taucb_mode.fmt \
-		epw_*/mobility_nk.fmt epw_*/mobility_nuq.fmt epw_*/inv_tau_mode.fmt \
-		epw_*/wigner.fmt epw_*/*.dos epw_*/*.dmat* epw_*/*.qmap epw_*/*.dwmatwe* \
+		epw_*/Fepmatkq1* epw_*/Fepmatkqcb1* epw_*/Fsparse* epw_*/Fsparsecb* \
+		epw_*/*.cube epw_*/EPW.bib \
+		epw_*/*_hr.dat epw_*/*_wsvec.dat epw_*/epwdata*.fmt epw_*/IBTEvel_sup*.fmt \
+		epw_*/restart*.fmt epw_*/vmedata*.fmt \
+		epw_*/selecq.fmt epw_*/dmedata*.fmt epw_*/band*.eig epw_*/ksdata*.fmt \
+		epw_*/mobility_nk*.fmt epw_*/mobility_nuq*.fmt epw_*/inv_tau* \
+		epw_*/wigner*.fmt epw_*/*.dos epw_*/*.dmat* epw_*/*.qmap epw_*/*.dwmatwe* \
 		epw_*/*.symk epw_*/*.sthmatwe* epw_*/*.xqc* epw_*/*.dgmatwe* epw_*/*.cpmew* \
-		epw_*/elself_wfpt_sup.* epw_*/*.bak
+		epw_*/elself_wfpt_sup.* epw_*/*.bak epw_*/out.* epw_*/m_effective*.fmt
 
 # Special cases for EPW
 	@rm -rf epw_base/save epw_super/save epw_super/*.bands.*.dat epw_pl/save/ epw_polar/save/ \
 		epw_trev/save epw_trev_uspp/save epw_trev_paw/save \
-		epw_mob/save epw_mob_ibte/save epw_mob_ibte_sym/save epw_mob_polar/save \
+		epw_mob/save epw_mob_ibte/save epw_mob_ibte_sym/save epw_mob_polar/save epw_mob_U/save \
 		epw_qdpt/save epw_2D/save epw_hall/save epw_qdpt/*.dat epw_wfpt/save \
 		epw_wfpt/matdyn.modes epw_plrn/*.plrn epw_plrn/plrn_tmp epw_plrn/save \
-		epw_plrn/dtau.plrn.xsf
+		epw_plrn/dtau.plrn.xsf epw_tdbe/ie_ph.dat epw_tdbe/iph_e.dat          \
+		epw_tdbe/felec epw_tdbe/nphon epw_tdbe/*points epw_tdbe/selecq_tdbe.fmt \
+	    epw_tdbe/inv_tau_rta* epw_tdbe/ph_freq epw_tdbe/save epw_lsda_metal/save
 
 # Cleaning IMAGE final files
 	@rm -rf image_*/_ph0 image_*/*.save image_*/*.xml image_*/*.dyn? image_*/*.dyn??  \
@@ -235,54 +241,3 @@ purge: clean
 	@for x in `find cp_* -name "benchmark*"`; do rm -rf $$x; done
 	@for x in `find QEHeat_* -name "benchmark*"`; do rm -rf $$x; done
 
-
-run-tests-serial : run-tests-pw-serial run-tests-cp-serial run-tests-ph-serial run-tests-epw-serial run-tests-hp-serial run-tests-tddfpt-serial run-tests-kcw-serial
-	@echo '$@ obsolete, use "make run-tests" instead'
-run-tests-pw-serial : run-tests-pw
-	@echo '$@ obsolete, use "make run-tests-pw" instead'
-run-tests-cp-serial : run-tests-cp
-	@echo '$@ obsolete, use "make run-tests-cp" instead'
-run-tests-ph-serial : run-tests-ph
-	@echo '$@ obsolete, use "make run-tests-ph" instead'
-run-tests-epw-serial : run-tests-epw
-	@echo '$@ obsolete, use "make run-tests-epw" instead'
-run-tests-hp-serial : run-tests-hp
-	@echo '$@ obsolete, use "make run-tests-hp" instead'
-run-tests-tddfpt-serial : run-tests-tddfpt
-	@echo '$@ obsolete, use "make run-tests-tddfpt" instead'
-run-tests-kcw-serial : run-tests-kcw
-	@echo '$@ obsolete, use "make run-tests-kcw" instead'
-run-tests-pp-serial : run-tests-pp
-	@echo '$@ obsolete, use "make run-tests-pp" instead'
-run-tests-zg-serial : run-tests-zg
-	@echo '$@ obsolete, use "make run-tests-zg" instead'
-
-run-tests-parallel : run-tests-pw-parallel run-tests-cp-parallel run-tests-ph-parallel run-tests-epw-parallel run-tests-hp-parallel run-tests-tddfpt-parallel run-tests-kcw-parallel
-	@echo '$@ obsolete, use "make run-tests NPROCS=4" instead'
-run-tests-pw-parallel : prolog pseudo
-	@echo '$@ obsolete, use "make run-tests-pw NPROCS=4" instead'
-	env QE_USE_MPI=4 ${TESTCODE_DIR}/bin/testcode.py --verbose --category=pw_all
-run-tests-cp-parallel : prolog pseudo
-	@echo '$@ obsolete, use "make run-tests-cp NPROCS=4" instead'
-	env QE_USE_MPI=4 ${TESTCODE_DIR}/bin/testcode.py --verbose --category=cp_all
-run-tests-ph-parallel : prolog pseudo
-	@echo '$@ obsolete, use "make run-tests-ph NPROCS=4" instead'
-	env QE_USE_MPI=4 ${TESTCODE_DIR}/bin/testcode.py --verbose --category=ph_all
-run-tests-epw-parallel : prolog pseudo
-	@echo '$@ obsolete, use "make run-tests-epw NPROCS=4" instead'
-	env QE_USE_MPI=4 ${TESTCODE_DIR}/bin/testcode.py --verbose --category=epw_all
-run-tests-hp-parallel : prolog pseudo
-	@echo '$@ obsolete, use "make run-tests-hp NPROCS=4" instead'
-	env QE_USE_MPI=4 ${TESTCODE_DIR}/bin/testcode.py --verbose --category=hp_all
-run-tests-tddfpt-parallel : prolog pseudo
-	@echo '$@ obsolete, use "make run-tests-tddfpt NPROCS=4" instead'
-	env QE_USE_MPI=4 ${TESTCODE_DIR}/bin/testcode.py --verbose --category=tddfpt_all
-run-tests-kcw-parallel : prolog pseudo
-	@echo '$@ obsolete, use "make run-tests-kcw NPROCS=4" instead'
-	env QE_USE_MPI=4 ${TESTCODE_DIR}/bin/testcode.py --verbose --category=kcw_all
-run-tests-pp-parallel : prolog pseudo
-	@echo '$@ obsolete, use "make run-tests-pp NPROCS=4" instead'
-	env QE_USE_MPI=4 ${TESTCODE_DIR}/bin/testcode.py --verbose --category=pp_all
-run-tests-zg-parallel : prolog pseudo
-	@echo '$@ obsolete, use "make run-tests-zg NPROCS=4" instead'
-	env QE_USE_MPI=4 ${TESTCODE_DIR}/bin/testcode.py --verbose --category=zg_all

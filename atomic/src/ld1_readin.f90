@@ -50,6 +50,8 @@ subroutine ld1_readin( )
   use xc_lib, only : xclib_dft_is_libxc, xclib_init_libxc
   use radial_grids, only: do_mesh, check_mesh
   use atomic_paw, only : paw2us
+  USE upf_utils,  only : imatches
+
   implicit none
 
   integer ::  &
@@ -67,7 +69,6 @@ subroutine ld1_readin( )
   character(len=25) :: rel_dist
   character(len=2), external :: atom_name
   integer, external :: atomic_number
-  logical, external :: matches
 
   namelist /input/ xmin,    &  ! the minimum x of the linear mesh
        dx,      &  ! parameters of the mesh
@@ -521,6 +522,8 @@ subroutine ld1_readin( )
            octsc (ns1,1)= ocs (ns)
            iswtsc(ns1,1)= isws(ns)
            jjtsc (ns1,1)= jjs (ns)
+           rcuttsc(ns1,1)= rcut(ns)
+           rcutustsc(ns1,1)= rcutus(ns)
         end if
      end do
      !
@@ -611,15 +614,14 @@ subroutine ld1_readin( )
      !
      if (file_pseudo == ' ') &
        call errore('ld1_readin','file_pseudo is needed',1)
-     if (matches('.upf',file_pseudo) .or. matches('.UPF', file_pseudo)) then
+     if (imatches('.upf',file_pseudo) ) then
         !
         !    UPF format
         !
         call import_upf ( )
         call check_mesh(grid)
         !
-     else if ( matches('.rrkj3', file_pseudo) .or. &
-               matches('.RRKJ3', file_pseudo)) then
+     else if ( imatches('.rrkj3', file_pseudo) ) then
         !
         !    Old RRKJ format
         !

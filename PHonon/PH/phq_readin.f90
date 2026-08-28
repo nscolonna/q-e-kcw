@@ -23,7 +23,7 @@ SUBROUTINE phq_readin()
   USE start_k,       ONLY : reset_grid
   USE klist,         ONLY : xk, nks, nkstot, lgauss, two_fermi_energies, ltetra
   USE control_flags, ONLY : gamma_only, tqr, restart, io_level, &
-                            ts_vdw, ldftd3, lxdm, isolve, dfpt_hub
+                            ts_vdw, ldftd3, lxdm, isolve
   USE xc_lib,        ONLY : xclib_dft_is
   USE uspp,          ONLY : okvan
   USE fixed_occ,     ONLY : tfixed_occ
@@ -31,13 +31,13 @@ SUBROUTINE phq_readin()
   USE cellmd,        ONLY : lmovecell
   USE run_info,      ONLY : title
   USE control_ph,    ONLY : epsil, zue, zeu, xmldyn, newgrid,                      &
-                            trans, ldisp, recover, lnoloc, start_irr, &
+                            trans, ldisp, recover, start_irr, &
                             last_irr, start_q, last_q, current_iq, tmp_dir_ph, &
                             ext_recover, ext_restart, u_from_file, ldiag, &
                             search_sym, lqdir, electron_phonon, tmp_dir_phq, &
                             qplot, only_init, only_wfc, &
                             low_directory_check, nk1, nk2, nk3, k1, k2, k3, &
-                            dftd3_hess
+                            dftd3_hess, lmultipole
   USE save_ph,       ONLY : tmp_dir_save, save_ph_input_variables
   USE gamma_gamma,   ONLY : asr
   USE partial,       ONLY : atomo, nat_todo, nat_todo_input
@@ -61,9 +61,9 @@ SUBROUTINE phq_readin()
                             el_ph_sigma, el_ph_nsigma, el_ph_ngauss,auxdvscf
   USE dfile_star,    ONLY : drho_star, dvscf_star
 
-  USE qpoint,        ONLY : nksq, xq
+  USE qpoint,        ONLY : nksq
   USE control_lr,    ONLY : lgamma, lrpa, alpha_mix, lgamma_gamma, tr2_ph, niter_ph, &
-                            nmix_ph, maxter, reduce_io, rec_code_read, lmultipole, lnolr
+                            nmix_ph, maxter, reduce_io, rec_code_read, lnolr, lnoloc
   ! YAMBO >
   USE YAMBO,         ONLY : elph_yambo,dvscf_yambo
   ! YAMBO <
@@ -80,6 +80,7 @@ SUBROUTINE phq_readin()
   USE open_close_input_file, ONLY : open_input_file, close_input_file
   USE el_phon,       ONLY : kx, ky, kz, elph_print
   USE two_chem,      ONLY : twochem
+  USE upf_utils,     ONLY : imatches
   !
   IMPLICIT NONE
   !
@@ -102,7 +103,6 @@ SUBROUTINE phq_readin()
   LOGICAL      :: q2d, q_in_band_form
   INTEGER, EXTERNAL  :: atomic_number
   REAL(DP), EXTERNAL :: atom_weight
-  LOGICAL, EXTERNAL  :: imatches
   LOGICAL, EXTERNAL  :: has_xml
   LOGICAL :: exst, parallelfs
   REAL(DP), ALLOCATABLE :: xqaux(:,:)
@@ -270,7 +270,7 @@ SUBROUTINE phq_readin()
   electron_phonon=' '
   elph_nbnd_min = 1
   elph_nbnd_max = 0
-  el_ph_sigma  = 0.02
+  el_ph_sigma  = 0.02_DP
   el_ph_nsigma = 10
   el_ph_ngauss = 1
   lraman       = .FALSE.
@@ -383,6 +383,8 @@ SUBROUTINE phq_readin()
      isolve = 0
   CASE ('cg')
      isolve = 1
+  CASE ('direct')
+     isolve = 5
   CASE DEFAULT
      CALL errore('phq_readin','diagonalization '//trim(diagonalization)//' not implemented',1)
   END SELECT
@@ -507,40 +509,40 @@ SUBROUTINE phq_readin()
   !
   IF (zeu) zeu = epsil
   !
-  !    reads the q point (just if ldisp = .false.)
+  !    read the q point(s) (except if ldisp and nq* are set)
+  !    FIXME: merge qplot, ldisp, nq*, etc. etc., into a "card"
+  !           like K_POINTS for scf
   !
-  IF (meta_ionode) THEN
-     ios = 0
-     IF (qplot) THEN
-        READ (qestdin, *, iostat = ios) nqaux
-     ELSE IF (.NOT. ldisp) THEN
-        nqaux = 1
-        READ (qestdin, *, iostat = ios) (xq (ipol), ipol=1,3)
-     ENDIF
-  END IF
-  CALL mp_bcast(nqaux, meta_ionode_id, world_comm )
-  CALL mp_bcast(ios, meta_ionode_id, world_comm )
-  CALL errore ('phq_readin', 'reading xq', ABS (ios) )
-  IF (qplot) THEN
+  ios = 0
+  nqaux = 1
+  IF (.NOT. ( ldisp .AND. nq1*nq2*nq3 > 0 ) ) THEN
+     IF (meta_ionode) THEN
+        IF (qplot) READ (qestdin, *, iostat = ios) nqaux
+     END IF
+     CALL mp_bcast(nqaux, meta_ionode_id, world_comm )
+     CALL mp_bcast(ios, meta_ionode_id, world_comm )
+     CALL errore ('phq_readin', 'reading nq', ABS (ios) )
      ALLOCATE(xqaux(3,nqaux))
      ALLOCATE(wqaux(nqaux))
      IF (meta_ionode) THEN
         DO iq=1, nqaux
-           READ (qestdin, *, iostat = ios) (xqaux (ipol,iq), ipol=1,3), wqaux(iq)
+           IF (qplot) THEN
+              READ (qestdin, *, iostat = ios) (xqaux (ipol,iq), ipol=1,3), wqaux(iq)
+           ELSE
+              wqaux(iq) = 0.0_dp
+              READ (qestdin, *, iostat = ios) (xqaux (ipol,iq), ipol=1,3)
+           ENDIF
         ENDDO
      ENDIF
      CALL mp_bcast(ios, meta_ionode_id, world_comm )
      CALL errore ('phq_readin', 'reading xq', ABS (ios) )
      CALL mp_bcast(xqaux, meta_ionode_id, world_comm )
      CALL mp_bcast(wqaux, meta_ionode_id, world_comm )
-  ELSE
-     CALL mp_bcast(xq, meta_ionode_id, world_comm  )
-  ENDIF
-
-  IF (.NOT.ldisp) THEN
-     lgamma = xq (1) .EQ.0.D0.AND.xq (2) .EQ.0.D0.AND.xq (3) .EQ.0.D0
-     IF ( (epsil.OR.zue.or.lraman.or.elop) .AND..NOT.lgamma) &
-                CALL errore ('phq_readin', 'gamma is needed for elec.field', 1)
+     IF ( .NOT. qplot) THEN
+        lgamma = ( xqaux(1,1)==0.0_dp .AND. xqaux(2,1)==0.0_dp .AND. xqaux(3,1)==0.0_dp )
+        IF ( .NOT.lgamma .AND. (epsil.OR.zue.OR.lraman.OR.elop) ) &
+           CALL errore ('phq_readin', 'gamma is needed for elec.field', 1)
+     END IF
   ENDIF
 
   IF (magnetic_sym.AND.(epsil.OR.zue.or.lraman.or.elop)) &
@@ -692,7 +694,7 @@ SUBROUTINE phq_readin()
   ENDIF
 1001 CONTINUE
 
-  IF (qplot.AND..NOT.recover) THEN
+  IF (.NOT. ( ldisp .AND. nq1*nq2*nq3 > 0 ) .AND. .NOT.recover) THEN
      IF (q2d) THEN
         nqs=wqaux(2)*wqaux(3)
         ALLOCATE(x_q(3,nqs))
@@ -816,6 +818,10 @@ SUBROUTINE phq_readin()
 
   IF (noncolin.and.(lraman.or.elop)) CALL errore('phq_readin', &
       'lraman, elop, and noncolin not programmed',1)
+#if defined(__CUDA)
+  IF (lraman) CALL errore('phq_readin', &
+          'Raman for GPU not present in this version', 1)
+#endif
   IF ( domag .and. lspinorb .and. elph ) CALL errore('phq_readin', & 
     'el-ph coefficient calculation disabled in magnetic spinorbit case',1)
 
@@ -858,15 +864,19 @@ SUBROUTINE phq_readin()
   IF (tqr) CALL errore('phq_readin',&
      'The phonon code with Q in real space not available',1)
 
-  ! FM : incompatibility for lmultipole
-  IF (lmultipole) lnolr = .TRUE.
-  IF (lmultipole .and. (okvan .or. domag)) CALL errore('phq_readin',&
-     'lmultipole implemented only for norm-conserving potential, and without magnetization', 1)
-  IF (lmultipole .and. (ltetra .OR. lgauss)) CALL errore('phq_readin',&
+  IF (lmultipole)  THEN
+     ! FM : incompatibility for lmultipole
+     lnolr = .TRUE.
+     IF (okvan .or. domag) CALL errore('phq_readin',&
+     'lmultipole only for norm-conserving potential and no magnetization', 1)
+     IF (ltetra .OR. lgauss) CALL errore('phq_readin',&
      'lmultipole does not work with metal', 1)
-  IF (lmultipole .and. epsil) CALL errore('phq_readin',&
+     IF (epsil) CALL errore('phq_readin',&
      'lmultipole is already an electric field calculation', 1)
-  !
+#if defined(__CUDA)
+     CALL errore('phq_readin','multipoles for GPU not present in this version', 1)
+#endif
+  END IF
   !
   IF (start_irr < 0 ) CALL errore('phq_readin', 'wrong start_irr',1)
   !
@@ -950,6 +960,16 @@ SUBROUTINE phq_readin()
   !   IF (meta_ionode) ios = close_input_file ()
   !
   IF (twochem.AND.elph) CALL errore ('phq_readin', 'electron-phonon with twochem approach not yet implemented',1)
+  !
+  ! The twochem method with USPP is not implemented nor tested. One thing
+  ! needed to implement it is the conduction-band Pulay augmentation charge.
+  ! It would need modification of compute_alphasum and compute_becsum_ph and
+  ! using them in addusddens_pulay. Since this code is not used, this code
+  ! was deleted. See commit d144d538d for the last state with this code
+  ! present, which can serve as a starting point for twochem+USPP implementation.
+  IF (twochem .AND. okvan) CALL errore ('phq_readin', &
+       'twochem with ultrasoft/PAW pseudopotentials is not implemented', 1)
+  !
   IF (epsil.AND.(lgauss .OR. ltetra)) &
         CALL errore ('phq_readin', 'no elec. field with metals', 1)
   IF (modenum > 0) THEN

@@ -109,6 +109,22 @@ module tester
 
 contains
 
+  !> Whether a check that has already failed counts as an error.
+  !!
+  !! An absent fail counts the error; fail = .true. marks a check that is
+  !! expected to fail. This is a function rather than one inline expression
+  !! testing present(fail) and fail together, because Fortran does not
+  !! guarantee short-circuit evaluation of .or. and .and., so such an
+  !! expression reads the absent argument and segfaults.
+  pure function is_error(fail)
+    logical, intent(in), optional :: fail !< Fail flag.
+    logical                       :: is_error
+
+    is_error = .true.
+    if (present(fail)) is_error = .not. fail
+
+  end function is_error
+
   !> Initialize the tester.
   subroutine init(this, tolerance32, tolerance64)
     class(tester_t), intent(out)          :: this        !< The tester.
@@ -149,9 +165,10 @@ contains
     if (this% n_errors == 0) then
        write(*,*) 'fortran_tester: all tests succeeded'
     else
-       write(*,*) 'fortran_tester: tests failed'
        if (do_errorstop) then
           stop 1
+       else
+          write(*,*) 'fortran_tester: tests failed'
        end if
     end if
 
@@ -166,7 +183,7 @@ contains
 
     this% n_tests = this% n_tests + 1
     if (i1 .ne. i2) then
-       if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+       if (is_error(fail)) then
           this% n_errors = this% n_errors + 1
        end if
     end if
@@ -182,7 +199,7 @@ contains
 
     this% n_tests = this% n_tests + 1
     if (i1 .ne. i2) then
-       if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+       if (is_error(fail)) then
           this% n_errors = this% n_errors + 1
        end if
     end if
@@ -198,7 +215,7 @@ contains
 
     this% n_tests = this% n_tests + 1
     if (i1 .ne. i2) then
-       if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+       if (is_error(fail)) then
           this% n_errors = this% n_errors + 1
        end if
     end if
@@ -214,7 +231,7 @@ contains
 
     this% n_tests = this% n_tests + 1
     if (i1 .ne. i2) then
-       if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+       if (is_error(fail)) then
           this% n_errors = this% n_errors + 1
        end if
     end if
@@ -230,7 +247,7 @@ contains
 
     this% n_tests = this% n_tests + 1
     if (r1 .ne. r2) then
-       if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+       if (is_error(fail)) then
           this% n_errors = this% n_errors + 1
        end if
     end if
@@ -246,7 +263,7 @@ contains
 
     this% n_tests = this% n_tests + 1
     if (r1 .ne. r2) then
-       if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+       if (is_error(fail)) then
           this% n_errors = this% n_errors + 1
        end if
     end if
@@ -262,7 +279,7 @@ contains
 
     this% n_tests = this% n_tests + 1
     if (c1 .ne. c2) then
-       if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+       if (is_error(fail)) then
           this% n_errors = this% n_errors + 1
        end if
     end if
@@ -278,7 +295,7 @@ contains
 
     this% n_tests = this% n_tests + 1
     if (c1 .ne. c2) then
-       if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+       if (is_error(fail)) then
           this% n_errors = this% n_errors + 1
        end if
     end if
@@ -294,7 +311,7 @@ contains
 
     this% n_tests = this% n_tests + 1
     if (l1 .neqv. l2) then
-       if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+       if (is_error(fail)) then
           this% n_errors = this% n_errors + 1
        end if
     end if
@@ -311,12 +328,12 @@ contains
     this% n_tests = this% n_tests + 1
 
     if ( size(i1) .ne. size(i2) ) then
-       if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+       if (is_error(fail)) then
           this% n_errors = this% n_errors + 1
        end if
     else
        if ( maxval(abs(i1-i2)) > 0 ) then
-          if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+          if (is_error(fail)) then
              this% n_errors = this% n_errors + 1
           end if
        end if
@@ -334,12 +351,12 @@ contains
     this% n_tests = this% n_tests + 1
 
     if ( size(i1) .ne. size(i2) ) then
-       if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+       if (is_error(fail)) then
           this% n_errors = this% n_errors + 1
        end if
     else
        if ( maxval(abs(i1-i2)) > 0 ) then
-          if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+          if (is_error(fail)) then
              this% n_errors = this% n_errors + 1
           end if
        end if
@@ -357,12 +374,12 @@ contains
     this% n_tests = this% n_tests + 1
 
     if ( size(i1) .ne. size(i2) ) then
-       if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+       if (is_error(fail)) then
           this% n_errors = this% n_errors + 1
        end if
     else
        if ( maxval(abs(i1-i2)) > 0 ) then
-          if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+          if (is_error(fail)) then
              this% n_errors = this% n_errors + 1
           end if
        end if
@@ -380,12 +397,12 @@ contains
     this% n_tests = this% n_tests + 1
 
     if ( size(i1) .ne. size(i2) ) then
-       if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+       if (is_error(fail)) then
           this% n_errors = this% n_errors + 1
        end if
     else
        if ( maxval(abs(i1-i2)) > 0 ) then
-          if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+          if (is_error(fail)) then
              this% n_errors = this% n_errors + 1
           end if
        end if
@@ -403,12 +420,12 @@ contains
     this% n_tests = this% n_tests + 1
 
     if ( size(r1) .ne. size(r2) ) then
-       if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+       if (is_error(fail)) then
           this% n_errors = this% n_errors + 1
        end if
     else
        if ( maxval(abs(r1-r2)) > 0 ) then
-          if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+          if (is_error(fail)) then
              this% n_errors = this% n_errors + 1
           end if
        end if
@@ -426,12 +443,12 @@ contains
     this% n_tests = this% n_tests + 1
 
     if ( size(r1) .ne. size(r2) ) then
-       if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+       if (is_error(fail)) then
           this% n_errors = this% n_errors + 1
        end if
     else
        if ( maxval(abs(r1-r2)) > 0 ) then
-          if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+          if (is_error(fail)) then
              this% n_errors = this% n_errors + 1
           end if
        end if
@@ -449,12 +466,12 @@ contains
     this% n_tests = this% n_tests + 1
 
     if ( size(c1) .ne. size(c2) ) then
-       if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+       if (is_error(fail)) then
           this% n_errors = this% n_errors + 1
        end if
     else
        if ( maxval(abs(c1-c2)) > 0 ) then
-          if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+          if (is_error(fail)) then
              this% n_errors = this% n_errors + 1
           end if
        end if
@@ -472,12 +489,12 @@ contains
     this% n_tests = this% n_tests + 1
 
     if ( size(c1) .ne. size(c2) ) then
-       if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+       if (is_error(fail)) then
           this% n_errors = this% n_errors + 1
        end if
     else
        if ( maxval(abs(c1-c2)) > 0 ) then
-          if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+          if (is_error(fail)) then
              this% n_errors = this% n_errors + 1
           end if
        end if
@@ -497,13 +514,13 @@ contains
     this% n_tests = this% n_tests + 1
 
     if ( size(l1) .ne. size(l2) ) then
-       if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+       if (is_error(fail)) then
           this% n_errors = this% n_errors + 1
        end if
     else
        do k = 1, size(l1)
           if (l1(k) .neqv. l2(k)) then
-             if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+             if (is_error(fail)) then
                 this% n_errors = this% n_errors + 1
              end if
              exit
@@ -521,7 +538,7 @@ contains
 
     this% n_tests = this% n_tests + 1
     if (i < 0) then
-       if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+       if (is_error(fail)) then
           this% n_errors = this% n_errors + 1
        end if
     end if
@@ -536,7 +553,7 @@ contains
 
     this% n_tests = this% n_tests + 1
     if (i < 0) then
-       if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+       if (is_error(fail)) then
           this% n_errors = this% n_errors + 1
        end if
     end if
@@ -551,7 +568,7 @@ contains
 
     this% n_tests = this% n_tests + 1
     if (i < 0) then
-       if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+       if (is_error(fail)) then
           this% n_errors = this% n_errors + 1
        end if
     end if
@@ -566,7 +583,7 @@ contains
 
     this% n_tests = this% n_tests + 1
     if (i < 0) then
-       if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+       if (is_error(fail)) then
           this% n_errors = this% n_errors + 1
        end if
     end if
@@ -581,7 +598,7 @@ contains
 
     this% n_tests = this% n_tests + 1
     if (r < 0) then
-       if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+       if (is_error(fail)) then
           this% n_errors = this% n_errors + 1
        end if
     end if
@@ -596,7 +613,7 @@ contains
 
     this% n_tests = this% n_tests + 1
     if (r < 0) then
-       if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+       if (is_error(fail)) then
           this% n_errors = this% n_errors + 1
        end if
     end if
@@ -612,7 +629,7 @@ contains
     this% n_tests = this% n_tests + 1
 
     if ( minval(i) < 0 ) then
-       if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+       if (is_error(fail)) then
           this% n_errors = this% n_errors + 1
        end if
     end if
@@ -628,7 +645,7 @@ contains
     this% n_tests = this% n_tests + 1
 
     if ( minval(i) < 0 ) then
-       if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+       if (is_error(fail)) then
           this% n_errors = this% n_errors + 1
        end if
     end if
@@ -644,7 +661,7 @@ contains
     this% n_tests = this% n_tests + 1
 
     if ( minval(i) < 0 ) then
-       if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+       if (is_error(fail)) then
           this% n_errors = this% n_errors + 1
        end if
     end if
@@ -660,7 +677,7 @@ contains
     this% n_tests = this% n_tests + 1
 
     if ( minval(i) < 0 ) then
-       if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+       if (is_error(fail)) then
           this% n_errors = this% n_errors + 1
        end if
     end if
@@ -676,7 +693,7 @@ contains
     this% n_tests = this% n_tests + 1
 
     if ( minval(r) < 0 ) then
-       if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+       if (is_error(fail)) then
           this% n_errors = this% n_errors + 1
        end if
     end if
@@ -692,13 +709,19 @@ contains
     this% n_tests = this% n_tests + 1
 
     if ( minval(r) < 0 ) then
-       if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+       if (is_error(fail)) then
           this% n_errors = this% n_errors + 1
        end if
     end if
 
   end subroutine assert_positive_r64_1
 
+  ! The assert_close routines that follow test .not. (difference <= tolerance)
+  ! rather than (difference > tolerance): every comparison against a NaN is
+  ! false, so the latter form would report a NaN difference as a pass. The array
+  ! versions use .not. all(...) rather than .not. (maxval(...) <= tolerance)
+  ! because maxval skips NaN entries instead of propagating them.
+  !
   !> Check if two reals (32 bits) are close with respect a tolerance.
   subroutine assert_close_r32(this, r1, r2, fail)
     class(tester_t), intent(inout)        :: this !< The tester.
@@ -708,8 +731,8 @@ contains
 
     this% n_tests = this% n_tests + 1
 
-    if ( abs(r1-r2) > this% tolerance32 ) then
-       if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+    if ( .not. (abs(r1-r2) <= this% tolerance32) ) then
+       if (is_error(fail)) then
           this% n_errors = this% n_errors + 1
        end if
     end if
@@ -724,9 +747,8 @@ contains
     logical,          intent(in), optional :: fail !< Fail flag.
 
     this% n_tests = this% n_tests + 1
-
-    if ( abs(r1-r2) > this% tolerance64 * abs(r2) ) then
-       if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+    if ( .not. (abs(r1-r2) <= this% tolerance64) ) then
+       if (is_error(fail)) then
           this% n_errors = this% n_errors + 1
        end if
     end if
@@ -743,12 +765,12 @@ contains
     this% n_tests = this% n_tests + 1
 
     if ( size(r1) .ne. size(r2) ) then
-       if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+       if (is_error(fail)) then
           this% n_errors = this% n_errors + 1
        end if
     else
-       if ( maxval(abs(r1-r2)) > this% tolerance64 ) then
-          if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+       if ( .not. all(abs(r1-r2) <= this% tolerance32) ) then
+          if (is_error(fail)) then
              this% n_errors = this% n_errors + 1
           end if
        end if
@@ -766,12 +788,12 @@ contains
     this% n_tests = this% n_tests + 1
 
     if ( size(r1) .ne. size(r2) ) then
-       if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+       if (is_error(fail)) then
           this% n_errors = this% n_errors + 1
        end if
     else
-       if ( maxval(abs(r1-r2)) > this% tolerance64 ) then
-          if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+       if ( .not. all(abs(r1-r2) <= this% tolerance64) ) then
+          if (is_error(fail)) then
              this% n_errors = this% n_errors + 1
           end if
        end if
@@ -788,8 +810,8 @@ contains
 
     this% n_tests = this% n_tests + 1
 
-    if ( abs(c1-c2) > this% tolerance32 ) then
-       if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+    if ( .not. (abs(c1-c2) <= this% tolerance32) ) then
+       if (is_error(fail)) then
           this% n_errors = this% n_errors + 1
        end if
     end if
@@ -805,8 +827,8 @@ contains
 
     this% n_tests = this% n_tests + 1
 
-    if ( abs(c1-c2) >  this% tolerance64 * abs(real(c2)) ) then
-       if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+    if ( .not. (abs(c1-c2) <= this% tolerance64) ) then
+       if (is_error(fail)) then
           this% n_errors = this% n_errors + 1
        end if
     end if
@@ -823,12 +845,12 @@ contains
     this% n_tests = this% n_tests + 1
 
     if ( size(c1) .ne. size(c2) ) then
-       if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+       if (is_error(fail)) then
           this% n_errors = this% n_errors + 1
        end if
     else
-       if ( maxval(abs(c1-c2)) > this% tolerance32 ) then
-          if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+       if ( .not. all(abs(c1-c2) <= this% tolerance32) ) then
+          if (is_error(fail)) then
              this% n_errors = this% n_errors + 1
           end if
        end if
@@ -846,14 +868,14 @@ contains
     this% n_tests = this% n_tests + 1
 
     if ( size(c1) .ne. size(c2) ) then
-       if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+       if (is_error(fail)) then
           this% n_errors = this% n_errors + 1
        end if
     else
-       if ( maxval(abs(c1-c2)) > this% tolerance64 ) then
-          if (.not. present(fail) .or. (present(fail) .and. fail .eqv. .false.)) then
+       if ( .not. all(abs(c1-c2) <= this% tolerance64) ) then
+          if (is_error(fail)) then
              this% n_errors = this% n_errors + 1
-          end if    
+          end if
        end if
     end if
 

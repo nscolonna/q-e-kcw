@@ -44,24 +44,25 @@ subroutine newdq (dvscf, npe)
   !
   !   And the local variables
   !
-  integer :: na, ig, nt, ir, ipert, is, ih, jh
-  ! countera
+  integer :: na, nb, nab, ig, nt, ir, ipert, is, ih, jh
+  ! counters
 
   real(DP), allocatable :: qmod (:), qg (:,:), ylmk0 (:,:)
   ! the modulus of q+G
   ! the values of q+G
   ! the spherical harmonics
 
-  complex(DP), allocatable :: aux1 (:), aux2 (:,:), veff (:), qgm(:)
+  complex(DP), allocatable :: aux1 (:,:), veff (:), qgm(:), sk(:,:)
   ! work space
+
+  COMPLEX(DP) :: tmp
+  ! temporary scalar to hold accumulated value
 
   if (.not.okvan) return
   !
   call start_clock ('newdq')
   !
-  int3 (:,:,:,:,:) = (0.d0, 0.0d0)
-  allocate (aux1 (ngm))
-  allocate (aux2 (ngm , nspin_mag))
+  allocate (aux1 (ngm , nspin_mag))
   allocate (veff (dfftp%nnr))
   allocate (ylmk0(ngm , lmaxq * lmaxq))
   allocate (qgm  (ngm))
@@ -88,6 +89,9 @@ subroutine newdq (dvscf, npe)
   !     integrate the change of the self consistent potential and
   !     the Q functions
   !
+  !$acc data create(qgm) copyin(ylmk0, qmod, eigqts)
+  !
+  int3 (:,:,:,:,:) = (0.d0, 0.0d0)
   do ipert = 1, npe
 
      do is = 1, nspin_mag
@@ -96,49 +100,74 @@ subroutine newdq (dvscf, npe)
         enddo
         CALL fwfft ('Rho', veff, dfftp)
         do ig = 1, ngm
-           aux2 (ig, is) = veff (dfftp%nl (ig) )
+           aux1 (ig, is) = veff (dfftp%nl (ig) )
         enddo
      enddo
+     !$acc data copyin(aux1)
 
      do nt = 1, ntyp
         if (upf(nt)%tvanp ) then
+           !
+           ! Count the number of atoms of type nt and allocate sk accordingly
+           !
+           nab = 0
+           do na = 1, nat
+              if (ityp(na) == nt) nab = nab + 1
+           enddo
+           !
+           allocate(sk(ngm, nab))
+           !$acc data create(sk)
+           !
+           nb = 0
+           do na = 1, nat
+              if (ityp(na) == nt) then
+                 nb = nb + 1
+                 !
+                 ! Compute the structure factor for all atoms of type nt
+                 !
+                 !$acc parallel loop present(eigts1,eigts2,eigts3,mill,eigqts)
+                 do ig = 1, ngm
+                    sk(ig,nb) = eigts1(mill(1,ig),na) * &
+                                eigts2(mill(2,ig),na) * &
+                                eigts3(mill(3,ig),na) * &
+                                eigqts(na)
+                 enddo
+              endif
+           enddo
+           !
            do ih = 1, nh (nt)
               do jh = ih, nh (nt)
                  call qvan2 (ngm, ih, jh, nt, qmod, qgm, ylmk0)
+                 nb = 0
                  do na = 1, nat
                     if (ityp (na) == nt) then
-                       do ig = 1, ngm
-                          aux1(ig) = qgm(ig) * eigts1(mill(1,ig),na) * &
-                                               eigts2(mill(2,ig),na) * &
-                                               eigts3(mill(3,ig),na) * &
-                                               eigqts(na)
-                       enddo
+                       nb = nb + 1
                        do is = 1, nspin_mag
-                          int3(ih,jh,na,is,ipert) = omega * &
-                                             dot_product(aux1(:),aux2(:,is))
+                          tmp = (0.d0, 0.d0)
+                          !$acc parallel loop reduction(+:tmp) present(qgm, sk, aux1)
+                          do ig = 1, ngm
+                             tmp = tmp + conjg(qgm(ig) * sk(ig,nb)) * aux1(ig,is)
+                          enddo
+                          int3(ih,jh,na,is,ipert) = omega * tmp
+                          !
+                          !    We use the symmetry properties of the ps factor:
+                          !    int3(jh,ih,...) = int3(ih,jh,...)
+                          !
+                          int3(jh,ih,na,is,ipert) = omega * tmp
                        enddo
                     endif
                  enddo
               enddo
            enddo
-           do na = 1, nat
-              if (ityp(na) == nt) then
-                 !
-                 !    We use the symmetry properties of the ps factor
-                 !
-                 do ih = 1, nh (nt)
-                    do jh = ih, nh (nt)
-                       do is = 1, nspin_mag
-                          int3(jh,ih,na,is,ipert) = int3(ih,jh,na,is,ipert)
-                       enddo
-                    enddo
-                 enddo
-              endif
-           enddo
+           !
+           !$acc end data ! sk
+           deallocate(sk)
+           !
         endif
      enddo
-
+     !$acc end data ! aux1
   enddo
+  !$acc end data ! qgm
 #if defined(__MPI)
   call mp_sum ( int3, intra_bgrp_comm )
 #endif
@@ -155,7 +184,6 @@ subroutine newdq (dvscf, npe)
   deallocate (qgm)
   deallocate (ylmk0)
   deallocate (veff)
-  deallocate (aux2)
   deallocate (aux1)
   !
   call stop_clock ('newdq')

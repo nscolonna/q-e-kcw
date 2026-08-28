@@ -40,22 +40,16 @@ else(SED_ERROR MATCHES ".*invalid.*")
     message("   sed supports -E")
 endif(SED_ERROR MATCHES ".*invalid.*")
 
+find_program(SH_EXECUTABLE sh)
+if(NOT SH_EXECUTABLE)
+    message(FATAL_ERROR "A POSIX shell (sh) is needed to extract the git revision information "
+                        "but was not found. On Windows it is provided by MSYS2.")
+endif()
+
+configure_file(${CMAKE_CURRENT_LIST_DIR}/GitInfo.sh.in ${qe_BINARY_DIR}/GitInfo.sh)
+
 add_custom_target(gitrev
-  COMMAND ${CMAKE_COMMAND} -E echo_append "#define GIT_BRANCH_RAW \"" > ${GITREV_TMP}
-  COMMAND ${GIT_EXECUTABLE} rev-parse --abbrev-ref HEAD | sed "s/$/\"/" >> ${GITREV_TMP}
-  COMMAND ${CMAKE_COMMAND} -E echo >> ${GITREV_TMP}
-  COMMAND ${CMAKE_COMMAND} -E echo_append "#define GIT_HASH_RAW \"" >> ${GITREV_TMP}
-  COMMAND ${GIT_EXECUTABLE} describe --always --dirty --abbrev=40 --match="NoTagWithThisName" | sed "s/$/\"/" >> ${GITREV_TMP}
-  COMMAND ${CMAKE_COMMAND} -E echo >> ${GITREV_TMP}
-  COMMAND ${CMAKE_COMMAND} -E echo_append "#define GIT_COMMIT_LAST_CHANGED_RAW \"" >> ${GITREV_TMP}
-  COMMAND ${GIT_EXECUTABLE} log -1 --format=%ad | sed "s/$/\"/" >> ${GITREV_TMP}
-  COMMAND ${CMAKE_COMMAND} -E echo >> ${GITREV_TMP}
-  COMMAND ${CMAKE_COMMAND} -E echo_append "#define GIT_COMMIT_SUBJECT_RAW \"" >> ${GITREV_TMP}
-  COMMAND ${GIT_EXECUTABLE} log -1 --format=%s | cut -c 1-50 | sed ${SED_FLAG} "s/\"/\"\\/\\/'\"'\\/\\/\"/g" | tr -d "\\n" >> ${GITREV_TMP}
-  COMMAND ${CMAKE_COMMAND} -E echo_append "\"" >> ${GITREV_TMP}
-  COMMAND ${CMAKE_COMMAND} -E echo >> ${GITREV_TMP}
-  COMMAND ${CMAKE_COMMAND} -E copy_if_different ${GITREV_TMP} ${GITREV_FILE}
-  COMMAND ${CMAKE_COMMAND} -E remove ${GITREV_TMP}
+  COMMAND ${SH_EXECUTABLE} ${qe_BINARY_DIR}/GitInfo.sh
   WORKING_DIRECTORY ${qe_SOURCE_DIR}
   VERBATIM)
 

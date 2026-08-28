@@ -18,7 +18,7 @@ subroutine kcw_allocate_q
   USE noncollin_module,     ONLY : npol, nspin_mag
   USE fft_base,             ONLY : dfftp
   USE wavefunctions,        ONLY : evc
-  USE becmod,               ONLY : allocate_bec_type, becp
+  USE becmod,               ONLY : allocate_bec_type, becp, allocate_bec_type_acc
   USE uspp,                 ONLY : nkb, okvan
   USE qpoint,               ONLY : nksq, eigqts
   USE lrus,                 ONLY : becp1
@@ -36,6 +36,7 @@ subroutine kcw_allocate_q
   ELSE
      ! q/=0 : evq is allocated and calculated at point k+q
      ALLOCATE (evq(npwx*npol,nbnd))
+     !$acc enter data create(evq)
   ENDIF
   !
   ALLOCATE (dvpsi(npwx*npol,nbnd))
@@ -52,7 +53,7 @@ subroutine kcw_allocate_q
         ENDDO
      ENDDO
   ENDIF
-  CALL allocate_bec_type ( nkb, nbnd, becp )
+  CALL allocate_bec_type_acc ( nkb, nbnd, becp )
   ALLOCATE (eigqts(nat))
   ALLOCATE (becp1(nksq))
   DO ik = 1,nksq

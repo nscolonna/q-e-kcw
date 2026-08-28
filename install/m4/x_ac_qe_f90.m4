@@ -111,6 +111,9 @@ arm:armflang )
         if test "$use_pedantic" -eq 1; then
             try_fflags="-O2 -g -pedantic -Wall -Wextra -Wconversion -fimplicit-none -fbacktrace -ffree-line-length-0 -fcheck=all"
         fi
+        if test "$f90_major_version" -lt "9" ; then
+           AC_MSG_ERROR([Compiler version too old, use at least 9.0])
+        fi
         if test "$f90_major_version" -ge "10"; then
  	   try_fflags="$try_fflags -fallow-argument-mismatch"
         fi
@@ -127,10 +130,12 @@ arm:armflang )
             try_fflags="-O0 -g"
         fi
         try_fflags_nomain=""
+        try_fflags_openmp="-mp"
         try_f90flags="\$(FFLAGS) -cpp"
         try_fflags_noopt="-O0 -g"
         try_dflags="$try_dflags -D_AOCC"
         try_ldflags=""
+        try_ldflags_openmp="-mp"
         ;;
 # from now on: likely obsolete cases
 x86_64:nagfor* )

@@ -9,12 +9,24 @@ have_aocl=0
 have_atlas=0
 have_essl=0
 have_mkl=0
-have_armpl=0 
+have_armpl=0
+have_nvpl=0
 
 if test "$blas_libs" != ""
 then
     echo setting BLAS from \$BLAS_LIBS with no check ...  $blas_libs
     have_blas=1
+elif test "$NVPLROOT" != ""; then
+    # NVPLROOT explicitly set on aarch64: assume NVPL without testing
+    # (link-time probes fail due to unresolved OpenMP/runtime deps)
+    if test "$use_openmp" -eq 0; then
+        blas_libs="-L$NVPLROOT/lib -lnvpl_blas_lp64_seq -lnvpl_lapack_lp64_seq"
+    else
+        blas_libs="-L$NVPLROOT/lib -lnvpl_blas_lp64_gomp -lnvpl_lapack_lp64_gomp"
+    fi
+    have_blas=1
+    have_nvpl=1
+    echo setting BLAS/LAPACK from NVPLROOT ... $blas_libs
 else
     # check directories in LD_LIBRARY_PATH too
     # (maybe they are already searched by default: useless?)
@@ -26,10 +38,14 @@ else
     
     *:flang )
 	    #
-            # AOCC: assume -lblis -lflame without testing 
+            # AOCC: assume -lblis[-mt] -lflame without testing 
 	    #
             unset ac_cv_search_dgemm # clear cached value
-            blas_libs="-lblis -lflame"
+            if test "$use_openmp" -eq 1 ; then
+               blas_libs="-lblis-mt -lflame"
+            else
+               blas_libs="-lblis -lflame"
+            fi
             have_blas=1
             have_aocl=1
             ;;
@@ -237,7 +253,7 @@ else
                     fi
                     if test "$ac_cv_search_dgemm" != "no"
                     then break ; fi
-          done       
+          done
           ;;
 
     # obsolescent or obsolete architectures
@@ -336,7 +352,7 @@ fi
 
 if test "$have_blas" -eq 0  ; then
     # No blas library found: use internal one (in lapack)
-    blas_libs="\$(TOPDIR)/external/lapack/libblas.a"
+    blas_libs="\$(BUILDDIR)/external/lapack/libblas.a"
 else
     echo setting BLAS_LIBS... $blas_libs
 fi

@@ -53,15 +53,17 @@ CONTAINS
     !
     IMPLICIT NONE
     !
-    COMPLEX(DP) :: ham_int(num_wann,num_wann)                   ! interpolated H(k)
-    COMPLEX(DP) :: eigvc(num_wann,num_wann)
-    REAL(DP)    :: eigvl(num_wann,nks_bands)
+    !!COMPLEX(DP) :: ham_int(num_wann,num_wann)                   ! interpolated H(k)
+    COMPLEX(DP), ALLOCATABLE :: ham_int(:,:)                   ! interpolated H(k)
+    !!COMPLEX(DP) :: eigvc(num_wann,num_wann)
+    COMPLEX(DP), ALLOCATABLE :: eigvc(:,:)
+    !!REAL(DP)    :: eigvl(num_wann,nks_bands)
+    REAL(DP), ALLOCATABLE    :: eigvl(:,:)
     INTEGER     :: ik
     INTEGER     :: k_to_R     ! FT type: (+1) from k- to R-space, (-1) from R- to k-space
     !
     !
     ALLOCATE( Hamlt_R(nkstot_eff,num_wann,num_wann) )
-    ALLOCATE( centers(3,num_wann) )
     !
     CALL real_ham( Hamlt_R )
     !
@@ -69,8 +71,10 @@ CONTAINS
     WRITE( stdout, '(5x, "STARTING BAND STRUCTURE INTERPOLATION")' )
     WRITE( stdout, '(5x,36("="))')
     !
+    ALLOCATE( centers(3,num_wann) )
     IF (use_ws_distance) CALL read_wannier_centers()
     !
+    ALLOCATE(ham_int(num_wann,num_wann) , eigvc(num_wann,num_wann), eigvl(num_wann,nks_bands))
     k_to_R = -1
     DO ik = 1, nks_bands
       !
@@ -87,6 +91,7 @@ CONTAINS
     CALL print_bands_to_file( eigvl )
     !
     WRITE( stdout, '(/,5x, "ENDING BAND STRUCTURE INTERPOLATION",/)' )
+    DEALLOCATE(ham_int, eigvc, eigvl)
     !
     !
   END SUBROUTINE interpolate_ham
@@ -105,18 +110,22 @@ CONTAINS
     !
     COMPLEX(DP), INTENT(OUT) :: ham(:,:,:)     ! H(R)
     !
-    COMPLEX(DP) :: ham_aux(num_wann,num_wann)
+    !!COMPLEX(DP) :: ham_aux(num_wann,num_wann)
+    COMPLEX(DP), ALLOCATABLE :: ham_aux(:,:)
     INTEGER :: ir
     INTEGER :: k_to_R
     !
     !
+    ALLOCATE( ham_aux(num_wann, num_wann) )
     k_to_R = +1
     DO ir = 1, nkstot_eff
       !
-      CALL FT_ham( Hamlt(1:nkstot_eff,:,:), num_wann, ham_aux, ir, k_to_R )
+      !!CALL FT_ham( Hamlt(1:nkstot_eff,:,:), num_wann, ham_aux, ir, k_to_R )
+      CALL FT_ham( Hamlt(:,:,:), num_wann, ham_aux, ir, k_to_R )
       ham(ir,:,:) = ham_aux 
       !
     ENDDO
+    DEALLOCATE(ham_aux)
     !
     !
   END SUBROUTINE real_ham
@@ -144,7 +153,8 @@ CONTAINS
     INTEGER, INTENT(IN)      :: h_dim
     INTEGER, INTENT(IN)      :: ir         ! k-point (or R-point) index
     INTEGER, INTENT(IN)      :: k_to_R     ! FT type: (+1) from k- to R-space, (-1) from R- to k-space
-    COMPLEX(DP), INTENT(IN)  :: ham(nkstot_eff,h_dim,h_dim)
+    !!COMPLEX(DP), INTENT(IN)  :: ham(nkstot_eff,h_dim,h_dim)
+    COMPLEX(DP), INTENT(IN)  :: ham(:,:,:)
     !
     COMPLEX(DP), INTENT(OUT) :: ham_t(h_dim,h_dim)
     !
@@ -312,7 +322,7 @@ CONTAINS
     USE cell_base,            ONLY : alat, bg
     USE constants,            ONLY : BOHR_RADIUS_ANGS
     USE control_kcw,          ONLY : seedname, have_empty, num_wann_occ, num_wann_emp, &
-                                     centers, use_ws_distance
+                                     centers, use_ws_distance, l_unique_manifold
     USE io_global,            ONLY : ionode_id
     USE mp,                   ONLY : mp_bcast
     USE mp_global,            ONLY : intra_image_comm
@@ -331,53 +341,59 @@ CONTAINS
     IF ( ionode ) THEN
       !
       filename = trim(seedname)//'_centres.xyz'
-      nlines = num_wann_occ
+      if ( l_unique_manifold ) then
+        nlines = num_wann_occ + num_wann_emp
+      else
+        nlines = num_wann_occ
+      end if
       !
 50    INQUIRE( file=filename, exist=exst )
       !
       IF ( .not. exst .and. .not. check_emp ) THEN 
         CALL infomsg('read_wannier_centers','WARNING: centres.xyz NOT FOUND, disabling WS distance')
         use_ws_distance = .false.
-        RETURN
       ENDIF
       !
       IF ( .not. exst .and. check_emp ) THEN 
         CALL infomsg('read_wannier_centers','WARNING: emp_centres.xyz NOT FOUND, disabling WS distance')
         use_ws_distance = .false.
-        RETURN
       ENDIF
       !
       !
-      OPEN( 100, file=filename, form='formatted', status='old' )
-      !
-      READ( 100, *, end=10, err=20 )    ! skip 1st line
-      READ( 100, *, end=10, err=20 )    ! skip 2nd line
-      !
-      DO n = 1, nlines
+      IF (use_ws_distance) THEN
         !
-        READ( 100, '(a256)', end=10, err=20 ) input_line
+        OPEN( 100, file=filename, form='formatted', status='old' )
         !
-        IF ( input_line(1:1) .ne. 'X' ) CALL errore( 'read_wannier_centers', &
-                'X must precede each Wannier center line', 1 )
+        READ( 100, *, end=10, err=20 )    ! skip 1st line
+        READ( 100, *, end=10, err=20 )    ! skip 2nd line
         !
-        line = n
-        IF ( check_emp ) line = n + num_wann_occ
-        READ( input_line(2:), *, end=10, err=20 ) centers(:,line)
+        DO n = 1, nlines
+          !
+          READ( 100, '(a256)', end=10, err=20 ) input_line
+          !
+          IF ( input_line(1:1) .ne. 'X' ) CALL errore( 'read_wannier_centers', &
+                  'X must precede each Wannier center line', 1 )
+          !
+          line = n
+          IF ( check_emp ) line = n + num_wann_occ
+          READ( input_line(2:), *, end=10, err=20 ) centers(:,line)
+          !
+        ENDDO
         !
-      ENDDO
-      !
-      READ( 100, * ) input_line
-      IF ( input_line(1:1) == 'X' ) CALL errore( 'read_wannier_centers', &
-              'Missing some center! Check num_wann', 1 )
-      !
-      CLOSE( 100 )
-      !
-      IF ( have_empty .and. .not. check_emp ) THEN
+        READ( 100, * ) input_line
+        IF ( input_line(1:1) == 'X' ) CALL errore( 'read_wannier_centers', &
+                'Missing some center! Check num_wann', 1 )
         !
-        filename = trim(seedname)//'_emp_centres.xyz'
-        nlines = num_wann_emp
-        check_emp = .TRUE.
-        GO TO 50
+        CLOSE( 100 )
+        !
+        IF ( have_empty .and. .not. check_emp .and. .not. l_unique_manifold) THEN
+          !
+          filename = trim(seedname)//'_emp_centres.xyz'
+          nlines = num_wann_emp
+          check_emp = .TRUE.
+          GO TO 50
+          !
+        ENDIF
         !
       ENDIF
       !      
@@ -385,6 +401,7 @@ CONTAINS
     !
     centers = centers / ( alat * BOHR_RADIUS_ANGS )     ! alat always in BOHR ??? (TO BE CHECKED)
     call mp_bcast ( centers, ionode_id, intra_image_comm ) 
+    call mp_bcast ( use_ws_distance, ionode_id, intra_image_comm ) 
     !
     DO n = 1, num_wann_occ+num_wann_emp
       !

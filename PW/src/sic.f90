@@ -75,7 +75,7 @@ MODULE sic_mod
    END SUBROUTINE init_SIC
    !
    !--------------------------------------------------
-   SUBROUTINE add_vsic(rho, rho_core, rhog_core, v)
+   SUBROUTINE add_vsic(rho, rho_core, rhog_core, tau_core, v)
    !--------------------------------------------------
       !
       ! ... apply self-interaction correction to the KS potential 
@@ -85,13 +85,14 @@ MODULE sic_mod
       TYPE(scf_type), INTENT(INOUT) :: rho                   ! electron density
       REAL(DP),       INTENT(IN)    :: rho_core(dfftp%nnr)   ! core charge in real space
       COMPLEX(DP),    INTENT(IN)    :: rhog_core(ngm)        ! core charge in reciprocal space
+      REAL(DP),       INTENT(IN)    :: tau_core(dfftp%nnr)   ! kinetic energy density of core
       TYPE(scf_type), INTENT(INOUT) :: v                     ! Hxc potential of rho
       TYPE(scf_type), ALLOCATABLE   :: rho_aux               ! auxiliary density
       REAL(DP),       ALLOCATABLE   :: vxc(:,:)              ! xc potential of rho
       REAL(DP),       ALLOCATABLE   :: vxc_aux(:,:)          ! xc potential of rho_aux
       REAL(DP),       ALLOCATABLE   :: vh_aux(:,:)           ! hartree potential
       REAL(DP) :: vtxc_aux, etxc_aux, eh_aux, charge_aux, sgn
-      REAL(DP), PARAMETER :: ry2ev = 13.605698066
+      REAL(DP), PARAMETER :: ry2ev = 13.605698066_DP
       INTEGER :: is
       !
       IF(tot_magnetization /= 0) THEN

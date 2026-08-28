@@ -1,4 +1,5 @@
   !
+  ! Copyright (C) 2023-2026 EPW-Collaboration
   ! Copyright (C) 2016-2023 EPW-Collaboration
   ! Copyright (C) 2016-2019 Samuel Ponce', Roxana Margine, Feliciano Giustino
   ! Copyright (C) 2010-2016 Samuel Ponce', Roxana Margine, Carla Verdi, Feliciano Giustino
@@ -38,12 +39,12 @@
     USE io_global,     ONLY : stdout, ionode
     USE io_var,        ONLY : iospectral_sup, iospectral
     USE input,         ONLY : nbndsub, wmin_specfun, wmax_specfun, nw_specfun, &
-                              efermi_read, fermi_energy, nstemp
+                              efermi_read, fermi_energy, nstemp, lsda
     USE global_var,    ONLY : gtemp, etf, ibndmin, nkqf, nktotf, efnew, &
                               xkf, nkqtotf, esigmar_all, esigmai_all, a_all, nbndfst
     USE ep_constants,  ONLY : kelvin2eV, ryd2mev, one, ryd2ev, two, zero, pi
     USE mp,            ONLY : mp_sum
-    USE mp_global,     ONLY : inter_pool_comm
+    USE mp_global,     ONLY : inter_pool_comm, inter_image_comm
     USE parallelism,   ONLY : poolgather2
     !
     IMPLICIT NONE
@@ -55,6 +56,8 @@
     !! File name for spectral function
     CHARACTER(LEN = 256) :: filespecsup
     !! File name for supporting information
+    CHARACTER(LEN = 256) :: fnm
+    !! Buffer file name
     INTEGER :: iw
     !! Counter on the frequency
     INTEGER :: ik
@@ -113,6 +116,8 @@
     CALL poolgather2(nbndsub, nkqtotf, nkqf, etf, etf_all)
     CALL mp_sum(esigmar_all, inter_pool_comm)
     CALL mp_sum(esigmai_all, inter_pool_comm)
+    CALL mp_sum(esigmar_all, inter_image_comm)
+    CALL mp_sum(esigmai_all, inter_image_comm)
     !
     DO itemp = 1, nstemp ! second temperature loop to write data
       !
@@ -135,11 +140,13 @@
       ! and constant matrix elements for dipole transitions)
       !
       IF (ionode) THEN
+        fnm = ''
+        IF (TRIM(lsda) == 'down') fnm = '.down'
         WRITE(tp, "(f8.3)") gtemp(itemp) * ryd2ev / kelvin2eV
-        filespec = 'specfun.elself.' // trim(adjustl(tp)) // 'K'
-        filespecsup = 'specfun_sup.elself.' // trim(adjustl(tp)) // 'K'
-        OPEN(UNIT = iospectral, FILE = filespec )
-        OPEN(UNIT = iospectral_sup, FILE = filespecsup )
+        filespec = 'specfun.elself.' // trim(adjustl(tp)) // 'K' // TRIM(fnm)
+        filespecsup = 'specfun_sup.elself.' // trim(adjustl(tp)) // 'K' // TRIM(fnm)
+        OPEN(UNIT = iospectral, FILE = TRIM(filespec) )
+        OPEN(UNIT = iospectral_sup, FILE = TRIM(filespecsup) )
         WRITE(iospectral, '(/2x, a/)') '#Electronic spectral function (meV)'
         WRITE(iospectral_sup, '(/2x, a/)') '#KS eigenenergies + real and im part of electronic self-energy (meV)'
         WRITE(iospectral, '(/2x, a/)') '#K-point     Energy[eV]     A(k,w)[meV^-1]'
@@ -232,8 +239,8 @@
     DEALLOCATE(etf_all, STAT = ierr)
     IF (ierr /= 0) CALL errore('spectral_func_el_q', 'Error deallocating etf_all', 1)
     !
-    101 FORMAT(5x, 'ik = ', i7, '  w = ', f9.4, ' eV   A(k,w) = ', e12.5, ' meV^-1')
-    102 FORMAT(2i9, 2x, f12.4, 2x, f12.4, 2x, f12.4, 2x, f12.4, 2x, f12.4)
+    101 FORMAT(5x, 'ik = ', i7, '  w = ', f9.4, ' eV   A(k,w) = ', ES13.5, ' meV^-1')
+    102 FORMAT(2i9, 2x, ES13.5, 2x, ES13.5, 2x, ES13.5, 2x, ES13.5, 2x, ES13.5)
     !
     RETURN
     !
@@ -242,7 +249,7 @@
     !-----------------------------------------------------------------------
     !
     !-----------------------------------------------------------------------
-    SUBROUTINE spectral_func_ph_q(iqq, iq, totq)
+    SUBROUTINE spectral_func_ph_q(iqq, iq, totq, nbndsub_tot, wkf_tot, etf_tot)
     !-----------------------------------------------------------------------
     !!
     !! Compute the imaginary part of the phonon self energy due to electron-
@@ -260,48 +267,42 @@
     USE io_global, ONLY : stdout, ionode
     USE io_var,    ONLY : iospectral_sup, iospectral
     USE modes,     ONLY : nmodes
-    USE input,     ONLY : nbndsub, fsthick, shortrange, ngaussw, degaussw, &
-                          nsmear, eps_acoustic, efermi_read, fermi_energy, &
-                           nstemp, wmin_specfun, wmax_specfun, nw_specfun
+    USE input,     ONLY : fsthick, shortrange, ngaussw, degaussw, &
+                          nsmear, delta_smear, eps_acoustic, nstemp, &
+                          wmin_specfun, wmax_specfun, nw_specfun, &
+                          phonselfen
     USE pwcom,     ONLY : nelec, ef
-    USE input,     ONLY : isk_dummy
-    USE global_var,ONLY : gtemp, epf17, ibndmin, etf, nbndfst, &
-                          wkf, xqf, nkqf, nkf, wf, a_all_ph, efnew
+    USE input,     ONLY : isk_dummy, lsda
+    USE global_var,ONLY : gtemp, epf17, ibndmin, nbndfst, &
+                          nkqf, wf, a_all_ph, pi_0, &
+                          pir_all, gammai_all
     USE ep_constants,  ONLY : kelvin2eV, ryd2mev, ryd2ev, one, two, zero, cone, ci, eps8
     USE constants,     ONLY : pi
     USE mp,            ONLY : mp_barrier, mp_sum
     USE mp_global,     ONLY : inter_pool_comm
+    USE selfen,        ONLY : selfen_phon_q
     !
     IMPLICIT NONE
     !
-    CHARACTER(LEN = 20) :: tp
-    !! String for temperatures
-    CHARACTER(LEN = 256) :: filespec
-    !! File name for spectral function
-    CHARACTER(LEN = 256) :: filespecsup
-    !! File name for supporting information
+    !
     INTEGER, INTENT(in) :: iqq
     !! Current q-point index from selecq
     INTEGER, INTENT(in) :: iq
     !! Current q-point index
     INTEGER, INTENT(in) :: totq
     !! Total q-points in selecq window
+    INTEGER, INTENT(in) :: nbndsub_tot
+    !! Total number of bands 
+    REAL(KIND = DP), INTENT(in) :: wkf_tot(nkqf)
+    !! Integration weights
+    REAL(KIND = DP), INTENT(in) :: etf_tot(nbndsub_tot,nkqf)
+    !! Interpolated eigenvalues
     !
     ! Local variables
-    INTEGER :: ik
-    !! Counter on the k-point index
-    INTEGER :: ikk
-    !! k-point index
-    INTEGER :: ikq
-    !! q-point index
-    INTEGER :: ibnd
-    !! Counter on bands
-    INTEGER :: jbnd
-    !! Counter on bands
+    INTEGER :: ismear
+    !! Number of smearing values for the Gaussian function
     INTEGER :: imode
     !! Counter on mode
-    INTEGER :: fermicount
-    !! Number of states on the Fermi surface
     INTEGER :: iw
     !! Counter on frequency for the phonon spectra
     INTEGER :: itemp
@@ -311,45 +312,10 @@
     !
     REAL(KIND = DP) :: g2
     !! Electron-phonon matrix elements squared in Ry^2
-    REAL(KIND = DP) :: ef0
-    !! Fermi energy level
-    REAL(KIND = DP) :: dosef
-    !! Density of state N(Ef)
-    REAL(KIND = DP) :: ekk
-    !! Eigen energy on the fine grid relative to the Fermi level
-    REAL(KIND = DP) :: ekq
-    !! Eigen energy of k+q on the fine grid relative to the Fermi level
-    REAL(KIND = DP) :: wgkk
-    !! Fermi-Dirac occupation factor $f_{nk}(T)$
-    REAL(KIND = DP) :: wgkq
-    !! Fermi-Dirac occupation factor $f_{nk+q}(T)$
-    REAL(KIND = DP) :: fact
-    !! Temporary variable to store fact = wgkq - wgkk
-    REAL(KIND = DP) :: etmp1
-    !! Temporary variable to store etmp1 = ekq - ekk
-    REAL(KIND = DP) :: etmp2
-    !! Temporary variable to store etmp2 = ekq - ekk - ww
-    REAL(KIND = DP) :: weight
-    !! Self-energy factor
-    REAL(KIND = DP) :: inv_degaussw
-    !! Inverse Gaussian for efficiency reasons
-    REAL(KIND = DP) :: inv_eptemp
-    !! Inverse temperature
     REAL(KIND = DP) :: inv_pi
     !! Inverse pi
     REAL(KIND = DP) :: dw
     !! Frequency intervals
-    REAL(KIND = DP), EXTERNAL :: dos_ef
-    !! Function to compute the Density of States at the Fermi level
-    REAL(KIND = DP), EXTERNAL :: efermig
-    !! Function to compute the Fermi energy
-    REAL(KIND = DP), EXTERNAL :: wgauss
-    !! Fermi-Dirac distribution function (when -99)
-    REAL(KIND = DP), EXTERNAL :: w0gauss
-    !! This function computes the derivative of the Fermi-Dirac function
-    !! It is therefore an approximation for a delta function
-    REAL(KIND = DP) :: gamma0(nmodes)
-   !! Phonon self-energy
     REAL(KIND = DP) :: wq(nmodes)
     !! Phonon frequency on the fine grid
     REAL(KIND = DP) :: inv_wq(nmodes)
@@ -360,15 +326,29 @@
     !! If the phonon frequency is too small discart g
     REAL(KIND = DP) :: ww(nw_specfun)
     !! Current frequency
-    REAL(KIND = DP) :: gammai_all(nw_specfun, nmodes)
-    !! Imaginary part of the frequency dependent spectral function
-    REAL(KIND = DP) :: gammar_all(nw_specfun, nmodes)
-    !!  Real part of the Phonon self-energy (freq. dependent for spectral function)
+    REAL(KIND = DP) :: degaussw0
+    !! degaussw0 = (ismear-1) * delta_smear + degaussw
+    REAL(KIND = DP) :: eta
+    !! artificial broadening of 0.1 meV for the visualization of the spectral function
+    CHARACTER(LEN = 20) :: tp
+    !! String for temperatures
+    CHARACTER(LEN = 256) :: filespec
+    !! File name for spectral function
+    CHARACTER(LEN = 256) :: filespecsup
+    !! File name for supporting information
+    CHARACTER(LEN = 256) :: fnm
+    !! Buffer file name
+    !
+    fnm = ''
+    IF (TRIM(lsda) == 'down') fnm = '.down'
     !
     dw = (wmax_specfun - wmin_specfun) / DBLE(nw_specfun - 1)
     DO iw = 1, nw_specfun
       ww(iw) = wmin_specfun + DBLE(iw - 1) * dw
     ENDDO
+    !
+    eta = 0.1d0 / ryd2mev
+    !
     !
     ! Now pre-treat phonon modes for efficiency
     ! Treat phonon frequency and Bose occupation
@@ -378,18 +358,25 @@
       wq(imode) = wf(imode, iq)
       dwq(imode) = two * wq(imode)
       IF (wq(imode) > eps_acoustic) THEN
-        g2_tmp(imode) = one
         inv_wq(imode) = one / (two * wq(imode))
       ELSE
-        g2_tmp(imode) = zero
         inv_wq(imode) = zero
       ENDIF
     ENDDO
     !
+    !
+    IF (.NOT. phonselfen) THEN
+      CALL selfen_phon_q(iqq, iq, totq, nbndsub_tot, wkf_tot, etf_tot)
+    ENDIF
+    !
+    ! collect contributions from all pools (sum over k-points) this finishes the integral over the BZ  (k)
+    !
+    CALL mp_sum(gammai_all, inter_pool_comm)
+    CALL mp_sum(pir_all, inter_pool_comm)
+    CALL mp_barrier(inter_pool_comm)
+    !
+    !
     DO itemp = 1, nstemp
-      gammar_all(:, :) = zero
-      gammai_all(:, :) = zero
-      !
       ! Thomas-Fermi screening according to Resta PRB 1977
       ! Here specific case of Diamond
       !eps0   = 5.7
@@ -407,184 +394,82 @@
         WRITE(stdout, '(/5x, a, f10.6, a)' ) 'Golden Rule strictly enforced with T = ', gtemp(itemp) * ryd2ev, ' eV'
       ENDIF
       !
-      ! SP: Multiplication is faster than division ==> Important if called a lot in inner loops
-      inv_degaussw = one / degaussw
-      inv_eptemp   = one / gtemp(itemp)
-      inv_pi       = one / pi
-      !
-      ! Fermi level and corresponding DOS
-      !
-      IF (efermi_read) THEN
+      DO ismear = 1, nsmear
         !
-        ef0 = fermi_energy
+        degaussw0 = (ismear - 1) * delta_smear + degaussw
         !
-      ELSEIF (nsmear > 1) THEN
+        ! SP: Multiplication is faster than division ==> Important if called a lot
+        !     in inner loops
+        inv_pi       = one / pi
         !
-        ! if some bands are skipped (nbndskip /= 0), nelec has already been recalculated in ephwann_shuffle
-        ef0 = efermig(etf, nbndsub, nkqf, nelec, wkf, degaussw, ngaussw, 0, isk_dummy)
+        WRITE(stdout, '(5x, a)')
         !
-      ELSE !SP: This is added for efficiency reason because the efermig routine is slow
-        ef0 = efnew
-      ENDIF
-      !
-      ! N(Ef) in the equation for lambda is the DOS per spin
-      dosef = dos_ef(ngaussw, degaussw, ef0, etf, wkf, nkqf, nbndsub)
-      dosef = dosef / two
-      !
-      IF (iqq == 1) THEN
-        WRITE(stdout, 100) degaussw * ryd2ev, ngaussw
-        WRITE(stdout, 101) dosef / ryd2ev, ef0 * ryd2ev
-      ENDIF
-      !
-      CALL start_clock('PH SPECTRAL-FUNCTION')
-      !
-      fermicount = 0
-      gamma0(:)  = zero
-      !
-      DO ik = 1, nkf
-        ikk = 2 * ik - 1
-        ikq = ikk + 1
+        IF (iqq == 1 .and. itemp == 1) THEN
+          IF (ionode) THEN
+            WRITE(tp, "(f8.1)") gtemp(itemp) * ryd2ev / kelvin2eV
+            filespecsup = 'specfun_sup.phon' // TRIM(fnm) ! // trim(adjustl(tp)) // 'K'
+            OPEN(UNIT = iospectral_sup, FILE = TRIM(filespecsup))
+            WRITE(iospectral_sup, '(2x, a)') '#Phonon eigenenergies + real and im part of phonon self-energy (meV)'
+            WRITE(iospectral_sup, '(2x, a)') '#Q-point    Mode      Temp.[K]       smearing[eV]       w_q[eV]    &    
+                                          &w[eV]     Real Pi(w, T_low)[meV]   Real Pi(w=0,T_high)[meV]     Im Pi(w, T_low)[meV]'
+          ENDIF
+        ENDIF
         !
-        ! Here we must have ef, not ef0, to be consistent with ephwann_shuffle
-        IF ((MINVAL(ABS(etf(:, ikk) - ef)) < fsthick) .AND. &
-            (MINVAL(ABS(etf(:, ikq) - ef)) < fsthick)) THEN
-          !
-          fermicount = fermicount + 1
+        ! Write to output file
+        WRITE(stdout, '(/5x, a)') 'Real and Imaginary part of the phonon self-energy (omega=0) without gamma0.'
+        DO imode = 1, nmodes
+          ! Real and Im part of Phonon self-energy at 0 freq.
+          WRITE(stdout, 105) imode, ryd2ev * wq(imode), ryd2mev * pir_all(1, imode, itemp, ismear), &
+                             ryd2mev * gammai_all(1, imode, itemp, ismear)
+        ENDDO
+        !
+        ! Write to support files
+        DO iw = 1, nw_specfun
           !
           DO imode = 1, nmodes
             !
-            DO ibnd = 1, nbndfst
-              !
-              !  the fermi occupation for k
-              ekk = etf(ibndmin - 1 + ibnd, ikk) - ef0
-              wgkk = wgauss(-ekk * inv_eptemp, -99)
-              !
-              DO jbnd = 1, nbndfst
-                !
-                !  the fermi occupation for k+q
-                ekq = etf(ibndmin - 1 + jbnd, ikq) - ef0
-                wgkq = wgauss(-ekq * inv_eptemp, -99)
-                !
-                ! here we take into account the zero-point DSQRT(hbar/2M\omega)
-                ! with hbar = 1 and M already contained in the eigenmodes
-                ! g2 is Ry^2, wkf must already account for the spin factor
-                !
-                IF (shortrange .AND. (ABS(xqf(1, iq))> eps8 .OR. ABS(xqf(2, iq))> eps8 &
-                   .OR. ABS(xqf(3, iq))> eps8 )) THEN
-                  ! SP: The abs has to be removed. Indeed the epf17 can be a pure imaginary
-                  !     number, in which case its square will be a negative number.
-                  g2 = REAL((epf17(jbnd, ibnd, imode, ik)**two) * inv_wq(imode) * g2_tmp(imode)) !* epsTF
-                ELSE
-                  g2 = (ABS(epf17(jbnd, ibnd, imode, ik))**two) * inv_wq(imode) * g2_tmp(imode) !* epsTF
-                ENDIF
-                !
-                ! SP - 03/2019 - Retarded phonon self-energy
-                !                See Eq. 145 of RMP 89, 015003 (2017)
-                ! \Pi^R = k-point weight * [ [f(E_k+q) - f(E_k)]/ [E_k+q - E_k -w_q - id]
-                !                           -[f(E_k+q) - f(E_k)]/ [E_k+q - E_k - id] ]
-                ! The second term is gamma0 (static)
-                !
-                fact = wgkq - wgkk
-                etmp1 = ekq - ekk
-                weight = wkf(ikk) * fact * REAL(cone / (etmp1 + ci * degaussw))
-                !
-                gamma0(imode) = gamma0(imode) + weight * g2
-                !
-                DO iw = 1, nw_specfun
-                  !
-                  etmp2 = etmp1 - ww(iw)
-                  weight = wkf(ikk) * fact * REAL(cone / (etmp2 + ci * degaussw))
-                  gammar_all(iw, imode) = gammar_all(iw, imode) + weight * g2
-                  !
-                  ! Normal implementation
-                  !weight = wkf (ikk) * fact * AIMAG(cone / (etmp2 + ci * degaussw))
-                  !
-                  ! More stable:
-                  ! Analytical im. part
-                  weight = pi * wkf(ikk) * fact * w0gauss(etmp2 * inv_degaussw, 0) * inv_degaussw
-                  !
-                  gammai_all(iw, imode) = gammai_all(iw, imode) + weight * g2
-                  !
-                ENDDO
-              ENDDO ! jbnd
-            ENDDO   ! ibnd
-          ENDDO ! loop on q-modes
-        ENDIF ! endif fsthick
-      ENDDO ! loop on k
-      !
-      CALL stop_clock('PH SPECTRAL-FUNCTION')
-      !
-#if defined(__MPI)
-      !
-      ! collect contributions from all pools (sum over k-points) this finishes the integral over the BZ  (k)
-      !
-      CALL mp_sum(gammai_all, inter_pool_comm)
-      CALL mp_sum(gammar_all, inter_pool_comm)
-      CALL mp_sum(gamma0, inter_pool_comm)
-      CALL mp_sum(fermicount, inter_pool_comm)
-      CALL mp_barrier(inter_pool_comm)
-      !
-#endif
-      !
-      WRITE(stdout, '(5x, a)')
-      !
-      IF (iqq == 1 .and. itemp == 1) THEN
-        IF (ionode) THEN
-          WRITE(tp, "(f8.1)") gtemp(itemp) * ryd2ev / kelvin2eV
-          filespecsup = 'specfun_sup.phon'! // trim(adjustl(tp)) // 'K'
-          OPEN(UNIT = iospectral_sup, FILE = filespecsup)
-          WRITE(iospectral_sup, '(2x, a)') '#Phonon eigenenergies + real and im part of phonon self-energy (meV)'
-          WRITE(iospectral_sup, '(2x, a)') '#Q-point    Mode      Temp.[K]       w_q[eV]        w[eV]    &
-                                           &Real Sigma(w)[meV]   Real Sigma(w=0)[meV]     Im Sigma(w)[meV]'
-        ENDIF
-      ENDIF
-      !
-      ! Write to output file
-      WRITE(stdout, '(/5x, a)') 'Real and Imaginary part of the phonon self-energy (omega=0) without gamma0.'
-      DO imode = 1, nmodes
-        ! Real and Im part of Phonon self-energy at 0 freq.
-        WRITE(stdout, 105) imode, ryd2ev * wq(imode), ryd2mev * gammar_all(1, imode), ryd2mev * gammai_all(1, imode)
-      ENDDO
-      WRITE(stdout, '(5x, a, i8, a, i8)' ) 'Number of (k,k+q) pairs on the Fermi surface: ', fermicount, ' out of ', totq
-      !
-      ! Write to support files
-      DO iw = 1, nw_specfun
-        !
-        DO imode = 1, nmodes
+            !a_all(iw,iq) = a_all(iw,iq) + ABS(gammai_all(imode,iq,iw) ) / pi / &
+            !      ( ( ww - wq - pir_all (imode,iq,iw) + pi_0 (imode))**two + (gammai_all(imode,iq,iw) )**two )
+            ! SP: From Eq. 16 of PRB 9, 4733 (1974)
+            !    Also in Eq.2 of PRL 119, 017001 (2017).
+            ! in this spectral function, phonons are unscreened with the static part calculated at the high smearing values from the DFPT calculation
+            a_all_ph(iw, iqq, itemp, ismear) = a_all_ph(iw, iqq, itemp, ismear) + inv_pi * dwq(imode) * &
+                                    (two * ww(iw) * eta - dwq(imode) * gammai_all(iw, imode, itemp, ismear)) / &
+                                    ((ww(iw)**two - eta**two - wq(imode)**two - dwq(imode) * &
+                                    (pir_all(iw, imode, itemp, ismear) - pi_0(imode)))**two + (two*ww(iw) * eta - dwq(imode) * &
+                                    gammai_all(iw, imode, itemp, ismear))**two)
+            !
+            IF (ionode) THEN
+              WRITE(iospectral_sup, 102) iq, imode, gtemp(itemp) * ryd2ev / kelvin2eV, degaussw0 * ryd2ev, ryd2ev * wq(imode), &
+                                       ryd2ev * ww(iw), ryd2mev * pir_all(iw, imode, itemp, ismear), ryd2mev * pi_0(imode), &
+                                       ryd2mev * gammai_all(iw, imode, itemp, ismear)
+            ENDIF
+            !
+          ENDDO
           !
-          !a_all(iw,iq) = a_all(iw,iq) + ABS(gammai_all(imode,iq,iw) ) / pi / &
-          !      ( ( ww - wq - gammar_all (imode,iq,iw) + gamma0 (imode))**two + (gammai_all(imode,iq,iw) )**two )
-          ! SP: From Eq. 16 of PRB 9, 4733 (1974)
-          !    Also in Eq.2 of PRL 119, 017001 (2017).
-          a_all_ph(iw, iqq, itemp) = a_all_ph(iw, iqq, itemp) + inv_pi * dwq(imode)**two * ABS(gammai_all(iw, imode)) / &
-                              ((ww(iw)**two - wq(imode)**two - dwq(imode) * (gammar_all(iw, imode) - gamma0(imode)))**two + &
-                               (dwq(imode) * gammai_all(iw, imode))**two)
+!         IF (ionode) THEN
+!           WRITE(iospectral, 103) iq, ryd2ev * ww(iw), a_all_ph(iw, iqq) / ryd2mev ! print to file
+!         ENDIF
           !
-          IF (ionode) THEN
-            WRITE(iospectral_sup, 102) iq, imode, gtemp(itemp) * ryd2ev / kelvin2eV, ryd2ev * wq(imode), ryd2ev * ww(iw), &
-                                       ryd2mev * gammar_all(iw, imode), ryd2mev * gamma0(imode), ryd2mev * gammai_all(iw, imode)
-          ENDIF
-          !
-        ENDDO
-        !
-!        IF (ionode) THEN
-!          WRITE(iospectral, 103) iq, ryd2ev * ww(iw), a_all_ph(iw, iqq) / ryd2mev ! print to file
-!        ENDIF
-        !
-      ENDDO
+        ENDDO !iw
+      ENDDO !ismear
     ENDDO ! itemp
-      !
+    !
     IF (iqq == totq) THEN
       IF (ionode) THEN
         DO itemp = 1, nstemp
           WRITE(tp, "(f8.3)") gtemp(itemp) * ryd2ev / kelvin2eV
-          filespec = 'specfun.phon.' // trim(adjustl(tp)) // 'K'
-          OPEN(UNIT = iospectral, FILE = filespec)
+          filespec = 'specfun.phon.' // trim(adjustl(tp)) // 'K'//TRIM(fnm)
+          OPEN(UNIT = iospectral, FILE = TRIM(filespec))                
           WRITE(iospectral, '(/2x, a)') '#Phonon spectral function (meV)'
-          WRITE(iospectral, '(/2x, a)') '#Q-point    Energy[eV]     A(q,w)[meV^-1]'
-          DO iqq_write = 1, totq
-            DO iw = 1, nw_specfun
-              WRITE(iospectral, 103) iqq_write, ryd2ev * ww(iw), a_all_ph(iw, iqq_write, itemp) / ryd2mev ! print to file
+          WRITE(iospectral, '(/2x, a)') '#Q-point    Energy[eV]      smearing[eV]     A(q,w)[meV^-1]'
+          DO ismear = 1, nsmear
+            degaussw0 = (ismear - 1) * delta_smear + degaussw
+            DO iqq_write = 1, totq
+              DO iw = 1, nw_specfun
+                WRITE(iospectral, 103) iqq_write, ryd2ev * ww(iw), degaussw0 * ryd2ev, &
+                                       a_all_ph(iw, iqq_write, itemp, ismear) / ryd2mev ! print to file
+              ENDDO
             ENDDO
           ENDDO
           CLOSE(iospectral)
@@ -596,8 +481,8 @@
     !
     100 FORMAT(5x, 'Gaussian Broadening: ', f10.6, ' eV, ngauss=', i4)
     101 FORMAT(5x, 'DOS =', f10.6,' states/spin/eV/Unit Cell at Ef=', f10.6, ' eV')
-    102 FORMAT(2i9, 2x, f8.3, 2x, f12.5, 2x, f12.5, 2x, E22.14, 2x, E22.14, 2x, E22.14)
-    103 FORMAT(2x, i7, 2x, f12.5, 2x, E22.14)
+    102 FORMAT(2i9, 2x, f8.3, 2x, f12.5, 2x, f12.5, 2x, f12.5, 2x, E22.14, 2x, E22.14, 2x, E22.14)
+    103 FORMAT(2x, i7, 2x, f12.5, 2x, f12.5, 2x, E22.14)
     105 FORMAT(5x, 'Omega( ', i3, ' )=', f9.4,' eV   Re[Pi]=', f15.6, ' meV Im[Pi]=', f15.6, ' meV')
     !
     RETURN
@@ -627,7 +512,7 @@
     USE io_var,        ONLY : iospectral_sup, iospectral
     USE input,         ONLY : nbndsub, fsthick, ngaussw, degaussw, nw_specfun, &
                               wmin_specfun, wmax_specfun, efermi_read, fermi_energy, &
-                              nstemp, nel, meff, epsiheg, restart, restart_step
+                              nstemp, nel, meff, epsiheg, restart, restart_step, lsda
     USE pwcom,         ONLY : ef
     USE global_var,    ONLY : etf, ibndmin, nkqf, nbndfst, nkf, wqf, xkf, &
                               nkqtotf, xqf, vmef, esigmar_all, esigmai_all, a_all, &
@@ -659,6 +544,8 @@
     !! File name for spectral function
     CHARACTER(LEN = 256) :: filespecsup
     !! File name for supporting information
+    CHARACTER(LEN = 256) :: fnm
+    !! Buffer file name
     INTEGER :: iw
     !! Counter on the frequency
     INTEGER :: ik
@@ -769,6 +656,9 @@
     !! SE factor
     !
     ! loop over temperatures can be introduced
+    !
+    fnm = ''
+    IF (TRIM(lsda) == 'down') fnm = '.down'
     !
     inv_degaussw = one / degaussw
     sq_degaussw = degaussw * degaussw
@@ -1030,10 +920,10 @@
         !
         IF (ionode) then
           WRITE(tp, "(f8.3)") gtemp(itemp) * ryd2ev / kelvin2eV
-          filespec = 'specfun.plself.' // trim(adjustl(tp)) // 'K'
-          filespecsup = 'specfun_sup.plself.' // trim(adjustl(tp)) // 'K'
-          OPEN(UNIT = iospectral, FILE = filespec )
-          OPEN(UNIT = iospectral_sup, FILE = filespecsup )
+          filespec = 'specfun.plself.' // trim(adjustl(tp)) // 'K'// TRIM(fnm)
+          filespecsup = 'specfun_sup.plself.' // trim(adjustl(tp)) // 'K' // TRIM(fnm)
+          OPEN(UNIT = iospectral, FILE = TRIM(filespec) )
+          OPEN(UNIT = iospectral_sup, FILE = TRIM(filespecsup) )
           WRITE(iospectral, '(/2x, a/)') '#Electron-plasmon spectral function (meV)'
           WRITE(iospectral_sup, '(/2x, a/)') '#KS eigenenergies + real and im part of electron-plasmon self-energy (meV)'
           WRITE(iospectral, '(/2x, a/)') '#K-point    Energy[meV]     A(k,w)[meV^-1]'
@@ -1158,7 +1048,7 @@
     USE modes,         ONLY : nmodes
     USE cell_base,     ONLY : omega
     USE input,         ONLY : degaussq, delta_qsmear, nqsmear, nqstep, nsmear, eps_acoustic, &
-                          nstemp, delta_smear, degaussw, fsthick, nc
+                          nstemp, delta_smear, degaussw, fsthick, nc, lsda
     USE global_var,    ONLY : gtemp, nqtotf, wf, wqf, lambda_all, lambda_v_all
     USE ep_constants,  ONLY : ryd2mev, ryd2ev, kelvin2eV, one, two, zero, kelvin2Ry
     USE constants,     ONLY : pi
@@ -1179,6 +1069,8 @@
     !! File name for phonon density of states
     CHARACTER(LEN = 256) :: filres
     !! File name for resistivity
+    CHARACTER(LEN = 256) :: fnm
+    !! Buffer file name
     !
     INTEGER :: imode
     !! Counter on mode
@@ -1255,6 +1147,9 @@
     !! Resistivity for different for different ismear
     !
     CALL start_clock('a2F')
+    !
+    fnm = ''
+    IF (TRIM(lsda) == 'down') fnm = '.down'
     IF (ionode) THEN
       !
       ALLOCATE(a2f_(nqstep, nqsmear), STAT = ierr)
@@ -1279,15 +1174,15 @@
           !
           WRITE(tp, "(f8.3)") gtemp(itemp) * ryd2ev / kelvin2eV
           IF (isig < 10) THEN
-            WRITE(fila2f,   '(a, a6, i1, a, a)') TRIM(prefix), '.a2f.0', isig, '.', trim(adjustl(tp))
-            WRITE(fila2ftr, '(a, a9, i1, a, a)') TRIM(prefix), '.a2f_tr.0', isig, '.', trim(adjustl(tp))
-            WRITE(filres,   '(a, a6, i1, a, a)') TRIM(prefix), '.res.0', isig, '.', trim(adjustl(tp))
-            WRITE(fildos,   '(a, a8, i1, a, a)') TRIM(prefix), '.phdos.0', isig, '.', trim(adjustl(tp))
+            WRITE(fila2f,   '(a, a6, i1, a, a)') TRIM(prefix) // TRIM(fnm), '.a2f.0', isig, '.', trim(adjustl(tp))
+            WRITE(fila2ftr, '(a, a9, i1, a, a)') TRIM(prefix) // TRIM(fnm), '.a2f_tr.0', isig, '.', trim(adjustl(tp))
+            WRITE(filres,   '(a, a6, i1, a, a)') TRIM(prefix) // TRIM(fnm), '.res.0', isig, '.', trim(adjustl(tp))
+            WRITE(fildos,   '(a, a8, i1, a, a)') TRIM(prefix) // TRIM(fnm), '.phdos.0', isig, '.', trim(adjustl(tp))
           ELSE
-            WRITE(fila2f,   '(a, a5, i2, a, a)') TRIM(prefix), '.a2f.', isig, '.', trim(adjustl(tp))
-            WRITE(fila2ftr, '(a, a8, i2, a, a)') TRIM(prefix), '.a2f_tr.', isig, '.', trim(adjustl(tp))
-            WRITE(filres,   '(a, a5, i2, a, a)') TRIM(prefix), '.res.', isig, '.', trim(adjustl(tp))
-            WRITE(fildos,   '(a, a7, i2, a ,a)') TRIM(prefix), '.phdos.', isig, '.', trim(adjustl(tp))
+            WRITE(fila2f,   '(a, a5, i2, a, a)') TRIM(prefix) // TRIM(fnm), '.a2f.', isig, '.', trim(adjustl(tp))
+            WRITE(fila2ftr, '(a, a8, i2, a, a)') TRIM(prefix) // TRIM(fnm), '.a2f_tr.', isig, '.', trim(adjustl(tp))
+            WRITE(filres,   '(a, a5, i2, a, a)') TRIM(prefix) // TRIM(fnm), '.res.', isig, '.', trim(adjustl(tp))
+            WRITE(fildos,   '(a, a7, i2, a ,a)') TRIM(prefix) // TRIM(fnm), '.phdos.', isig, '.', trim(adjustl(tp))
           ENDIF
           OPEN(UNIT = iua2ffil, FILE = fila2f, FORM = 'formatted')
           OPEN(UNIT = iua2ftrfil, FILE = fila2ftr, FORM = 'formatted')

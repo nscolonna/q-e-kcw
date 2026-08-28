@@ -1,16 +1,73 @@
-Fixed in development version:
-  * Problem with too short variable holding tag name when reading UPF files,
-    occurring only for some fully-relativistic pseudopotentials
-  * Warning on poor testing of Berry Phase calculation removed, thanks to
-    accurate testing performed by Riccardo Dal Molin and Antimo Marrazzo.
-  * Symmetrization glitches on many processors (reported by Yunqi Shao)
-  * Crash for noncolinear PAW case on many processors (reported by I. Timrov)
-  * The HP code for the magnetic noncollinear case had a bug
-    when symmetry was used (some symmetry arrays were not re-initialized
-    when perturbing Hubbard atoms) and the magnetization direction flip was 
-    missing in the Hubbard term (for the second Sternheimer equation) (fixed by L. Binci)
+Fixed in 8.0 version 
+  * ...
+Incompatible changes in 8.0 version 
+  * ...
+New in 8.0 version 
+  * ...
 
-New in development version:
+Fixed in 7.6.1 version(s)
+  * Missing initialization of some PAW arrays (issue #863, courtesy Minkyu Park)
+  * XML reading problem with some PPs (issue #857, courtesy Victor Yu)
+  * The averaging of full-relativistic PPs for usage without spin-orbit was 
+    failing in some cases. Averaging is now more expensive, all projectors
+    being needed, but more correct (see !2886, courtesy Michail Minotakis)
+  * Incorrect weights when using tetrahedra and fixed magnetization on
+    more than one MPI processes (issue #869, courtesy Robert Rueger)
+  * Recently added "direct" diagonalization could fail in some cases
+    (see !2907, courtesy Jae-Mo Limh)
+  * Incorrect __WIN32 replaced by _WIN32 (see !2909, courtesy Robert Rueger)
+  * Gross mistake in compute_qq*, existing since 3 years. May have affected
+    EELS and Berry phase calculations with USPP
+  * Too small thresholds for rho and grho2 in meta-GGA lead to numerical noise 
+    (Pietro Delugas)
+    
+
+Incompatible changes in 7.6.1 version(s)
+  * Full-relativistic PPs in calculations with no spin-orbit may yield 
+    tiny differences wrt previous versions
+  * "make pwall" compiles hp and tddfpt instead of pwcond
+  * Meta-GGA: tiny differences in final total energies may appear 
+
+New in 7.6.1 version(s) 
+  * ... 
+
+Fixed in 7.6 version:
+  * Stress for meta-GGA functionals was broken (Marc Slot, Pietro Delugas) 
+  * pw2wannier90: Fix gamma_only bug in write_plot (Jae-Mo Lihm)
+  * Improved performance ph.x of initialization for USPP and PAW cases in CPUs 
+  * Improved performance for computations of effective charges in ph.x  in the USPP, PAW cases.  
+  * Calculation of Raman coefficients with second-order response was broken
+    since v.7.4.1
+  * Bug in ELF normalization for nspin=1 (courtesy Nicolas F. Barrera)
+  * Phonon bug for GPU + 1 k-point + finite wave-vector (courtesy A. Dal Corso)
+  * Bug in TDDFPT codes when restart is used (courtesy Ermanno Botti)
+  * Minor bug fix in PH/elphon.f90 addressing a symmetry-related issue in 
+    printing electron-phonon matrix elements (EPW group).
+Incompatible changes in 7.6 version:
+  * Removed the option to compile PW with the pre-processor flag
+    __SPIN_BALANCE (T. Thonhauser)
+
+New in 7.6 version:
+  * NLCC for norm-conserving with mega-GGA functionals (Marc Slot, Pietro Delugas) 
+  * Use of ONCVPP for R2SCAN with model atomic kinetic energy density (Marc Slot) 
+  * EPW v6.1 with new features including 
+     	1. GPU offloading support through CUDA, OpenACC, and OpenMP. 
+        2. Two-level parallelization across EPW using image and pool parallelism (both coarse and fine grids). 
+        3. Support for calculations with DFPT+U. 
+        4. Support for calculations with LSDA. 
+  * Support for out of build directory with autoconf (Tommaso Gorni) 
+  * vdW-DF3-mc, van der Waals density functional for molecular crystals
+    [T. Jenkins, K. Berland, and T. Thonhauser, Phys. Rev. B 112, 235121 (2025)]
+  * Symmetry and the nonlocal pseudopotential contribution added to PP/epsilon 
+    for eps_calc, now allowing USPP/PAW pseudos. Calculations that previously 
+    used nonlocal pseudopotentials (ex: ONCVs) may yield different (more 
+    accurate) numerical results
+  * Expose BEEF vdW functional using LibXC, named BEEF_LXC (A. Fonari).
+  * Performance optimization and GPU porting of lr_addusddens (Giannis Savva)
+
+New in 7.5 version:
+  * New Orbital Resolved DFT+U method -E. Macke, I. Timrov 
+    (see Macke et al. JCTC  2024 20 (11), 4824-4843) 
   * Interface between Wannier90 and DFT+U to use Wannier functions as
     Hubbard projectors (I. Timrov, A. Carta, C. Ederer et al., arXiv:2411.03937)
   * Extension of pp.x to visualize Hubbard projectors of DFT+U (I. Timrov)
@@ -22,6 +79,24 @@ New in development version:
     (Phys. Rev. B 110, 094306,https://doi.org/10.1103/PhysRevB.110.094306).
   * Implemented NVT dynamics with Nose-Hoover thermostats with Verlet and velocity-Verlet engines
   * Implemented NPT dynamics with Nose-Hoover thermostats, Parrinello-Rahman and Wentzcovich barostats and Beeman MD engine.  
+
+Incompatible changes in 7.5 version:
+  * The Simpson routine for radial integration has been modified for the case
+    of an even number of points in the integration grid. The current version 
+    is more accurate than the previous one, but may yield slightly different
+    numerical results.
+
+Fixed in 7.5 version:
+  * Problem with too short variable holding tag name when reading UPF files,
+    occurring only for some fully-relativistic pseudopotentials
+  * Warning on poor testing of Berry Phase calculation removed, thanks to
+    accurate testing performed by Riccardo Dal Molin and Antimo Marrazzo.
+  * Symmetrization glitches on many processors (reported by Yunqi Shao)
+  * Crash for noncolinear PAW case on many processors (reported by I. Timrov)
+  * The HP code for the magnetic noncollinear case had a bug
+    when symmetry was used (some symmetry arrays were not re-initialized
+    when perturbing Hubbard atoms) and the magnetization direction flip was 
+    missing in the Hubbard term (for the second Sternheimer equation) (fixed by L. Binci)
 
 Fixed in 7.4.1 version:
   * Error in qexml_init might cause EPW to fail in some cases

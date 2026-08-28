@@ -49,13 +49,15 @@ SUBROUTINE full_ham (ik)
   INTEGER i_start, i_end, ik_eff
   !
   !
-  REAL(DP) :: n_r(dfftp%nnr), num1, num2, sh, aux_r(dfftp%nnr) 
-  ! ... orbital density in rela space
+  REAL(DP) :: num1, num2, sh
   !
-  COMPLEX(DP) n_g(ngm), n_g_aux(ngm,nspin_mag), aux_g(ngm)
+  REAL(DP), ALLOCATABLE :: n_r(:), aux_r(:), v(:,:), vxc_minus1(:,:), vxc(:,:)
+  ! ... orbital density in real space
+  !
+  COMPLEX(DP), ALLOCATABLE :: n_g(:), n_g_aux(:,:), aux_g(:)
   ! ... orbital density in G space
   !
-  REAL(DP) :: ehart, v(dfftp%nnr,nspin_mag), vxc_minus1(dfftp%nnr,2), vxc(dfftp%nnr,nspin_mag), charge, w1
+  REAL(DP) :: ehart, charge, w1
   !  
   TYPE (scf_type) :: rho_minus1
   !
@@ -74,6 +76,9 @@ SUBROUTINE full_ham (ik)
   !
   ALLOCATE (psic_1( dfftp%nnr), vpsi_r(dffts%nnr), vpsi(npwx), v_ki(npwx,nbnd))
   ALLOCATE (et_aux(nbnd,nks))
+  ALLOCATE (n_r(dfftp%nnr), aux_r(dfftp%nnr) )
+  ALLOCATE (n_g(ngm), n_g_aux(ngm,nspin_mag), aux_g(ngm))
+  ALLOCATE (v(dfftp%nnr,nspin_mag), vxc_minus1(dfftp%nnr,2), vxc(dfftp%nnr,nspin_mag))
   !
   !
   WRITE(stdout,'(/,5x,"INFO: KI calcualtion: Full Hamiltonian ... ",/ )')
@@ -95,7 +100,7 @@ SUBROUTINE full_ham (ik)
   ! Retrive the ks function at k 
   IF (kcw_iverbosity .gt. 1 ) WRITE(stdout,'(8X, "INFO: u_k(g) RETRIEVED"/)')
   !
-  CALL compute_map_ikq_single (ik)
+  CALL compute_map_ikq_single (ik, .false.)
   ! find tha map k+q --> k'+G and store the res 
   !
   dim_ham = num_wann
@@ -198,13 +203,13 @@ SUBROUTINE full_ham (ik)
      !
      IF ( ibnd .LE. num_wann_occ ) THEN
         !
-        rho_minus1%of_r(:,1) = rho_minus1%of_r(:,1) - n_r(:)  ! denisty rho-rho_i in real space
-        rho_minus1%of_g(:,1) = rho_minus1%of_g(:,1) - n_g(:)  ! denisty rho-rho_i in reciprocal scape
+        rho_minus1%of_r(:,1) = rho_minus1%of_r(:,1) - n_r(:)  ! density rho-rho_i in real space
+        rho_minus1%of_g(:,1) = rho_minus1%of_g(:,1) - n_g(:)  ! density rho-rho_i in reciprocal scape
         ! The magnetization depends on which channel we remove the orbital from
         ! we reduce by n_i(r) if current_spin=1, we increase by n_i(r) if current_spin=2
         ! This is taken care by the factor (3-2*current_spin)
-        rho_minus1%of_r(:,2) = rho_minus1%of_r(:,2) - (3-2*current_spin)*n_r(:)  ! denisty rho-rho_i in real space
-        rho_minus1%of_g(:,2) = rho_minus1%of_g(:,2) - (3-2*current_spin)*n_g(:)  ! denisty rho-rho_i in reciprocal scape
+        rho_minus1%of_r(:,2) = rho_minus1%of_r(:,2) - (3-2*current_spin)*n_r(:)  ! density rho-rho_i in real space
+        rho_minus1%of_g(:,2) = rho_minus1%of_g(:,2) - (3-2*current_spin)*n_g(:)  ! density rho-rho_i in reciprocal scape
         ! 
         etxc_minus1 = 0.D0; vtxc_minus1 = 0.D0; vxc_minus1(:,:) = 0.D0
         nspin_aux=nspin_mag; nspin_mag=2
@@ -230,10 +235,10 @@ SUBROUTINE full_ham (ik)
         !
      ELSE
         !
-        rho_minus1%of_r(:,1) = rho_minus1%of_r(:,1) + n_r(:)  ! denisty rho+rho_i in real space
-        rho_minus1%of_g(:,1) = rho_minus1%of_g(:,1) + n_g(:)  ! denisty rho+rho_i in reciprocal scape
-        rho_minus1%of_r(:,2) = rho_minus1%of_r(:,2) + (3-2*current_spin)*n_r(:)  ! denisty rho+rho_i in real space
-        rho_minus1%of_g(:,2) = rho_minus1%of_g(:,2) + (3-2*current_spin)*n_g(:)  ! denisty rho+rho_i in reciprocal scape
+        rho_minus1%of_r(:,1) = rho_minus1%of_r(:,1) + n_r(:)  ! density rho+rho_i in real space
+        rho_minus1%of_g(:,1) = rho_minus1%of_g(:,1) + n_g(:)  ! density rho+rho_i in reciprocal scape
+        rho_minus1%of_r(:,2) = rho_minus1%of_r(:,2) + (3-2*current_spin)*n_r(:)  ! density rho+rho_i in real space
+        rho_minus1%of_g(:,2) = rho_minus1%of_g(:,2) + (3-2*current_spin)*n_g(:)  ! density rho+rho_i in reciprocal scape
         ! 
         etxc_minus1 = 0.D0; vtxc_minus1 = 0.D0; vxc_minus1(:,:) = 0.D0
         nspin_aux=nspin_mag; nspin_mag=2
@@ -285,10 +290,10 @@ SUBROUTINE full_ham (ik)
         ! Use rho_minus as a workspace 
         rho_minus1%of_r(:,:) = 0.D0
         rho_minus1%of_g(:,:) = (0.D0, 0.D0) 
-        rho_minus1%of_r(:,1) = n_r(:)  ! orbital denisty rho_i in real space
-        rho_minus1%of_r(:,2) = n_r(:)  ! orbital denisty rho_i in real space
-        rho_minus1%of_g(:,1) = n_g(:)  ! orbital denisty rho_i in reciprocal scape
-        rho_minus1%of_g(:,2) = n_g(:)  ! orbital denisty rho_i in reciprocal scape
+        rho_minus1%of_r(:,1) = n_r(:)  ! orbital density rho_i in real space
+        rho_minus1%of_r(:,2) = n_r(:)  ! orbital density rho_i in real space
+        rho_minus1%of_g(:,1) = n_g(:)  ! orbital density rho_i in reciprocal scape
+        rho_minus1%of_g(:,2) = n_g(:)  ! orbital density rho_i in reciprocal scape
         !
         etxc_minus1 = 0.D0; vtxc_minus1 = 0.D0; vxc_minus1(:,:) = 0.D0
         nspin_aux=nspin_mag; nspin_mag=2
@@ -529,6 +534,9 @@ SUBROUTINE full_ham (ik)
   !
   DEALLOCATE (psic_1, vpsi_r, vpsi, v_ki) 
   DEALLOCATE (et_aux)
+  DEALLOCATE (n_r, aux_r)
+  DEALLOCATE (n_g, n_g_aux, aux_g)
+  DEALLOCATE (v, vxc_minus1, vxc)
   !
 9046 FORMAT(8x, 'KI[pert] highest occupied level (ev): ',F10.4 )
 9045 FORMAT(8x, 'KI[full] highest occupied level (ev): ',F10.4 )

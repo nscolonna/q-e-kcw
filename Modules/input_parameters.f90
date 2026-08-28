@@ -472,7 +472,11 @@ MODULE input_parameters
 
           ! next group of variables PWSCF ONLY
           ! 
-          !
+        CHARACTER(len=80) :: exx_type = 'band_pairs'
+        !! exx band parallelism schemes: "bands"      ... distribute bands over bgrp 
+        !!                               "band_pairs" ... distribute band pairs over bgrp (useful when the local DFT part becomes relevant)
+        !!                                                (Barnes et al., Computer Physics Communications, Volume 214, 2017, Pages 52-58)
+        !
         REAL(DP) :: exx_fraction = -1.0_DP
         !! exact exchange fraction. If negative, use defaults
         REAL(DP) :: screening_parameter = -1.0_DP
@@ -517,9 +521,9 @@ MODULE input_parameters
         REAL(DP) :: zgate = 0.5
         LOGICAL  :: relaxz = .false.
         LOGICAL  :: block = .false.
-        REAL(DP) :: block_1 = 0.45
-        REAL(DP) :: block_2 = 0.55
-        REAL(DP) :: block_height = 0.1
+        REAL(DP) :: block_1 = 0.45_DP
+        REAL(DP) :: block_2 = 0.55_DP
+        REAL(DP) :: block_height = 0.1_DP
 
           ! Various parameters for noncollinear calculations
         LOGICAL  :: noncolin = .false.
@@ -693,7 +697,7 @@ MODULE input_parameters
              nqx1, nqx2, nqx3, ecutfock, localization_thr, scdm, ace,         &
              scdmden, scdmgrd, nscdm, n_proj,                                 &
              exxdiv_treatment, x_gamma_extrapolation, yukawa, ecutvcut,       &
-             exx_fraction, screening_parameter, ref_alat,                     &
+             exx_fraction, exx_type, screening_parameter, ref_alat,      &
              noncolin, lspinorb, starting_spin_angle, lambda, angle1, angle2, &
              report, lforcet,                                                 &
              constrained_magnetization, B_field, fixed_magnetization,         &

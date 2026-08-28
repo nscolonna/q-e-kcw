@@ -50,10 +50,15 @@ MODULE qes_write_module
     MODULE PROCEDURE qes_write_HubbardInterSpecieV
     MODULE PROCEDURE qes_write_SiteMoment
     MODULE PROCEDURE qes_write_HubbardJ
+    MODULE PROCEDURE qes_write_vector
+    MODULE PROCEDURE qes_write_HubbardM
     MODULE PROCEDURE qes_write_ChannelOcc
     MODULE PROCEDURE qes_write_HubbardOcc
     MODULE PROCEDURE qes_write_SitMag
     MODULE PROCEDURE qes_write_starting_ns
+    MODULE PROCEDURE qes_write_integerVector
+    MODULE PROCEDURE qes_write_orderUm
+    MODULE PROCEDURE qes_write_matrix
     MODULE PROCEDURE qes_write_Hubbard_ns
     MODULE PROCEDURE qes_write_HubbardBack
     MODULE PROCEDURE qes_write_vdW
@@ -124,9 +129,7 @@ MODULE qes_write_module
     MODULE PROCEDURE qes_write_cp_cellNose
     MODULE PROCEDURE qes_write_scalmags
     MODULE PROCEDURE qes_write_d3mags
-    MODULE PROCEDURE qes_write_vector
-    MODULE PROCEDURE qes_write_integerVector
-    MODULE PROCEDURE qes_write_matrix
+    MODULE PROCEDURE qes_write_pseudoPath
     MODULE PROCEDURE qes_write_integerMatrix
     MODULE PROCEDURE qes_write_scalarQuantity
     MODULE PROCEDURE qes_write_rism3d
@@ -602,9 +605,7 @@ MODULE qes_write_module
            CALL xml_addCharacters(xp, obj%mass, fmt='s16')
         CALL xml_EndElement(xp, "mass")
      END IF
-     CALL xml_NewElement(xp, 'pseudo_file')
-        CALL xml_addCharacters(xp, TRIM(obj%pseudo_file))
-     CALL xml_EndElement(xp, 'pseudo_file')
+     CALL qes_write_pseudoPath (xp, obj%pseudo_file)
      IF (obj%starting_magnetization_ispresent) THEN
         CALL xml_NewElement(xp, "starting_magnetization")
            CALL xml_addCharacters(xp, obj%starting_magnetization, fmt='s16')
@@ -804,6 +805,16 @@ MODULE qes_write_module
            CALL xml_addCharacters(xp, obj%localization_threshold, fmt='s16')
         CALL xml_EndElement(xp, "localization_threshold")
      END IF
+     IF (obj%use_ace_ispresent) THEN
+        CALL xml_NewElement(xp, "use_ace")
+           CALL xml_addCharacters(xp, obj%use_ace)
+        CALL xml_EndElement(xp, "use_ace")
+     END IF
+     IF (obj%nbndproj_ispresent) THEN
+        CALL xml_NewElement(xp, "nbndproj")
+           CALL xml_addCharacters(xp, obj%nbndproj)
+        CALL xml_EndElement(xp, "nbndproj")
+     END IF
      CALL xml_EndElement(xp, TRIM(obj%tagname))
    END SUBROUTINE qes_write_hybrid
 
@@ -852,6 +863,11 @@ MODULE qes_write_module
            CALL qes_write_HubbardCommon(xp, obj%Hubbard_U(i) )
         END DO
      END IF
+     IF (obj%Hubbard_Um_ispresent) THEN
+        DO i = 1, obj%ndim_Hubbard_Um
+           CALL qes_write_HubbardM(xp, obj%Hubbard_Um(i) )
+        END DO
+     END IF
      IF (obj%Hubbard_J0_ispresent) THEN
         DO i = 1, obj%ndim_Hubbard_J0
            CALL qes_write_HubbardCommon(xp, obj%Hubbard_J0(i) )
@@ -885,6 +901,11 @@ MODULE qes_write_module
      IF (obj%Hubbard_ns_ispresent) THEN
         DO i = 1, obj%ndim_Hubbard_ns
            CALL qes_write_Hubbard_ns(xp, obj%Hubbard_ns(i) )
+        END DO
+     END IF
+     IF (obj%Hub_m_order_ispresent) THEN
+        DO i = 1, obj%ndim_Hub_m_order
+           CALL qes_write_orderUm(xp, obj%Hub_m_order(i) )
         END DO
      END IF
      IF (obj%U_projection_type_ispresent) THEN
@@ -983,6 +1004,50 @@ MODULE qes_write_module
      CALL xml_EndElement(xp, TRIM(obj%tagname))
    END SUBROUTINE qes_write_HubbardJ
 
+   SUBROUTINE qes_write_vector(xp, obj)
+     !-----------------------------------------------------------------
+     IMPLICIT NONE
+     TYPE (xmlf_t),INTENT(INOUT)                      :: xp
+     TYPE(vector_type),INTENT(IN)    :: obj
+     ! 
+     INTEGER                                          :: i 
+     ! 
+     IF ( .NOT. obj%lwrite ) RETURN 
+     ! 
+     CALL xml_NewElement(xp, TRIM(obj%tagname))
+     CALL xml_addAttribute(xp, 'size', obj%size )
+     CALL xml_addNewLine(xp)
+     DO i = 1, obj%size, 5
+        CALL xml_AddCharacters(xp, obj%vector(i:MIN(i+5-1,obj%size)), fmt='s16')
+        CALL xml_AddNewLine(xp)
+     END DO
+     CALL xml_EndElement(xp, TRIM(obj%tagname))
+   END SUBROUTINE qes_write_vector
+
+   SUBROUTINE qes_write_HubbardM(xp, obj)
+     !-----------------------------------------------------------------
+     IMPLICIT NONE
+     TYPE (xmlf_t),INTENT(INOUT)                      :: xp
+     TYPE(HubbardM_type),INTENT(IN)    :: obj
+     ! 
+     INTEGER                                          :: i 
+     ! 
+     IF ( .NOT. obj%lwrite ) RETURN 
+     ! 
+     CALL xml_NewElement(xp, TRIM(obj%tagname))
+     CALL xml_addAttribute(xp, 'size', obj%size )
+     IF (obj%specie_ispresent) CALL xml_addAttribute(xp, 'specie', TRIM(obj%specie) )
+     IF (obj%label_ispresent) CALL xml_addAttribute(xp, 'label', TRIM(obj%label) )
+     IF (obj%spin_ispresent) CALL xml_addAttribute(xp, 'spin', obj%spin )
+     IF (obj%jjj_ispresent) CALL xml_addAttribute(xp, 'jjj', obj%jjj )
+     CALL xml_addNewLine(xp)
+     DO i = 1, obj%size, 5
+        CALL xml_AddCharacters(xp, obj%HubbardM(i:MIN(i+5-1,obj%size)), fmt='s16')
+        CALL xml_AddNewLine(xp)
+     END DO
+     CALL xml_EndElement(xp, TRIM(obj%tagname))
+   END SUBROUTINE qes_write_HubbardM
+
    SUBROUTINE qes_write_ChannelOcc(xp, obj)
      !-----------------------------------------------------------------
      IMPLICIT NONE
@@ -1060,6 +1125,72 @@ MODULE qes_write_module
      END DO
      CALL xml_EndElement(xp, TRIM(obj%tagname))
    END SUBROUTINE qes_write_starting_ns
+
+   SUBROUTINE qes_write_integerVector(xp, obj)
+     !-----------------------------------------------------------------
+     IMPLICIT NONE
+     TYPE (xmlf_t),INTENT(INOUT)                      :: xp
+     TYPE(integerVector_type),INTENT(IN)    :: obj
+     ! 
+     INTEGER                                          :: i 
+     ! 
+     IF ( .NOT. obj%lwrite ) RETURN 
+     ! 
+     CALL xml_NewElement(xp, TRIM(obj%tagname))
+     CALL xml_addAttribute(xp, 'size', obj%size )
+     CALL xml_addNewLine(xp)
+     DO i = 1, obj%size, 8
+        CALL xml_AddCharacters(xp, obj%integerVector(i:MIN(i+8-1, obj%size)))
+        CALL xml_AddNewLine(xp)
+     END DO
+     CALL xml_EndElement(xp, TRIM(obj%tagname))
+   END SUBROUTINE qes_write_integerVector
+
+   SUBROUTINE qes_write_orderUm(xp, obj)
+     !-----------------------------------------------------------------
+     IMPLICIT NONE
+     TYPE (xmlf_t),INTENT(INOUT)                      :: xp
+     TYPE(orderUm_type),INTENT(IN)    :: obj
+     ! 
+     INTEGER                                          :: i 
+     ! 
+     IF ( .NOT. obj%lwrite ) RETURN 
+     ! 
+     CALL xml_NewElement(xp, TRIM(obj%tagname))
+     CALL xml_addAttribute(xp, 'size', obj%size )
+     IF (obj%specie_ispresent) CALL xml_addAttribute(xp, 'specie', TRIM(obj%specie) )
+     IF (obj%label_ispresent) CALL xml_addAttribute(xp, 'label', TRIM(obj%label) )
+     IF (obj%spin_ispresent) CALL xml_addAttribute(xp, 'spin', obj%spin )
+     IF (obj%atomidx_ispresent) CALL xml_addAttribute(xp, 'atomidx', obj%atomidx )
+     CALL xml_addNewLine(xp)
+     DO i = 1, obj%size, 8
+        CALL xml_AddCharacters(xp, obj%orderUm(i:MIN(i+8-1, obj%size)))
+        CALL xml_AddNewLine(xp)
+     END DO
+     CALL xml_EndElement(xp, TRIM(obj%tagname))
+   END SUBROUTINE qes_write_orderUm
+
+   SUBROUTINE qes_write_matrix(xp, obj)
+     !-----------------------------------------------------------------
+     IMPLICIT NONE
+     TYPE (xmlf_t),INTENT(INOUT)                      :: xp
+     TYPE(matrix_type),INTENT(IN)    :: obj
+     ! 
+     INTEGER                                          :: i 
+     ! 
+     IF ( .NOT. obj%lwrite ) RETURN 
+     ! 
+     CALL xml_NewElement(xp, TRIM(obj%tagname))
+     CALL xml_addAttribute(xp, 'rank', obj%rank )
+     CALL xml_addAttribute(xp, 'dims', obj%dims )
+     IF (obj%order_ispresent) CALL xml_addAttribute(xp, 'order', TRIM(obj%order) )
+       CALL xml_addNewLine(xp)
+        DO i = 1, obj%dims(2)
+           CALL xml_AddCharacters(xp, obj%matrix((i-1)*obj%dims(1)+1: i*obj%dims(1)), fmt ='s16')
+           CALL xml_addNewLine(xp)
+        END DO
+     CALL xml_EndElement(xp, TRIM(obj%tagname))
+   END SUBROUTINE qes_write_matrix
 
    SUBROUTINE qes_write_Hubbard_ns(xp, obj)
      !-----------------------------------------------------------------
@@ -1478,6 +1609,11 @@ MODULE qes_write_module
         CALL xml_NewElement(xp, "diago_cg_maxiter")
            CALL xml_addCharacters(xp, obj%diago_cg_maxiter)
         CALL xml_EndElement(xp, "diago_cg_maxiter")
+     END IF
+     IF (obj%diago_ppcg_maxiter_ispresent) THEN
+        CALL xml_NewElement(xp, "diago_ppcg_maxiter")
+           CALL xml_addCharacters(xp, obj%diago_ppcg_maxiter)
+        CALL xml_EndElement(xp, "diago_ppcg_maxiter")
      END IF
      IF (obj%diago_david_ndim_ispresent) THEN
         CALL xml_NewElement(xp, "diago_david_ndim")
@@ -3413,67 +3549,24 @@ MODULE qes_write_module
      CALL xml_EndElement(xp, TRIM(obj%tagname))
    END SUBROUTINE qes_write_d3mags
 
-   SUBROUTINE qes_write_vector(xp, obj)
+   SUBROUTINE qes_write_pseudoPath(xp, obj)
      !-----------------------------------------------------------------
      IMPLICIT NONE
      TYPE (xmlf_t),INTENT(INOUT)                      :: xp
-     TYPE(vector_type),INTENT(IN)    :: obj
+     TYPE(pseudoPath_type),INTENT(IN)    :: obj
      ! 
      INTEGER                                          :: i 
      ! 
      IF ( .NOT. obj%lwrite ) RETURN 
      ! 
      CALL xml_NewElement(xp, TRIM(obj%tagname))
-     CALL xml_addAttribute(xp, 'size', obj%size )
-     CALL xml_addNewLine(xp)
-     DO i = 1, obj%size, 5
-        CALL xml_AddCharacters(xp, obj%vector(i:MIN(i+5-1,obj%size)), fmt='s16')
-        CALL xml_AddNewLine(xp)
-     END DO
+     IF (obj%Zval_ispresent) CALL xml_addAttribute(xp, 'Zval', obj%Zval )
+     IF (obj%mesh_ispresent) CALL xml_addAttribute(xp, 'mesh', obj%mesh )
+     IF (obj%nbeta_ispresent) CALL xml_addAttribute(xp, 'nbeta', obj%nbeta )
+     IF (obj%l_ispresent) CALL xml_addAttribute(xp, 'l', obj%l )
+        CALL xml_AddCharacters(xp, TRIM(obj%pseudoPath))
      CALL xml_EndElement(xp, TRIM(obj%tagname))
-   END SUBROUTINE qes_write_vector
-
-   SUBROUTINE qes_write_integerVector(xp, obj)
-     !-----------------------------------------------------------------
-     IMPLICIT NONE
-     TYPE (xmlf_t),INTENT(INOUT)                      :: xp
-     TYPE(integerVector_type),INTENT(IN)    :: obj
-     ! 
-     INTEGER                                          :: i 
-     ! 
-     IF ( .NOT. obj%lwrite ) RETURN 
-     ! 
-     CALL xml_NewElement(xp, TRIM(obj%tagname))
-     CALL xml_addAttribute(xp, 'size', obj%size )
-     CALL xml_addNewLine(xp)
-     DO i = 1, obj%size, 8
-        CALL xml_AddCharacters(xp, obj%integerVector(i:MIN(i+8-1, obj%size)))
-        CALL xml_AddNewLine(xp)
-     END DO
-     CALL xml_EndElement(xp, TRIM(obj%tagname))
-   END SUBROUTINE qes_write_integerVector
-
-   SUBROUTINE qes_write_matrix(xp, obj)
-     !-----------------------------------------------------------------
-     IMPLICIT NONE
-     TYPE (xmlf_t),INTENT(INOUT)                      :: xp
-     TYPE(matrix_type),INTENT(IN)    :: obj
-     ! 
-     INTEGER                                          :: i 
-     ! 
-     IF ( .NOT. obj%lwrite ) RETURN 
-     ! 
-     CALL xml_NewElement(xp, TRIM(obj%tagname))
-     CALL xml_addAttribute(xp, 'rank', obj%rank )
-     CALL xml_addAttribute(xp, 'dims', obj%dims )
-     IF (obj%order_ispresent) CALL xml_addAttribute(xp, 'order', TRIM(obj%order) )
-       CALL xml_addNewLine(xp)
-        DO i = 1, obj%dims(2)
-           CALL xml_AddCharacters(xp, obj%matrix((i-1)*obj%dims(1)+1: i*obj%dims(1)), fmt ='s16')
-           CALL xml_addNewLine(xp)
-        END DO
-     CALL xml_EndElement(xp, TRIM(obj%tagname))
-   END SUBROUTINE qes_write_matrix
+   END SUBROUTINE qes_write_pseudoPath
 
    SUBROUTINE qes_write_integerMatrix(xp, obj)
      !-----------------------------------------------------------------

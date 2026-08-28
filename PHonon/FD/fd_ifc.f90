@@ -101,7 +101,7 @@ nrx1 = 1
 nrx2 = 1
 nrx2 = 1
 innx=2
-de = 0.002 ! in Angstrom
+de = 0.002_DP ! in Angstrom
 verbose =.false.
 offdiagonal=.false.
 file_rmsd = ' '
@@ -882,7 +882,7 @@ deallocate (phid_symm3)
 END IF
 
 
-   CALL environment_end( 'FD_IFC' )
+   CALL environment_end( )
 
 end program fd_ifc
 

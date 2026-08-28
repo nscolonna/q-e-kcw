@@ -50,6 +50,7 @@ subroutine solve_e_fpol( iw )
                                     niter_ph, flmixdpot, rec_code
   USE dv_of_drho_lr
   USE uspp_init,        ONLY : init_us_2
+  USE incdrhoscf_mod,   ONLY : incdrhoscf
 
   implicit none
   
@@ -167,7 +168,10 @@ subroutine solve_e_fpol( iw )
         !
         ! read unperturbed wavefunctions psi_k in G_space, for all bands
         !
-        if (nksq.gt.1) call get_buffer(evc, lrwfc, iuwfc, ik)
+        if (nksq.gt.1) then 
+           call get_buffer(evc, lrwfc, iuwfc, ik)
+           !$acc update device(evc)
+        endif
         !
         ! compute beta functions and kinetic energy for k-point ik
         ! needed by h_psi, called by cch_psi_all, called by gmressolve_all
@@ -288,7 +292,7 @@ subroutine solve_e_fpol( iw )
            !
            ! calculates dvscf, sum over k => dvscf_q_ipert
            !
-           call incdrhoscf (dvscfout(1,current_spin,ipol), wk(ik), &
+           call incdrhoscf (dvscfout(:,current_spin,ipol), wk(ik), &
                             ik, dbecsum(1,1,current_spin,ipol), dpsi)
         enddo   ! on polarizations
      enddo      ! on k points
@@ -307,13 +311,13 @@ subroutine solve_e_fpol( iw )
         enddo
      endif
 
-     call addusddense (dvscfout, dbecsum)
+     call lr_addusddens (3, dbecsum, dvscfout)
      !
      !   dvscfout contains the (unsymmetrized) linear charge response
      !   for the three polarizations - symmetrize it
      !
      call mp_sum ( dvscfout, inter_pool_comm )
-     call psymdvscf(dvscfout)
+     call psymdvscf(dvscfout, dfftp)
      !
      !   save the symmetrized linear charge response to file
      !   calculate the corresponding linear potential response

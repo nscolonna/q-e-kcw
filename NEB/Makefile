@@ -1,11 +1,13 @@
 # Makefile for NEB
 sinclude ../make.inc
 
-default: all
+# see comments in file tldeps for explanations
+TLDEPS=pwlibs
+include ../install/tldeps
 
 all:
 	if test -d src ; then \
-	( cd src ; $(MAKE) || exit 1 ) ; fi
+	( cd src ; $(MAKE) all || exit 1 ) ; fi
 
 doc:
 	if test -d Doc ; then \

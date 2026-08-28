@@ -321,34 +321,38 @@ CONTAINS
   !--------------------------------------------------------------------------
   FUNCTION check_writable ( file_path, process_id ) RESULT ( ios )
     !--------------------------------------------------------------------------
-    !! If run by multiple processes, specific "process_id" to avoid
-    !! opening, closing, deleting the same file from different processes.
+    !! Check whether directory "file_path" is writable by creating and
+    !! deleting a test file named test_<id>_<clock>. The clock suffix keeps
+    !! the name unique across runs sharing the directory, avoiding a race
+    !! where one run deletes another's test file ("File cannot be deleted").
     !
     IMPLICIT NONE
     !
     CHARACTER(LEN=*),  INTENT(IN) :: file_path
     INTEGER, OPTIONAL, INTENT(IN) :: process_id
     !
-    INTEGER :: ios
+    INTEGER :: ios, ios_close
+    INTEGER :: iunit, id
+    INTEGER(KIND=8) :: clock
+    CHARACTER(LEN=LEN(file_path)+48) :: filename
     !
-    CHARACTER(LEN=6), EXTERNAL :: int_to_char
+    ! ... file_path should end by a "/"
     !
-    ! ... check whether the scratch directory is writable
-    ! ... note that file_path should end by a "/"
+    id = 0
+    IF ( PRESENT( process_id ) ) id = process_id
+    CALL SYSTEM_CLOCK( COUNT = clock )
+    WRITE( filename, '(A,I0,A,I0)' ) TRIM(file_path) // 'test_', id, '_', clock
     !
-    IF ( PRESENT (process_id ) ) THEN
-       OPEN( UNIT = 4, FILE = TRIM(file_path) // 'test' // &
-           & TRIM( int_to_char ( process_id ) ), &
-           & STATUS = 'UNKNOWN', FORM = 'UNFORMATTED', IOSTAT = ios )
-    ELSE
-       OPEN( UNIT = 4, FILE = TRIM(file_path) // 'test', &
-             STATUS = 'UNKNOWN', FORM = 'UNFORMATTED', IOSTAT = ios )
-    END IF
+    OPEN( NEWUNIT = iunit, FILE = TRIM(filename), &
+        & STATUS = 'UNKNOWN', FORM = 'UNFORMATTED', IOSTAT = ios )
     !
-    CLOSE( UNIT = 4, STATUS = 'DELETE' )
+    ! ... ios (from OPEN) is the writability verdict. Delete the probe file
+    ! ... only if it was created, and tolerate a failed delete without
+    ! ... aborting: a failed delete does not mean the directory is unwritable.
+    IF ( ios == 0 ) CLOSE( UNIT = iunit, STATUS = 'DELETE', IOSTAT = ios_close )
     !
     !-----------------------------------------------------------------------
-  END FUNCTION check_writable 
+  END FUNCTION check_writable
   !-----------------------------------------------------------------------
   !
   !------------------------------------------------------------------------
@@ -397,6 +401,7 @@ subroutine diropn (unit, extension, recl, exst, tmp_dir_)
   !! If \(\text{recl}=-1\), the file existence is checked, nothing else
   !! is done.
   !
+  USE kinds, ONLY: i8b
   implicit none
   !
   !    first the input variables
@@ -417,7 +422,7 @@ subroutine diropn (unit, extension, recl, exst, tmp_dir_)
   character(len=320) :: tempfile
   ! complete file name
   real(dp):: dummy
-  integer*8 :: unf_recl
+  integer(kind=i8b) :: unf_recl
   ! double precision to prevent integer overflow
   integer :: ios, direct_io_factor
   logical :: opnd

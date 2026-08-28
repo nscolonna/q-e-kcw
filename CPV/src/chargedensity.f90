@@ -44,7 +44,8 @@
 !     e_v = sum_i,ij rho_i,ij d^ion_is,ji
 !
       USE kinds,              ONLY: DP
-      USE control_flags,      ONLY: iprint, iverbosity, thdyn, tpre, trhor, ndr
+      USE control_flags,      ONLY: iprint, iverbosity
+      USE cp_control,         ONLY: trhor, thdyn, ndr, tpre
       USE ions_base,          ONLY: nat
       USE gvect,              ONLY: gstart, ig_l2g
       USE smallbox_gvec,      ONLY: ngb
@@ -603,6 +604,9 @@ SUBROUTINE drhov(irb,eigrb,rhovan,drhovan,rhog,rhor,drhog,drhor)
 !     On input rhor and rhog must contain the smooth part only !
 !     Output in (drhor, drhog)
 !
+#if defined(_OPENMP)
+      USE omp_lib
+#endif
       USE kinds,                    ONLY: DP
       USE control_flags,            ONLY: iprint
       USE ions_base,                ONLY: na, nsp, nat, ityp
@@ -637,10 +641,6 @@ SUBROUTINE drhov(irb,eigrb,rhovan,drhovan,rhog,rhor,drhog,drhor)
       COMPLEX(DP), ALLOCATABLE:: dqgbt(:,:)
       COMPLEX(DP), ALLOCATABLE :: qv(:)
       COMPLEX(DP), ALLOCATABLE :: fg1(:), fg2(:)
-#if defined(_OPENMP)
-      INTEGER  :: omp_get_thread_num, omp_get_num_threads
-      EXTERNAL :: omp_get_thread_num, omp_get_num_threads
-#endif
 !
 !$omp parallel do collapse(3) default(none), private(i,j,iss,ir,ig), shared(nspin,dfftp,drhor,drhog,rhor,rhog,ainv) 
       DO j=1,3
@@ -851,6 +851,9 @@ SUBROUTINE rhov(rhovan,rhog,rhor)
 !
 !     routine makes use of c(-g)=c*(g)  and  beta(-g)=beta*(g)
 !
+#if defined(_OPENMP)
+      USE omp_lib
+#endif
       USE kinds,                    ONLY: dp
       USE ions_base,                ONLY: nat, na, nsp, ityp
       USE io_global,                ONLY: stdout
@@ -863,7 +866,8 @@ SUBROUTINE rhov(rhovan,rhog,rhor)
       USE smallbox_subs,            ONLY: fft_oned2box, box2grid
       USE cell_base,                ONLY: omega
       USE small_box,                ONLY: omegab
-      USE control_flags,            ONLY: iprint, iverbosity, tpre
+      USE control_flags,            ONLY: iprint, iverbosity
+      USE cp_control,               ONLY: tpre
       USE qgb_mod,                  ONLY: qgb
       USE fft_interfaces,           ONLY: fwfft, invfft
       USE fft_base,                 ONLY: dfftb, dfftp, dfftb
@@ -894,10 +898,6 @@ SUBROUTINE rhov(rhovan,rhog,rhor)
       COMPLEX(DP), ALLOCATABLE :: fg1(:), fg2(:)
 
       INTEGER  :: mytid, ntids
-#if defined(_OPENMP)
-      INTEGER  :: omp_get_thread_num, omp_get_num_threads
-      EXTERNAL :: omp_get_thread_num, omp_get_num_threads
-#endif
 
       !  Quick return if this sub is not needed
       !
