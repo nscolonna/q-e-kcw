@@ -1,0 +1,82 @@
+ This example tests the "pjdos" capability of epsilon.x: a generalization
+ of the joint density of states (jdos, calculation='jdos' in the INPUTPP
+ namelist) in which every electronic transition i(occupied) -> j(empty)
+ is weighted by the projection of the initial and final Kohn-Sham states
+ onto a chosen set of atomic orbitals, instead of being counted with unit
+ weight. The weights are read from two files whose names are given
+ through the filproj1 (initial/occupied states) and filproj2
+ (final/empty states) variables of the INPUTPP namelist.
+
+ The test system is LiCoO2 treated with DFT+U+V, using the same SCF
+ input as PW/examples/example13.
+
+ 1) make a self-consistent DFT+U+V calculation for LiCoO2
+    (input=LiCoO2.scf.in, output=LiCoO2.scf.out)
+
+ 2) make a non-self-consistent calculation on the same k-point grid,
+    adding empty bands (nbnd=40): jdos/pjdos need conduction states too
+    (input=LiCoO2.nscf.in, output=LiCoO2.nscf.out)
+
+ 3) run projwfc.x to compute the projections of every Kohn-Sham state
+    onto the atomic orbitals of the pseudopotentials, with
+    diag_basis=.true.. With filproj set, projwfc.x writes, on top of
+    the usual PDOS(E) files, the ASCII file 'LiCoO2.projwfc_up'
+    containing, for every atomic wavefunction, the list of
+    |<atomic wfc|psi_{ik,ibnd}>|^2 for every k-point and band
+    (see PP/src/write_proj.f90::write_proj_file).
+    diag_basis=.true. is needed because the CoO6 octahedra of this
+    rhombohedral cell are NOT aligned with the global x,y,z axes: it
+    rotates, independently for every atom, the atomic orbitals of each
+    shell to the local basis that diagonalizes that atom's on-site
+    occupation matrix (see PP/src/projwfc.f90::rotate_basis) -- for an
+    octahedrally coordinated transition-metal ion this is the t2g/eg
+    eigenbasis, regardless of how the octahedron happens to be oriented
+    in the cell.
+    (input=LiCoO2.projwfc.in, output=LiCoO2.projwfc.out)
+
+ 4) build the '*_up.proj' files read by epsilon.x (filproj1/filproj2)
+    by summing the relevant atomic-wfc blocks of 'LiCoO2.projwfc_up'.
+    This is done by the script ../extract_proj.sh, which greps the
+    header line of each atomic-wfc block ("nwfc na atm els n l m") and
+    sums, for every (ik,ibnd), the projections of the blocks matching a
+    given list of atom indices, an orbital label, and a subset of the
+    magnetic quantum number m (last column of the header line). Passing
+    "all" for the m selection sums the whole shell (basis-independent,
+    so it is the same with or without diag_basis); passing a subset,
+    e.g. "3,4,5", isolates individual orbitals or symmetry-adapted
+    combinations without summing over all m -- this is what makes it
+    possible to inspect a specific d-d transition instead of the full,
+    m-summed, d -> d jdos.
+
+    Because of diag_basis, the Co-3D "m" index (1..5) no longer labels
+    the fixed global-frame real harmonics (dz2,dzx,dzy,dx2-y2,dxy): it
+    labels the eigenvectors of the local on-site occupation matrix, in
+    ASCENDING eigenvalue order (QE's diagonalizer convention). For this
+    system (see LiCoO2.projwfc.out, "ATOM 1" / "Orbital quantum number
+    l = 2"), the eigenvalues are 0.740 0.740 1.981 1.981 1.982, a clean
+    2+3 split: m=1,2 are the low-occupation eg orbitals, m=3,4,5 the
+    high-occupation t2g orbitals (consistent with low-spin Co3+, d6,
+    t2g^6 eg^0, softened by Co-O covalency). This m<->orbital
+    correspondence is specific to this run and must be re-checked from
+    the eigenvalues whenever the system changes.
+      Co_d_up.proj    : sum of all 5 Co-3D orbitals (atom 1)
+      Co_t2g_up.proj  : sum of the Co-3D t2g orbitals (m=3,4,5)
+      Co_eg_up.proj   : sum of the Co-3D eg orbitals  (m=1,2)
+      O_p_up.proj     : sum of the 2P orbitals of atoms 2 and 3 (both O)
+
+ 5) run epsilon.x three times with calculation='jdos':
+      - without filproj1/filproj2  -> plain jdos
+        (input=LiCoO2.jdos.in, output jdos_LiCoO2_plain.dat)
+      - filproj1='O_p', filproj2='Co_d' -> pjdos weighted by O-2p
+        character in the initial (occupied) states and Co-3d character
+        in the final (empty) states, i.e. an O(2p) -> Co(3d)
+        charge-transfer-like weighted jdos
+        (input=LiCoO2.pjdos_Op_Cod.in, output pjdos_LiCoO2_Op_Cod.dat)
+      - filproj1='Co_t2g', filproj2='Co_eg' -> pjdos for the Co(t2g) ->
+        Co(eg) crystal-field d-d transition, obtained by selecting a
+        subset of the m's of the Co-3d shell for the initial and final
+        states respectively
+        (input=LiCoO2.pjdos_t2g_eg.in, output pjdos_LiCoO2_t2g_eg.dat)
+
+ The output files are 2-column (jdos) or the same format (pjdos) ASCII
+ files: energy grid [eV], jdos/pjdos [1/eV].

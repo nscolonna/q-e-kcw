@@ -1,0 +1,353 @@
+#!/bin/sh
+# run from directory where this script is
+cd `dirname $0`
+EXAMPLE_DIR=`pwd`
+
+# check whether echo has the -e option
+if test "`echo -e`" = "-e" ; then ECHO=echo ; else ECHO="echo -e" ; fi
+
+$ECHO
+$ECHO "$EXAMPLE_DIR : starting"
+$ECHO
+$ECHO "This example shows how to use epsilon.x to compute the projected"
+$ECHO "joint density of states (pjdos): a generalization of the joint"
+$ECHO "density of states (jdos) where each electronic transition is"
+$ECHO "weighted by the projection of the initial and final Kohn-Sham"
+$ECHO "states onto a chosen set of atomic orbitals (as computed by"
+$ECHO "projwfc.x)."
+$ECHO
+$ECHO "The test system is LiCoO2 treated with DFT+U+V (same SCF setup"
+$ECHO "as PW/examples/example13). The workflow is:"
+$ECHO "  1) scf     (pw.x)      : DFT+U+V ground state"
+$ECHO "  2) nscf    (pw.x)      : add empty bands needed for jdos/pjdos"
+$ECHO "  3) projwfc (projwfc.x) : atomic projections of the KS states,"
+$ECHO "     with diag_basis=.true. so that the Co-3d projections are"
+$ECHO "     expressed in the LOCAL basis that diagonalizes the on-site"
+$ECHO "     occupation matrix -- i.e. the t2g/eg eigenbasis -- rather"
+$ECHO "     than in the fixed global-xyz real harmonics. This is needed"
+$ECHO "     because the CoO6 octahedra of this rhombohedral cell are NOT"
+$ECHO "     aligned with the global x,y,z axes, so the usual dz2/dzx/dzy/"
+$ECHO "     dx2-y2/dxy labels of the global frame do not correspond to"
+$ECHO "     t2g/eg here; diag_basis finds the local octahedral frame for"
+$ECHO "     each Co atom automatically, independent of the cell orientation."
+$ECHO "  4) build the *_up.proj files that epsilon.x reads via the"
+$ECHO "     filproj1/filproj2 namelist variables, by summing selected"
+$ECHO "     atomic-wfc blocks of the projwfc.x ASCII output"
+$ECHO "     ('prefix.projwfc_up', see PP/src/write_proj.f90)"
+$ECHO "  5) epsilon (epsilon.x) : calculation='jdos', with and without"
+$ECHO "     filproj1/filproj2, to compare jdos and pjdos"
+
+# set the needed environment variables
+. ../../../environment_variables
+
+# required executables and pseudopotentials
+BIN_LIST="pw.x projwfc.x epsilon.x"
+PSEUDO_LIST="Co.pbesol-spn-rrkjus_psl.0.3.1.UPF O.pbesol-n-rrkjus_psl.0.1.UPF Li.pbesol-s-rrkjus_psl.0.2.1.UPF"
+
+# BIN_DIR from environment_variables assumes a $PREFIX/bin tree; fall back
+# to the CMake build directory used in this working copy if pw.x is not
+# found there.
+if test ! -x "$BIN_DIR/pw.x" ; then
+    for TRY_DIR in "$EXAMPLE_DIR/../../../build_gnu/bin" "$EXAMPLE_DIR/../../../build/bin" ; do
+        if test -x "$TRY_DIR/pw.x" ; then
+            BIN_DIR="$TRY_DIR"
+            break
+        fi
+    done
+fi
+
+$ECHO
+$ECHO "  executables directory: $BIN_DIR"
+$ECHO "  pseudo directory:      $PSEUDO_DIR"
+$ECHO "  temporary directory:   $TMP_DIR"
+$ECHO "  checking that needed directories and files exist...\c"
+
+# check for directories
+for DIR in "$BIN_DIR" "$PSEUDO_DIR" ; do
+    if test ! -d $DIR ; then
+        $ECHO
+        $ECHO "ERROR: $DIR not existent or not a directory"
+        $ECHO "Aborting"
+        exit 1
+    fi
+done
+for DIR in "$TMP_DIR" "$EXAMPLE_DIR/results" ; do
+    if test ! -d $DIR ; then
+        mkdir $DIR
+    fi
+done
+cd $EXAMPLE_DIR/results
+
+# check for executables
+for FILE in $BIN_LIST ; do
+    if test ! -x $BIN_DIR/$FILE ; then
+        $ECHO
+        $ECHO "ERROR: $BIN_DIR/$FILE not existent or not executable"
+        $ECHO "Aborting"
+        exit 1
+    fi
+done
+
+# check for pseudopotentials
+for FILE in $PSEUDO_LIST ; do
+    if test ! -r $PSEUDO_DIR/$FILE ; then
+       $ECHO
+       $ECHO "Downloading $FILE to $PSEUDO_DIR...\c"
+            $WGET $PSEUDO_DIR/$FILE $NETWORK_PSEUDO/$FILE 2> /dev/null
+    fi
+    if test $? != 0; then
+        $ECHO
+        $ECHO "ERROR: $PSEUDO_DIR/$FILE not existent or not readable"
+        $ECHO "Aborting"
+        exit 1
+    fi
+done
+$ECHO " done"
+
+# how to run executables
+PW_COMMAND="$PARA_PREFIX $BIN_DIR/pw.x $PARA_POSTFIX"
+PROJWFC_COMMAND="$PARA_PREFIX $BIN_DIR/projwfc.x $PARA_POSTFIX"
+EPSILON_COMMAND="$PARA_PREFIX $BIN_DIR/epsilon.x $PARA_POSTFIX"
+$ECHO
+$ECHO "  running pw.x      as: $PW_COMMAND"
+$ECHO "  running projwfc.x as: $PROJWFC_COMMAND"
+$ECHO "  running epsilon.x as: $EPSILON_COMMAND"
+$ECHO
+
+# clean TMP_DIR
+$ECHO "  cleaning $TMP_DIR...\c"
+rm -rf $TMP_DIR/*
+$ECHO " done"
+
+PREFIX='LiCoO2'
+NBND=40
+
+#-----------------------------------------------------------------------
+# 1) self-consistent DFT+U+V calculation (same input as example13)
+#-----------------------------------------------------------------------
+cat > $PREFIX.scf.in << EOF
+ &control
+    calculation='scf'
+    restart_mode='from_scratch',
+    prefix='$PREFIX'
+    pseudo_dir = '$PSEUDO_DIR/'
+    outdir='$TMP_DIR/'
+    verbosity='high'
+ /
+ &system
+    ibrav = 5,
+    celldm(1) = 9.3705,
+    celldm(4) = 0.83874,
+    nat = 4,
+    ntyp = 3,
+    ecutwfc = 50.0
+    ecutrho = 400.0
+ /
+ &electrons
+    conv_thr =  1.d-10
+    mixing_beta = 0.7
+ /
+ATOMIC_SPECIES
+Co  59.0   Co.pbesol-spn-rrkjus_psl.0.3.1.UPF
+O   16.0   O.pbesol-n-rrkjus_psl.0.1.UPF
+Li   7.0   Li.pbesol-s-rrkjus_psl.0.2.1.UPF
+ATOMIC_POSITIONS {crystal}
+ Co  0.0000000000   0.0000000000   0.0000000000
+ O   0.2604885000   0.2604885000   0.2604885000
+ O   0.7395115000   0.7395115000   0.7395115000
+ Li  0.5000000000   0.5000000000   0.5000000000
+K_POINTS {automatic}
+ 2 2 2 0 0 0
+HUBBARD {ortho-atomic}
+U Co-3d 5.0
+V Co-3d O-2p 1 2 0.8
+EOF
+$ECHO "  Running the SCF calculation for $PREFIX..."
+$PW_COMMAND < $PREFIX.scf.in > $PREFIX.scf.out
+check_failure $?
+$ECHO " done"
+
+#-----------------------------------------------------------------------
+# 2) non-self-consistent calculation with extra empty bands
+#    (jdos/pjdos need conduction states too)
+#-----------------------------------------------------------------------
+cat > $PREFIX.nscf.in << EOF
+ &control
+    calculation='nscf'
+    restart_mode='from_scratch',
+    prefix='$PREFIX'
+    pseudo_dir = '$PSEUDO_DIR/'
+    outdir='$TMP_DIR/'
+    verbosity='high'
+ /
+ &system
+    ibrav = 5,
+    celldm(1) = 9.3705,
+    celldm(4) = 0.83874,
+    nat = 4,
+    ntyp = 3,
+    ecutwfc = 50.0
+    ecutrho = 400.0
+    nbnd = $NBND
+ /
+ &electrons
+    conv_thr =  1.d-10
+    mixing_beta = 0.7
+ /
+ATOMIC_SPECIES
+Co  59.0   Co.pbesol-spn-rrkjus_psl.0.3.1.UPF
+O   16.0   O.pbesol-n-rrkjus_psl.0.1.UPF
+Li   7.0   Li.pbesol-s-rrkjus_psl.0.2.1.UPF
+ATOMIC_POSITIONS {crystal}
+ Co  0.0000000000   0.0000000000   0.0000000000
+ O   0.2604885000   0.2604885000   0.2604885000
+ O   0.7395115000   0.7395115000   0.7395115000
+ Li  0.5000000000   0.5000000000   0.5000000000
+K_POINTS {automatic}
+ 2 2 2 0 0 0
+HUBBARD {ortho-atomic}
+U Co-3d 5.0
+V Co-3d O-2p 1 2 0.8
+EOF
+$ECHO "  Running the NSCF calculation for $PREFIX (nbnd=$NBND)..."
+$PW_COMMAND < $PREFIX.nscf.in > $PREFIX.nscf.out
+check_failure $?
+$ECHO " done"
+
+NK=`grep "number of k points" $PREFIX.nscf.out | awk '{print $5}'`
+$ECHO "  number of k points found in the NSCF run: $NK"
+
+#-----------------------------------------------------------------------
+# 3) atomic projections (projwfc.x)
+#-----------------------------------------------------------------------
+cat > $PREFIX.projwfc.in << EOF
+&projwfc
+ outdir = '$TMP_DIR/'
+ prefix = '$PREFIX'
+ DeltaE = 0.02
+ filproj = '$PREFIX'
+ degauss = 0.02
+ diag_basis = .true.
+/
+EOF
+$ECHO "  Running projwfc.x for $PREFIX (diag_basis=.true.)..."
+$PROJWFC_COMMAND < $PREFIX.projwfc.in > $PREFIX.projwfc.out
+check_failure $?
+$ECHO " done"
+
+#-----------------------------------------------------------------------
+# 4) build the *_up.proj files read by epsilon.x (filproj1/filproj2)
+#    out of the standard "$PREFIX.projwfc_up" file written by projwfc.x.
+#    See extract_proj.sh for details. The 6th argument selects which
+#    magnetic quantum number(s) m to sum over: "all" sums the whole
+#    shell (basis-independent, so it is the same with or without
+#    diag_basis), a comma separated subset isolates individual orbitals
+#    or symmetry-adapted combinations.
+#
+#    Because projwfc.x was run with diag_basis=.true., the Co-3D "m"
+#    index (1..5) no longer labels the fixed global-frame real harmonics
+#    (dz2,dzx,dzy,dx2-y2,dxy): it labels the eigenvectors of the local
+#    on-site occupation matrix, in ASCENDING eigenvalue order (QE's
+#    diagonalizer convention). For this system (see LiCoO2.projwfc.out,
+#    "ATOM 1" / "Orbital quantum number l = 2"), the eigenvalues are
+#    0.740 0.740 1.981 1.981 1.982, a clean 2+3 split: m=1,2 are the
+#    low-occupation eg orbitals, m=3,4,5 the high-occupation t2g
+#    orbitals (consistent with low-spin Co3+, d6, t2g^6 eg^0, softened
+#    by Co-O covalency). This m<->orbital correspondence is specific to
+#    this run and must be re-checked from the eigenvalues whenever the
+#    system changes.
+#      Co_d    : sum of all 5 Co-3D orbitals (atom 1)        -> empty states
+#      Co_t2g  : sum of the Co-3D t2g orbitals (m=3,4,5)      -> occupied-like
+#      Co_eg   : sum of the Co-3D eg orbitals  (m=1,2)        -> empty-like
+#      O_p     : sum of the 2P orbitals of both O atoms       -> occupied states
+#-----------------------------------------------------------------------
+$ECHO "  Building the projection files for pjdos..."
+../extract_proj.sh $PREFIX.projwfc_up $NK $NBND 1   3D all   Co_d_up.proj
+../extract_proj.sh $PREFIX.projwfc_up $NK $NBND 1   3D 3,4,5 Co_t2g_up.proj
+../extract_proj.sh $PREFIX.projwfc_up $NK $NBND 1   3D 1,2   Co_eg_up.proj
+../extract_proj.sh $PREFIX.projwfc_up $NK $NBND 2,3 2P all   O_p_up.proj
+$ECHO " done"
+
+#-----------------------------------------------------------------------
+# 5) epsilon.x: plain jdos, O_p -> Co_d pjdos, and Co(t2g) -> Co(eg) pjdos
+#-----------------------------------------------------------------------
+cat > $PREFIX.jdos.in << EOF
+&inputpp
+outdir='$TMP_DIR/'
+prefix='$PREFIX'
+calculation='jdos'
+/
+&energy_grid
+smeartype='gauss'
+intersmear=0.2d0
+wmax=15.0d0
+wmin=0.0d0
+nw=600
+shift=0.0d0
+/
+EOF
+$ECHO "  Running epsilon.x: plain jdos..."
+$EPSILON_COMMAND < $PREFIX.jdos.in > $PREFIX.jdos.out
+check_failure $?
+mv jdos_$PREFIX.dat jdos_${PREFIX}_plain.dat
+$ECHO " done"
+
+cat > $PREFIX.pjdos_Op_Cod.in << EOF
+&inputpp
+outdir='$TMP_DIR/'
+prefix='$PREFIX'
+calculation='jdos'
+filproj1='O_p'
+filproj2='Co_d'
+/
+&energy_grid
+smeartype='gauss'
+intersmear=0.2d0
+wmax=15.0d0
+wmin=0.0d0
+nw=600
+shift=0.0d0
+/
+EOF
+$ECHO "  Running epsilon.x: pjdos weighted by O-2p (initial) -> Co-3d (final)..."
+$EPSILON_COMMAND < $PREFIX.pjdos_Op_Cod.in > $PREFIX.pjdos_Op_Cod.out
+check_failure $?
+mv pjdos_$PREFIX.dat pjdos_${PREFIX}_Op_Cod.dat
+$ECHO " done"
+
+cat > $PREFIX.pjdos_t2g_eg.in << EOF
+&inputpp
+outdir='$TMP_DIR/'
+prefix='$PREFIX'
+calculation='jdos'
+filproj1='Co_t2g'
+filproj2='Co_eg'
+/
+&energy_grid
+smeartype='gauss'
+intersmear=0.2d0
+wmax=15.0d0
+wmin=0.0d0
+nw=600
+shift=0.0d0
+/
+EOF
+$ECHO "  Running epsilon.x: pjdos for the Co(t2g) -> Co(eg) d-d transition..."
+$EPSILON_COMMAND < $PREFIX.pjdos_t2g_eg.in > $PREFIX.pjdos_t2g_eg.out
+check_failure $?
+mv pjdos_$PREFIX.dat pjdos_${PREFIX}_t2g_eg.dat
+$ECHO " done"
+
+$ECHO
+$ECHO "  Results (energy grid [eV], jdos/pjdos [1/eV]):"
+$ECHO "    jdos_${PREFIX}_plain.dat      : unweighted jdos"
+$ECHO "    pjdos_${PREFIX}_Op_Cod.dat    : pjdos weighted by O-2p (initial states)"
+$ECHO "                                    and Co-3d (final states) character"
+$ECHO "    pjdos_${PREFIX}_t2g_eg.dat    : pjdos for the Co(t2g) -> Co(eg) d-d"
+$ECHO "                                    transition, using the diag_basis"
+$ECHO "                                    local octahedral eigenbasis (a"
+$ECHO "                                    subset of the m's of the Co-3d"
+$ECHO "                                    shell, not the full d -> d)"
+
+$ECHO
+$ECHO "$EXAMPLE_DIR: done"
