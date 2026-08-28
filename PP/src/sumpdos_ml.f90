@@ -1,6 +1,7 @@
 !
 ! Copyright (C) 2005 Andrea Ferretti
 !      Modified 2016 Guido Fratesi
+!      Modified 2026 Nicola Colonna (generalized to any l, ml-resolved)
 ! This file is distributed under the terms of the
 ! GNU General Public License. See the file `License'
 ! in the root directory of the present distribution,
@@ -12,12 +13,14 @@ PROGRAM sumpdos
   !
   ! AUTHOR: Andrea Ferretti
   ! edited: Guido Fratesi (to sum K-resolved DOS files)
+  ! edited: Nicola Colonna (to keep the ml resolution, for any l=1..4)
   !
-  ! this program reads and sum pdos from different
-  ! files (which are related to different atoms)
+  ! this program reads and sums ml-resolved pdos from different
+  ! files (which are related to different atoms), keeping the
+  ! resolution over the ml quantum number for a given l shell
+  ! (s, p, d or f) instead of summing over ml as sumpdos.f90 does
   !
-  ! file names are read from stdin
-  ! USAGE: sumpdos <file1> ... <fileN>
+  ! USAGE: see "sumpdos_ml -h"
   !
   INTEGER             :: ngrid              ! dimension of the energy grid
   INTEGER             :: nfile              ! number of files to sum
@@ -27,6 +30,7 @@ PROGRAM sumpdos
 
   CHARACTER(256), ALLOCATABLE    :: file(:) ! names of the files to sum
   CHARACTER(256)      :: filein
+  CHARACTER(256)      :: arg
   CHARACTER(10)       :: cdum, str1, str2, str3
 
   LOGICAL             :: exist, kresolveddos
@@ -35,49 +39,89 @@ PROGRAM sumpdos
   REAL, ALLOCATABLE   :: egrid(:)
   REAL, ALLOCATABLE   :: mysum(:,:)
 
-  INTEGER :: ios, ierr, iarg, ie, isp, ifile, i
+  INTEGER :: ios, ierr, nargs, iarg, ie, isp, ifile, i
   INTEGER :: ik, nk, iun
 
   !**************************************************************
-  ! User should supply input values here
+  ! defaults, possibly overridden by command-line options below
   !
   efermi = 0.0d0
-  l      = 2
+  l      = 2  ! d shell
 
   !**************************************************************
 
   !
   ! get the number of arguments (i.e. the number of files)
   !
-  nfile = command_argument_count ()
-  IF ( nfile == 0 ) THEN
+  nargs = command_argument_count ()
+  IF ( nargs == 0 ) THEN
      WRITE(0,"( 'No file to sum' )")
      STOP
   ENDIF
 
-  CALL get_command_argument ( 1, str1 )
   !
-  SELECT CASE ( trim(str1) )
-  CASE ( "-h" )
+  ! parse -l / -f / -h options, if any, then interpret what remains
+  ! as the list of files to sum
+  !
+  nfile = 0
+  filein = ' '
+  iarg = 0
+  !
+  DO WHILE ( iarg < nargs )
+     iarg = iarg + 1
+     CALL get_command_argument ( iarg, arg )
      !
-     ! write the manual
-     !
-     WRITE(0,"(/,'USAGE: sumpdos [-h] [-f <filein>] [<file1> ... <fileN>]', /, &
-          &'  Sum the pdos from the file specified in input and write the sum ', /, &
-          &'  to stdout', /, &
-          &'     -h           : write this manual',/, &
-          &'     -f <filein>  : takes the list of pdos files from <filein> ', /, &
-          &'                    (one per line) instead of command line',/, &
-          &'     <fileM>      : the M-th pdos file', &
-          & / )")
-     STOP
-     !
-  CASE ( "-f" )
-     !
-     ! read file names from file
-     !
-     CALL get_command_argument ( 2, filein )
-     IF ( len_trim(filein) == 0 ) CALL errore('sumpdos','provide filein name',2)
+     SELECT CASE ( trim(arg) )
+     CASE ( "-h" )
+        !
+        ! write the manual
+        !
+        WRITE(0,"(/,'USAGE: sumpdos [-h] [-l <l>] [-f <filein>] [<file1> ... <fileN>]', /, &
+             &'  Sum the pdos from the file specified in input and write the sum ', /, &
+             &'  to stdout', /, &
+             &'     -h           : write this manual',/, &
+             &'     -l <l>       : angular momentum of the shell (1 to 4, default 2 i.e. d)',/, &
+             &'     -f <filein>  : takes the list of pdos files from <filein> ', /, &
+             &'                    (one per line) instead of command line',/, &
+             &'     <fileM>      : the M-th pdos file', &
+             & / )")
+        STOP
+        !
+     CASE ( "-l" )
+        !
+        ! read the angular momentum from command line
+        !
+        iarg = iarg + 1
+        IF ( iarg > nargs ) CALL errore('sumpdos','provide a value for -l',iarg)
+        CALL get_command_argument ( iarg, arg )
+        READ(arg, *, IOSTAT=ios) l
+        IF ( ios /= 0 ) CALL errore('sumpdos','invalid value for -l: '//trim(arg),iarg)
+        IF ( l < 1 .or. l > 4 ) CALL errore('sumpdos','-l must be between 1 and 4',l)
+        !
+     CASE ( "-f" )
+        !
+        ! read file names from file
+        !
+        iarg = iarg + 1
+        IF ( iarg > nargs ) CALL errore('sumpdos','provide filein name',iarg)
+        CALL get_command_argument ( iarg, filein )
+        IF ( len_trim(filein) == 0 ) CALL errore('sumpdos','provide filein name',2)
+        !
+     CASE DEFAULT
+        !
+        ! get the name of a file
+        !
+        nfile = nfile + 1
+        IF ( .not. ALLOCATED(file) ) ALLOCATE( file(nargs), STAT=ierr )
+        IF (ierr/=0) CALL errore('sumpdos','allocating FILE',abs(ierr))
+        file(nfile) = arg
+        !
+     END SELECT
+  ENDDO
+  !
+  IF ( trim(filein) /= '' ) THEN
+     IF ( nfile > 0 ) CALL errore('sumpdos', &
+          'file names found both in command line and in file '//trim(filein),nfile)
 
      INQUIRE( FILE=trim(filein), EXIST=exist )
      IF (.not. exist) CALL errore('sumpdos','file '//trim(filein)//' does not exist',3)
@@ -113,19 +157,11 @@ PROGRAM sumpdos
            IF (ios /=0 ) CALL errore('sumpdos','reading from '//trim(filein),i)
         ENDDO
      ENDDO
-
-  CASE DEFAULT
-
+     CLOSE (unit=10)
      !
-     ! get the names of the files
-     !
-     ALLOCATE( file(nfile), STAT=ierr )
-     IF (ierr/=0) CALL errore('sumpdos','allocating FILE',abs(ierr))
-     DO iarg = 1, nfile
-        CALL get_command_argument ( iarg, file(iarg) )
-     ENDDO
-
-  END SELECT
+  END IF
+  !
+  IF ( nfile == 0 ) CALL errore('sumpdos','no file to sum',1)
 
   !
   ! open the first file and get data about spin
@@ -238,9 +274,9 @@ PROGRAM sumpdos
         !
         DO ie = 1, ngrid
            IF (kresolveddos) THEN
-              READ(iun, *, IOSTAT=ios ) cdum, egrid(ie), pdos(ie, 1:nspin*6, ifile)
+              READ(iun, *, IOSTAT=ios ) cdum, egrid(ie), pdos(ie, 1:nspin*(2*l+2), ifile)
            ELSE
-              READ(iun, *, IOSTAT=ios ) egrid(ie), pdos(ie, 1:nspin*6, ifile)
+              READ(iun, *, IOSTAT=ios ) egrid(ie), pdos(ie, 1:nspin*(2*l+2), ifile)
            END IF
            IF (ios/=0) &
                 CALL errore("sumpdos", "reading first line in "//trim(file(ifile)), ie )
@@ -274,13 +310,13 @@ PROGRAM sumpdos
 
      mysum = 0.0d0
      DO ie=1,ngrid
-        DO isp=1,nspin*6
+        DO isp=1,nspin*(2*l+2)
            mysum(ie,isp) = sum( pdos(ie,isp,:) )
         ENDDO
         IF (kresolveddos) THEN
-           WRITE(6,"(i5,' ',f9.3,12e11.3)") ik, egrid(ie) - efermi, mysum(ie,1:nspin*6)
+           WRITE(6,"(i5,' ',f9.3,20e11.3)") ik, egrid(ie) - efermi, mysum(ie,1:nspin*(2*l+2))
         ELSE
-           WRITE(6,"(f9.3,12e11.3)") egrid(ie) - efermi, mysum(ie,1:nspin*6)
+           WRITE(6,"(f9.3,20e11.3)") egrid(ie) - efermi, mysum(ie,1:nspin*(2*l+2))
         END IF
      ENDDO
 
