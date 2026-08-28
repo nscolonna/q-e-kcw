@@ -45,6 +45,8 @@ SUBROUTINE ks_hamiltonian (evc, ik, h_dim)
   !
   INTEGER :: iband, jband, ig, ik_eff
   !
+  INTEGER, EXTERNAL :: global_kpoint_index
+  !
   IF (check_ks ) WRITE(stdout,'(/,8x, "KS Hamiltonian calculation at k=", 3f12.4, 2x, " ... ")', advance="no" )  xk(:,ik)
   !
   CALL allocate_bec_type_acc ( nkb, h_dim, becp, intra_bgrp_comm )
@@ -95,8 +97,8 @@ SUBROUTINE ks_hamiltonian (evc, ik, h_dim)
   !
   ! Store the hamiltonian in the Wannier Gauge
   !
-  IF (calculation == 'ham') then 
-    ik_eff = ik - (spin_component -1)*nkstot/nspin
+  IF (calculation == 'ham') then
+    ik_eff = global_kpoint_index (nkstot, ik) - (spin_component -1)*nkstot/nspin
     !WRITE(*,*) ik, ik_eff
     Hamlt(ik_eff,1:h_dim,1:h_dim) = ham(1:h_dim,1:h_dim)
   ENDIF
