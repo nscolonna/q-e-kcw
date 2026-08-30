@@ -232,7 +232,6 @@ MODULE ldaU
   COMPLEX(DP), ALLOCATABLE :: overlap_inv(:,:)
   !! overlap matrix (transposed): (O^{-1/2})^T
   COMPLEX(DP), ALLOCATABLE :: doverlap_inv(:,:)
-  !$acc declare device_resident(doverlap_inv)
   !! derivative of the overlap matrix (not transposed): d(O^{-1/2})
   COMPLEX(DP), ALLOCATABLE :: proj_atom(:,:)
   !! bare atomic-orbital projections <phi_J|S|psi_n> for the current k-point;
