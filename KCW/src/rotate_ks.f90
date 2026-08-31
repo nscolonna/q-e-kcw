@@ -81,12 +81,14 @@ SUBROUTINE rotate_ks ()
   h_dim = nbnd
   IF (.NOT. kcw_at_ks) h_dim = num_wann
   !
-  IF (check_ks) THEN
-    ALLOCATE ( eigvl_wann_chk(h_dim) )
-    ALLOCATE ( et_wann_chk(h_dim, nkstot_eff), et_pwscf_chk(h_dim, nkstot_eff) )
-    et_wann_chk = 0.D0
-    et_pwscf_chk = 0.D0
-  ENDIF
+  ! eigvl_wann_chk/et_wann_chk/et_pwscf_chk are allocated unconditionally: ks_hamiltonian
+  ! requires eigvl_wann_chk as a mandatory (not OPTIONAL) argument on every call, since it
+  ! is a bare external subroutine with no explicit interface visible here - see the note
+  ! in ks_hamiltonian.f90. They are only ever filled/used when check_ks is on.
+  ALLOCATE ( eigvl_wann_chk(h_dim) )
+  ALLOCATE ( et_wann_chk(h_dim, nkstot_eff), et_pwscf_chk(h_dim, nkstot_eff) )
+  et_wann_chk = 0.D0
+  et_pwscf_chk = 0.D0
 
   k_loop: DO ik = 1, nks
      !
@@ -142,15 +144,13 @@ SUBROUTINE rotate_ks ()
      ! ... Check that the rotation did not spoil the KS eigenvalues
      ! ... and store it for later Hamiltonian diagonalization
      !
+     CALL ks_hamiltonian(evc0, ik, n_orb, eigvl_wann_chk)
      IF (check_ks) THEN
-       CALL ks_hamiltonian(evc0, ik, n_orb, eigvl_wann_chk)
        ! Stash this pool's contribution at its GLOBAL (effective) k-index; gathered
        ! and printed after the loop (see below) - printing here would only ever
        ! reach the log for the k-points owned by ionode's own pool.
        et_wann_chk(:,ik_eff) = eigvl_wann_chk(:)
        et_pwscf_chk(:,ik_eff) = et(1:h_dim,ik)
-     ELSE
-       CALL ks_hamiltonian(evc0, ik, n_orb)
      ENDIF
      !
   ENDDO k_loop
@@ -167,8 +167,8 @@ SUBROUTINE rotate_ks ()
         WRITE( stdout, '(8X, "PWSCF ",8F11.4)' ) (et_pwscf_chk(i,ik)*rytoev, i=1,h_dim)
       ENDDO
     ENDIF
-    DEALLOCATE ( eigvl_wann_chk, et_wann_chk, et_pwscf_chk )
   ENDIF
+  DEALLOCATE ( eigvl_wann_chk, et_wann_chk, et_pwscf_chk )
   IF (check_ks .AND. .NOT. kcw_at_ks )  WRITE( stdout, '(/,8x,A)') &
                'INFO: Performing a check on the eigenvalues of the rotated KS Hamiltonian ... DONE'
   WRITE(stdout, '(/,5X,"INFO: Minimizing orbitals DEFINED")')

@@ -227,13 +227,15 @@ subroutine kcw_setup_ham
     WRITE(stdout,'(/,5X, "INFO: MLWF read from file: &
                   Reading collected, re-writing distributed wavefunctions")')
     WRITE(stdout,'(5X, "INFO: Building KS Hamiltonian H(k) in the MLWF gauge")')
-    IF (check_ks) THEN
-    WRITE(stdout,'(5X, "INFO: Going to check KS eigenvalues: Diag H(k)")')
-      ALLOCATE ( eigvl_wann_chk(num_wann) )
-      ALLOCATE ( et_wann_chk(num_wann, nkstot_eff), et_pwscf_chk(num_wann, nkstot_eff) )
-      et_wann_chk = 0.D0
-      et_pwscf_chk = 0.D0
-    ENDIF
+    IF (check_ks) WRITE(stdout,'(5X, "INFO: Going to check KS eigenvalues: Diag H(k)")')
+    ! eigvl_wann_chk/et_wann_chk/et_pwscf_chk are allocated unconditionally: ks_hamiltonian
+    ! requires eigvl_wann_chk as a mandatory (not OPTIONAL) argument on every call, since it
+    ! is a bare external subroutine with no explicit interface visible here - see the note
+    ! in ks_hamiltonian.f90. They are only ever filled/used when check_ks is on.
+    ALLOCATE ( eigvl_wann_chk(num_wann) )
+    ALLOCATE ( et_wann_chk(num_wann, nkstot_eff), et_pwscf_chk(num_wann, nkstot_eff) )
+    et_wann_chk = 0.D0
+    et_pwscf_chk = 0.D0
     DO ik = 1, nks
         !
         current_k = ik
@@ -244,16 +246,14 @@ subroutine kcw_setup_ham
         CALL read_collected_wfc ( dirname, ik, evc0, "wan")
         CALL save_buffer ( evc0, lrwfc, iuwfc_wann, ik )
         ! LOCAL ik: iuwfc_wann follows the per-pool buffer convention (see rotate_ks.f90)
+        CALL ks_hamiltonian(evc0, ik, num_wann, eigvl_wann_chk)
         IF (check_ks) THEN
-          CALL ks_hamiltonian(evc0, ik, num_wann, eigvl_wann_chk)
           ! Stash this pool's contribution at its GLOBAL (effective) k-index; gathered
           ! and printed after the loop (see below) - printing here would only ever
           ! reach the log for the k-points owned by ionode's own pool.
           ik_eff = global_kpoint_index (nkstot, ik) - (spin_component -1)*nkstot/nspin
           et_wann_chk(:,ik_eff) = eigvl_wann_chk(:)
           et_pwscf_chk(:,ik_eff) = et(1:num_wann,ik)
-        ELSE
-          CALL ks_hamiltonian(evc0, ik, num_wann)
         ENDIF
     END DO
     IF (check_ks) THEN
@@ -267,8 +267,8 @@ subroutine kcw_setup_ham
           WRITE( stdout, '(8X, "PWSCF ",8F11.4)' ) (et_pwscf_chk(iwann,ik)*rytoev, iwann=1,num_wann)
         ENDDO
       ENDIF
-      DEALLOCATE ( eigvl_wann_chk, et_wann_chk, et_pwscf_chk )
     ENDIF
+    DEALLOCATE ( eigvl_wann_chk, et_wann_chk, et_pwscf_chk )
   ENDIF
   !
   ! ... pass all the WFs to all the pool (needed to have pool parallelization)
