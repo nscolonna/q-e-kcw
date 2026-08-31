@@ -38,14 +38,17 @@ subroutine kcw_setup_ham
                                 num_wann, num_wann_occ, num_wann_emp, i_orb, iorb_start, iorb_end, &
                                 calculation, nqstot, occ_mat ,alpha_final_full, spin_component, &
                                 tmp_dir_kcw, tmp_dir_kcwq, x_q, lgamma_iq, io_sp, nrho, nkstot_eff, &
-                                iuwfc_wann_allk, igk_k_all, ngk_all !, wq
-  USE io_global,         ONLY : stdout
+                                iuwfc_wann_allk, igk_k_all, ngk_all, check_ks !, wq
+  USE io_global,         ONLY : stdout, ionode
   USE klist,             ONLY : nkstot, xk, nks, ngk, igk_k, nelec, nelup, neldw
+  USE wvfct,             ONLY : et
+  USE constants,         ONLY : rytoev
+  USE mp_pools,          ONLY : inter_pool_comm
   USE cell_base,         ONLY : at, omega !, bg
   USE fft_base,          ONLY : dffts
   !
   USE control_lr,        ONLY : nbnd_occ
-  USE mp,                ONLY : mp_bcast
+  USE mp,                ONLY : mp_bcast, mp_sum
   USE eqv,               ONLY : dmuxc
   !
   USE io_kcw,            ONLY : read_rhowann, read_rhowann_g
@@ -76,9 +79,18 @@ subroutine kcw_setup_ham
   CHARACTER (LEN=256) :: file_base
   CHARACTER (LEN=6), EXTERNAL :: int_to_char
   !
-  INTEGER :: ik
+  INTEGER :: ik, ik_eff, iwann
   CHARACTER(LEN=256)  :: dirname
   LOGICAL :: mlwf_from_u = .FALSE.
+  INTEGER, EXTERNAL :: global_kpoint_index
+  !
+  REAL(DP), ALLOCATABLE :: eigvl_wann_chk(:)
+  ! The "WANN" eigenvalues from ks_hamiltonian for the current (local) k-point
+  !
+  ! Gathered, full-mesh copies of the WANN/PWSCF eigenvalues used to print the
+  ! check_ks report once (from ionode) after the pool-parallel k-loop below,
+  ! instead of from inside ks_hamiltonian - see the note there.
+  REAL(DP), ALLOCATABLE :: et_wann_chk(:,:), et_pwscf_chk(:,:)
   !
   !LOGICAL :: skip_equivalence
   !INTEGER :: nk1, nk2, nk3, k1, k2, k3
@@ -210,10 +222,18 @@ subroutine kcw_setup_ham
                   Reading collected, re-writing distributed wavefunctions")')
     CALL rotate_ks () 
     !
-  ELSE 
+  ELSE
     dirname = restart_dir ()
     WRITE(stdout,'(/,5X, "INFO: MLWF read from file: &
                   Reading collected, re-writing distributed wavefunctions")')
+    WRITE(stdout,'(5X, "INFO: Building KS Hamiltonian H(k) in the MLWF gauge")')
+    IF (check_ks) THEN
+    WRITE(stdout,'(5X, "INFO: Going to check KS eigenvalues: Diag H(k)")')
+      ALLOCATE ( eigvl_wann_chk(num_wann) )
+      ALLOCATE ( et_wann_chk(num_wann, nkstot_eff), et_pwscf_chk(num_wann, nkstot_eff) )
+      et_wann_chk = 0.D0
+      et_pwscf_chk = 0.D0
+    ENDIF
     DO ik = 1, nks
         !
         current_k = ik
@@ -224,8 +244,31 @@ subroutine kcw_setup_ham
         CALL read_collected_wfc ( dirname, ik, evc0, "wan")
         CALL save_buffer ( evc0, lrwfc, iuwfc_wann, ik )
         ! LOCAL ik: iuwfc_wann follows the per-pool buffer convention (see rotate_ks.f90)
-        CALL ks_hamiltonian(evc0, ik, num_wann)
+        IF (check_ks) THEN
+          CALL ks_hamiltonian(evc0, ik, num_wann, eigvl_wann_chk)
+          ! Stash this pool's contribution at its GLOBAL (effective) k-index; gathered
+          ! and printed after the loop (see below) - printing here would only ever
+          ! reach the log for the k-points owned by ionode's own pool.
+          ik_eff = global_kpoint_index (nkstot, ik) - (spin_component -1)*nkstot/nspin
+          et_wann_chk(:,ik_eff) = eigvl_wann_chk(:)
+          et_pwscf_chk(:,ik_eff) = et(1:num_wann,ik)
+        ELSE
+          CALL ks_hamiltonian(evc0, ik, num_wann)
+        ENDIF
     END DO
+    IF (check_ks) THEN
+      WRITE(stdout,'(/,8x, "KS Hamiltonian eigenvalues CHECK")', advance="yes" )
+      CALL mp_sum ( et_wann_chk, inter_pool_comm )
+      CALL mp_sum ( et_pwscf_chk, inter_pool_comm )
+      IF (ionode) THEN
+        DO ik = 1, nkstot_eff
+          WRITE( stdout, 9020 ) ik
+          WRITE( stdout, '(8X, "WANN  ",8F11.4)' ) (et_wann_chk(iwann,ik)*rytoev, iwann=1,num_wann)
+          WRITE( stdout, '(8X, "PWSCF ",8F11.4)' ) (et_pwscf_chk(iwann,ik)*rytoev, iwann=1,num_wann)
+        ENDDO
+      ENDIF
+      DEALLOCATE ( eigvl_wann_chk, et_wann_chk, et_pwscf_chk )
+    ENDIF
   ENDIF
   !
   ! ... pass all the WFs to all the pool (needed to have pool parallelization)
@@ -350,6 +393,8 @@ subroutine kcw_setup_ham
   !
   DEALLOCATE (rhowann, rhowann_aux)
   DEALLOCATE (rhog)
+  !
+9020 FORMAT(/'         ik =',1I7,'     band energies (ev):'/ )
   !
   RETURN
   !

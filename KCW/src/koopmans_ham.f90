@@ -12,7 +12,7 @@
 SUBROUTINE koopmans_ham ()
   !---------------------------------------------------------------------
   !
-  USE io_global,             ONLY : stdout
+  USE io_global,             ONLY : stdout, ionode
   USE kinds,                 ONLY : DP
   USE klist,                 ONLY : nkstot, nks
   USE lsda_mod,              ONLY : nspin, lsda, isk
@@ -42,6 +42,13 @@ SUBROUTINE koopmans_ham ()
   ! Local copy of the new (KI) eigenvalues, filled only for the k-points owned by
   ! this pool and zero elsewhere, then summed across pools (see below)
   REAL(DP), ALLOCATABLE :: et_eff(:,:)
+  !
+  ! Same as et_eff but for the KS eigenvalues (Hamlt before the KI correction is
+  ! added): needed only so that the per-k "KS"/"KI" report below can be printed
+  ! AFTER gathering across pools (see below), instead of from inside the
+  ! per-pool k-point loop where only the k-points owned by ionode's own pool
+  ! would ever reach the log.
+  REAL(DP), ALLOCATABLE :: et_ks_eff(:,:)
   !
   ! The scalar part (independent on k) <rho_0i|v_0i|rho_0i>delta_ij
   COMPLEX(DP) :: deltah_scal (num_wann, num_wann)
@@ -100,7 +107,9 @@ SUBROUTINE koopmans_ham ()
   ! The new (KI) eigenvalues, filled only for the k-points owned by this pool
   ! (zero elsewhere) then summed across pools right after the loop.
   ALLOCATE ( et_eff(num_wann, nkstot_eff) )
+  ALLOCATE ( et_ks_eff(num_wann, nkstot_eff) )
   et_eff = 0.D0
+  et_ks_eff = 0.D0
   !
   ! ... Loop over the LOCAL (this pool's) k-points only: with pools active each
   ! pool owns a different subset of the nkstot_eff k-points of the current spin
@@ -169,15 +178,19 @@ SUBROUTINE koopmans_ham ()
     ENDDO
 #endif
     !
-    WRITE( stdout, 9020 ) ( x_q(i,ik_eff), i = 1, 3 )
-    WRITE( stdout, '(10x, "KS  ",8F11.4)' ) (eigvl(iwann)*rytoev, iwann=1,num_wann)
+    ! Stash the KS-in-Wannier-gauge eigenvalues for this k-point; the actual
+    ! "KS"/"KI" report is printed after the pool loop (see below), once every
+    ! process has the full, gathered table - printing here would only ever
+    ! reach the log for the k-points owned by ionode's own pool.
+    DO iwann = 1, num_wann
+      et_ks_eff(iwann,ik_eff) = eigvl(iwann)
+    ENDDO
     !
     ehomo_ks = MAX ( ehomo_ks, eigvl(num_wann_occ ) )
     IF (num_wann .gt. num_wann_occ) elumo_ks = MIN ( elumo_ks, eigvl(num_wann_occ+1 ) )
     !
     ham(:,:) = Hamlt(ik_eff,:,:)
     CALL cdiagh( num_wann, ham, num_wann, eigvl, eigvc )
-    WRITE( stdout, '(10x, "KI  ",8F11.4)' ) (eigvl(iwann)*rytoev, iwann=1,num_wann)
     !
     nbnd = num_wann
     ! Canonical wfc at each k point (overwrite the evc from DFT)
@@ -209,12 +222,26 @@ SUBROUTINE koopmans_ham ()
   !
   CALL mp_sum ( Hamlt(1:nkstot_eff,:,:), inter_pool_comm )
   CALL mp_sum ( et_eff, inter_pool_comm )
+  CALL mp_sum ( et_ks_eff, inter_pool_comm )
   et(1:num_wann,1:nkstot_eff) = et_eff(1:num_wann,1:nkstot_eff)
-  DEALLOCATE ( et_eff )
   CALL mp_max ( ehomo_ks, inter_pool_comm )
   CALL mp_max ( ehomo, inter_pool_comm )
   CALL mp_min ( elumo_ks, inter_pool_comm )
   CALL mp_min ( elumo, inter_pool_comm )
+  !
+  ! ... The per-k "KS"/"KI" report, now that every process holds the full,
+  ! gathered table: print once, in k-point order, from ionode only (x_q is
+  ! already replicated on every process - see compute_map_ikq_single.f90).
+  !
+  IF (ionode) THEN
+    DO ik_eff = 1, nkstot_eff
+      WRITE( stdout, 9020 ) ( x_q(i,ik_eff), i = 1, 3 )
+      WRITE( stdout, '(10x, "KS  ",8F11.4)' ) (et_ks_eff(iwann,ik_eff)*rytoev, iwann=1,num_wann)
+      WRITE( stdout, '(10x, "KI  ",8F11.4)' ) (et_eff(iwann,ik_eff)*rytoev, iwann=1,num_wann)
+    ENDDO
+  ENDIF
+  DEALLOCATE ( et_eff )
+  DEALLOCATE ( et_ks_eff )
   !
   IF ( elumo < 1d+6) THEN
      WRITE( stdout, 9042 ) ehomo_ks*rytoev, elumo_ks*rytoev
