@@ -20,6 +20,8 @@ Fixed in 7.6.1 version(s)
     EELS and Berry phase calculations with USPP
   * Too small thresholds for rho and grho2 in meta-GGA lead to numerical noise 
     (Pietro Delugas)
+  * Symmetrization error in noncolinear magnetic phonon calculations
+    See !2931, courtesy Seung-Ju Hong
     
 
 Incompatible changes in 7.6.1 version(s)
@@ -29,7 +31,7 @@ Incompatible changes in 7.6.1 version(s)
   * Meta-GGA: tiny differences in final total energies may appear 
 
 New in 7.6.1 version(s) 
-  * ... 
+  * DFT+U+V, 'ortho-atomic' DFT+U speedup: see !2905, courtesy Moritz Gubler
 
 Fixed in 7.6 version:
   * Stress for meta-GGA functionals was broken (Marc Slot, Pietro Delugas) 
