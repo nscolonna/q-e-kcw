@@ -13,22 +13,6 @@ SUBROUTINE ks_hamiltonian (evc, ik, h_dim, eigvl_out)
   !! Non-collinear case is NOT implemented!
   !! OBSOLETE?
   !
-  !! ik is the LOCAL (pool) k-point index. The caller always passes eigvl_out
-  !! to retrieve the "WANN" (KS-in-Wannier-gauge) eigenvalues computed here
-  !! (only meaningful when check_ks is on - see below) instead of having this
-  !! routine print them directly: with pools active this is called once per
-  !! LOCAL k-point, so a WRITE here would only ever reach the log for the
-  !! k-points owned by ionode's own pool. The caller is expected to gather
-  !! eigvl_out (and the corresponding et(:,ik)) across pools and print the
-  !! full, ordered table once - see kcw_setup_ham.f90 and rotate_ks.f90.
-  !! NOTE: eigvl_out is a mandatory (not OPTIONAL) argument on purpose: this
-  !! is an external subroutine with no explicit interface at any call site,
-  !! and per the Fortran standard OPTIONAL dummy arguments require the caller
-  !! to see an explicit interface (module procedure or INTERFACE block) -
-  !! otherwise whether an actual argument was omitted cannot be determined
-  !! reliably. Callers that do not need it (check_ks off) still pass a
-  !! throwaway array (see kcw_setup_ham.f90/rotate_ks.f90).
-  !
   USE kinds,                ONLY : DP
   USE io_global,            ONLY : stdout
   USE wvfct,                ONLY : npwx, npw, et

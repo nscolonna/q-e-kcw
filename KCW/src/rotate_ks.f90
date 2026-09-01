@@ -49,14 +49,9 @@ SUBROUTINE rotate_ks ()
   COMPLEX(DP) :: occ_mat_aux(num_wann,num_wann)
   !
   INTEGER :: h_dim
-  ! Dimension of the Hamiltonian diagonalized in ks_hamiltonian: fixed for the
-  ! whole loop (kcw_at_ks does not vary with ik), nbnd if kcw_at_ks else num_wann
   REAL(DP), ALLOCATABLE :: eigvl_wann_chk(:)
   ! The "WANN" eigenvalues from ks_hamiltonian for the current (local) k-point
   !
-  ! Gathered, full-mesh copies of the WANN/PWSCF eigenvalues, used to print the
-  ! check_ks report once (from ionode) after the pool-parallel k-loop below,
-  ! instead of from inside ks_hamiltonian - see the note there.
   REAL(DP), ALLOCATABLE :: et_wann_chk(:,:), et_pwscf_chk(:,:)
   !
   IF ( ionode )  THEN 
@@ -81,10 +76,6 @@ SUBROUTINE rotate_ks ()
   h_dim = nbnd
   IF (.NOT. kcw_at_ks) h_dim = num_wann
   !
-  ! eigvl_wann_chk/et_wann_chk/et_pwscf_chk are allocated unconditionally: ks_hamiltonian
-  ! requires eigvl_wann_chk as a mandatory (not OPTIONAL) argument on every call, since it
-  ! is a bare external subroutine with no explicit interface visible here - see the note
-  ! in ks_hamiltonian.f90. They are only ever filled/used when check_ks is on.
   ALLOCATE ( eigvl_wann_chk(h_dim) )
   ALLOCATE ( et_wann_chk(h_dim, nkstot_eff), et_pwscf_chk(h_dim, nkstot_eff) )
   et_wann_chk = 0.D0
@@ -146,9 +137,6 @@ SUBROUTINE rotate_ks ()
      !
      CALL ks_hamiltonian(evc0, ik, n_orb, eigvl_wann_chk)
      IF (check_ks) THEN
-       ! Stash this pool's contribution at its GLOBAL (effective) k-index; gathered
-       ! and printed after the loop (see below) - printing here would only ever
-       ! reach the log for the k-points owned by ionode's own pool.
        et_wann_chk(:,ik_eff) = eigvl_wann_chk(:)
        et_pwscf_chk(:,ik_eff) = et(1:h_dim,ik)
      ENDIF

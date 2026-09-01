@@ -33,21 +33,10 @@ SUBROUTINE koopmans_ham ()
   INTEGER, EXTERNAL :: global_kpoint_index
   !! The global index of a local (pool) k-point
   !
-  ! ik is the LOCAL (pool) k-point index; ik_eff is the "effective" index (1:nkstot_eff)
-  ! used throughout KCW for the current spin channel to label Hamlt, evc0 (buffers
-  ! iuwfc_wann/iuwfc_wann_allk) and et. See bcast_wfc.f90/rho_of_q.f90 for the same
-  ! convention, used here to pool-parallelize the k-point loop.
   INTEGER :: ik, ik_eff
   !
-  ! Local copy of the new (KI) eigenvalues, filled only for the k-points owned by
-  ! this pool and zero elsewhere, then summed across pools (see below)
   REAL(DP), ALLOCATABLE :: et_eff(:,:)
   !
-  ! Same as et_eff but for the KS eigenvalues (Hamlt before the KI correction is
-  ! added): needed only so that the per-k "KS"/"KI" report below can be printed
-  ! AFTER gathering across pools (see below), instead of from inside the
-  ! per-pool k-point loop where only the k-points owned by ionode's own pool
-  ! would ever reach the log.
   REAL(DP), ALLOCATABLE :: et_ks_eff(:,:)
   !
   ! The scalar part (independent on k) <rho_0i|v_0i|rho_0i>delta_ij
@@ -110,12 +99,6 @@ SUBROUTINE koopmans_ham ()
   ALLOCATE ( et_ks_eff(num_wann, nkstot_eff) )
   et_eff = 0.D0
   et_ks_eff = 0.D0
-  !
-  ! ... Loop over the LOCAL (this pool's) k-points only: with pools active each
-  ! pool owns a different subset of the nkstot_eff k-points of the current spin
-  ! channel. ik_eff is the "effective" index (1:nkstot_eff) used everywhere else
-  ! in KCW (Hamlt, et, the iuwfc_wann_allk buffer, the k+q/k-q map, ...); ik is
-  ! the local-pool index needed for the per-pool buffers (iuwfc_wann, iuwfc).
   !
   DO ik = 1, nks
     !

@@ -85,11 +85,7 @@ subroutine kcw_setup_ham
   INTEGER, EXTERNAL :: global_kpoint_index
   !
   REAL(DP), ALLOCATABLE :: eigvl_wann_chk(:)
-  ! The "WANN" eigenvalues from ks_hamiltonian for the current (local) k-point
   !
-  ! Gathered, full-mesh copies of the WANN/PWSCF eigenvalues used to print the
-  ! check_ks report once (from ionode) after the pool-parallel k-loop below,
-  ! instead of from inside ks_hamiltonian - see the note there.
   REAL(DP), ALLOCATABLE :: et_wann_chk(:,:), et_pwscf_chk(:,:)
   !
   !LOGICAL :: skip_equivalence
@@ -185,9 +181,9 @@ subroutine kcw_setup_ham
   CALL open_buffer ( iuwfc_wann, 'wfc_wann', lrwfc, io_level, exst )
   if (kcw_iverbosity .gt. 1) WRITE(stdout,'(/,5X, "INFO: Buffer for WFs, OPENED")')
   !
-  ! ... Open an other buffer for the KS states in the WANNIER gauge which contains
-  !     all the k points (not just the one in this pool). This is needed for each k-point
-  !     to have access to all the other k-points (pool parallelization). MEMORY INTENSE
+  ! Open an other buffer for the KS states in the WANNIER gauge which contains
+  ! all the k points (not just the one in this pool). This is needed for each k-point
+  ! to have access to all the other k-points (pool parallelization). MEMORY INTENSE
   !
   iuwfc_wann_allk = 210
   io_level = 1
@@ -228,10 +224,6 @@ subroutine kcw_setup_ham
                   Reading collected, re-writing distributed wavefunctions")')
     WRITE(stdout,'(5X, "INFO: Building KS Hamiltonian H(k) in the MLWF gauge")')
     IF (check_ks) WRITE(stdout,'(5X, "INFO: Going to check KS eigenvalues: Diag H(k)")')
-    ! eigvl_wann_chk/et_wann_chk/et_pwscf_chk are allocated unconditionally: ks_hamiltonian
-    ! requires eigvl_wann_chk as a mandatory (not OPTIONAL) argument on every call, since it
-    ! is a bare external subroutine with no explicit interface visible here - see the note
-    ! in ks_hamiltonian.f90. They are only ever filled/used when check_ks is on.
     ALLOCATE ( eigvl_wann_chk(num_wann) )
     ALLOCATE ( et_wann_chk(num_wann, nkstot_eff), et_pwscf_chk(num_wann, nkstot_eff) )
     et_wann_chk = 0.D0
@@ -248,9 +240,6 @@ subroutine kcw_setup_ham
         ! LOCAL ik: iuwfc_wann follows the per-pool buffer convention (see rotate_ks.f90)
         CALL ks_hamiltonian(evc0, ik, num_wann, eigvl_wann_chk)
         IF (check_ks) THEN
-          ! Stash this pool's contribution at its GLOBAL (effective) k-index; gathered
-          ! and printed after the loop (see below) - printing here would only ever
-          ! reach the log for the k-points owned by ionode's own pool.
           ik_eff = global_kpoint_index (nkstot, ik) - (spin_component -1)*nkstot/nspin
           et_wann_chk(:,ik_eff) = eigvl_wann_chk(:)
           et_pwscf_chk(:,ik_eff) = et(1:num_wann,ik)

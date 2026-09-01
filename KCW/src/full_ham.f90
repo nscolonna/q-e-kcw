@@ -69,7 +69,6 @@ SUBROUTINE full_ham (ik)
   COMPLEX(DP) , ALLOCATABLE :: ham (:,:), ham_up(:,:), ham_dw(:,:), vpsi(:), vpsi_r(:), ham_aux(:,:), v_ki(:,:)
   REAL(DP), ALLOCATABLE :: eigvl_ki(:), et_aux(:,:)
   REAL(DP), ALLOCATABLE :: eigvl_wann_chk(:)
-  ! The "WANN" eigenvalues from ks_hamiltonian, only filled/used when check_ks is on
   !
   LOGICAL :: off_diag = .TRUE.
   REAL(DP) :: ehomo, elumo
@@ -117,9 +116,6 @@ SUBROUTINE full_ham (ik)
   ik_eff = ik + (spin_component -1)*nkstot/nspin_mag
   ALLOCATE ( eigvl_wann_chk(dim_ham) )
   CALL ks_hamiltonian (evc0, ik_eff, dim_ham, eigvl_wann_chk)
-  ! This is only ever called once, identically, on every process (no pool split -
-  ! see the nkstot/nspin==1 guard in koopmans_ham.f90), so printing directly here
-  ! (unlike koopmans_ham.f90/kcw_setup_ham.f90) is safe.
   IF (check_ks .AND. ionode) THEN
     WRITE( stdout, '(8X, "WANN  ",8F11.4)' ) (eigvl_wann_chk(ibnd)*rytoev, ibnd=1,dim_ham)
     WRITE( stdout, '(8X, "PWSCF ",8F11.4)' ) (et(ibnd,ik_eff)*rytoev, ibnd=1,dim_ham)

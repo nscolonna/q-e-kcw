@@ -189,10 +189,6 @@ CONTAINS
         ENDDO
       ENDDO
       !
-      ! ... Sum ONCE, after ham_t has been fully accumulated over (iband,jband,ik): calling
-      ! mp_sum inside the iband/jband loop would keep re-summing entries already reduced in
-      ! earlier iterations, multiplying them by npool again on every later pass (harmless
-      ! no-op with npool=1, but wrong - and compounding - as soon as pools are active).
       CALL mp_sum(ham_t, inter_pool_comm)
       !
       ham_t = ham_t / (nkstot_eff)   ! 1/Nk factor for the FT from H(k) to H(R)
