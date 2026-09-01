@@ -150,7 +150,7 @@ SUBROUTINE rotate_ks ()
     IF ( .NOT. kcw_at_ks ) WRITE( stdout, '(/,8x,A)') &
                'INFO: Performing a check on the eigenvalues of the rotated KS Hamilotnian ... '
       DO ik = 1, nkstot_eff
-        WRITE( stdout, 9020 ) ik
+        WRITE( stdout, 9020 ) ( xk(i,ik), i = 1, 3 )
         WRITE( stdout, '(8X, "WANN  ",8F11.4)' ) (et_wann_chk(i,ik)*rytoev, i=1,h_dim)
         WRITE( stdout, '(8X, "PWSCF ",8F11.4)' ) (et_pwscf_chk(i,ik)*rytoev, i=1,h_dim)
       ENDDO
@@ -161,7 +161,7 @@ SUBROUTINE rotate_ks ()
                'INFO: Performing a check on the eigenvalues of the rotated KS Hamiltonian ... DONE'
   WRITE(stdout, '(/,5X,"INFO: Minimizing orbitals DEFINED")')
   !
-9020 FORMAT(/'         ik =',1I7,'     band energies (ev):'/ )
+9020 FORMAT(/'          k =',3F7.4,'     band energies (ev):'/ )
   !
   RETURN
   !

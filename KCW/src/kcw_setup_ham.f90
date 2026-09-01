@@ -245,13 +245,14 @@ subroutine kcw_setup_ham
           et_pwscf_chk(:,ik_eff) = et(1:num_wann,ik)
         ENDIF
     END DO
+    !
     IF (check_ks) THEN
       WRITE(stdout,'(/,8x, "KS Hamiltonian eigenvalues CHECK")', advance="yes" )
       CALL mp_sum ( et_wann_chk, inter_pool_comm )
       CALL mp_sum ( et_pwscf_chk, inter_pool_comm )
       IF (ionode) THEN
         DO ik = 1, nkstot_eff
-          WRITE( stdout, 9020 ) ik
+          WRITE( stdout, 9020 ) ( xk(i,ik), i = 1, 3 )
           WRITE( stdout, '(8X, "WANN  ",8F11.4)' ) (et_wann_chk(iwann,ik)*rytoev, iwann=1,num_wann)
           WRITE( stdout, '(8X, "PWSCF ",8F11.4)' ) (et_pwscf_chk(iwann,ik)*rytoev, iwann=1,num_wann)
         ENDDO
@@ -383,7 +384,7 @@ subroutine kcw_setup_ham
   DEALLOCATE (rhowann, rhowann_aux)
   DEALLOCATE (rhog)
   !
-9020 FORMAT(/'         ik =',1I7,'     band energies (ev):'/ )
+9020 FORMAT(/'          k =',3F7.4,'     band energies (ev):'/ )
   !
   RETURN
   !
