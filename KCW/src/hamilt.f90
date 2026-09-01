@@ -107,7 +107,7 @@ SUBROUTINE ham_koopmans_k (ik)
   ! auxiliary variable for alpha correction
   !
   LOGICAL :: corr_done=.FALSE.
-  COMPLEX(dp) :: zpom, zpomSH
+  COMPLEX(dp) :: auxsum, auxsumSH
   ! whether the correction to the current wannier was already done 
   !
   if (nspin_mag == 4) &
@@ -202,15 +202,15 @@ SUBROUTINE ham_koopmans_k (ik)
      !!  sh(iwann) = sh(iwann) + 0.5D0 * sum (CONJG(rhog (:)) * vh_rhog(:)                )*weight(iq)*omega
      !!  deltaH(iwann, iwann) = deltaH(iwann,iwann) -0.5D0 * sum (CONJG(rhog (:)) * delta_vg(:,spin_component))*weight(iq)*omega
 
-       zpom = (0.0_dp, 0.0_dp)
-       zpomSH = (0.0_dp, 0.0_dp)
-       !$acc parallel loop reduction(+:zpom, zpomSH) present(rhog, delta_vg, vh_rhog)
+       auxsum = (0.0_dp, 0.0_dp)
+       auxsumSH = (0.0_dp, 0.0_dp)
+       !$acc parallel loop reduction(+:auxsum, auxsumSH) present(rhog, delta_vg, vh_rhog)
        DO ii =1, ngms
-         zpom  = zpom + CONJG(rhog (ii)) * delta_vg(ii,spin_component)
-         zpomSH  = zpomSH + CONJG(rhog (ii)) * vh_rhog(ii)
+         auxsum  = auxsum + CONJG(rhog (ii)) * delta_vg(ii,spin_component)
+         auxsumSH  = auxsumSH + CONJG(rhog (ii)) * vh_rhog(ii)
        END DO
-       sh(iwann) = sh(iwann) + 0.5D0 * zpomSH*weight(iq)*omega
-       deltaH(iwann, iwann) = deltaH(iwann,iwann) -0.5D0 * zpom*weight(iq)*omega
+       sh(iwann) = sh(iwann) + 0.5D0 * auxsumSH*weight(iq)*omega
+       deltaH(iwann, iwann) = deltaH(iwann,iwann) -0.5D0 * auxsum*weight(iq)*omega
        ! the diagonal term 
        !
     ENDDO
@@ -235,15 +235,15 @@ SUBROUTINE ham_koopmans_k (ik)
      !!  sh(iwann) = sh(iwann) + 0.5D0 * sum (CONJG(rhog (:)) * vh_rhog(:)                )*weight(iq)*omega
      !!  deltaH(iwann, iwann) = deltaH(iwann,iwann) + 0.5D0 * sum (CONJG(rhog (:)) * delta_vg(:,spin_component))*weight(iq)*omega
 
-       zpom = (0.0_dp, 0.0_dp)
-       zpomSH = (0.0_dp, 0.0_dp)
-       !$acc parallel loop reduction(+:zpom, zpomSH) present(rhog, delta_vg, vh_rhog)
+       auxsum = (0.0_dp, 0.0_dp)
+       auxsumSH = (0.0_dp, 0.0_dp)
+       !$acc parallel loop reduction(+:auxsum, auxsumSH) present(rhog, delta_vg, vh_rhog)
        DO ii =1, ngms
-         zpom  = zpom + CONJG(rhog (ii)) * delta_vg(ii,spin_component)
-         zpomSH  = zpomSH + CONJG(rhog (ii)) * vh_rhog(ii)
+         auxsum  = auxsum + CONJG(rhog (ii)) * delta_vg(ii,spin_component)
+         auxsumSH  = auxsumSH + CONJG(rhog (ii)) * vh_rhog(ii)
        END DO
-       sh(iwann) = sh(iwann) + 0.5D0 * zpomSH*weight(iq)*omega
-       deltaH(iwann, iwann) = deltaH(iwann,iwann) +0.5D0 * zpom*weight(iq)*omega
+       sh(iwann) = sh(iwann) + 0.5D0 * auxsumSH*weight(iq)*omega
+       deltaH(iwann, iwann) = deltaH(iwann,iwann) +0.5D0 * auxsum*weight(iq)*omega
 
        !! the diagonal term 
        !
@@ -317,12 +317,12 @@ SUBROUTINE ham_koopmans_k (ik)
           !
          !! deltaH(iwann, jwann) = deltaH(iwann,jwann) + SUM((rho_g_nm(:))*CONJG(delta_vg(:,spin_component)))*weight(iq)*omega
 
-          zpom = (0.0_dp, 0.0_dp)
-          !$acc parallel loop reduction(+:zpom) present(delta_vg, rho_g_nm)
+          auxsum = (0.0_dp, 0.0_dp)
+          !$acc parallel loop reduction(+:auxsum) present(delta_vg, rho_g_nm)
           DO ii =1, ngms
-             zpom  = zpom + rho_g_nm (ii) * CONJG(delta_vg(ii,spin_component))
+             auxsum  = auxsum + rho_g_nm (ii) * CONJG(delta_vg(ii,spin_component))
           END DO
-          deltaH(iwann, jwann) = deltaH(iwann,jwann) + zpom*weight(iq)*omega
+          deltaH(iwann, jwann) = deltaH(iwann,jwann) + auxsum*weight(iq)*omega
 
           !deltaH(jwann, iwann) = deltaH(jwann,iwann) + SUM(rho_g_nm(:)*CONJG(delta_vg(:,spin_component)))*weight(iq)*omega
           !WRITE(*,'("NICOLA G", 2i5, 2F20.15)') iwann, jwann, SUM (CONJG(rho_g_nm (:)) * delta_vg(:,spin_component))*weight(iq)*omega

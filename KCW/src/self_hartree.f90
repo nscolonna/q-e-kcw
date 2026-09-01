@@ -36,7 +36,7 @@ SUBROUTINE self_hartree (iwann, sh)
   COMPLEX(DP), ALLOCATABLE :: delta_vr(:,:), delta_vr_(:,:)
   !
   ! The self Hartree
-  COMPLEX(DP) :: sh, zpom
+  COMPLEX(DP) :: sh, auxsum
   !
   ! Auxiliary variables 
   COMPLEX(DP), ALLOCATABLE  :: rhog(:,:), delta_vg(:,:), vh_rhog(:), delta_vg_(:,:)
@@ -72,20 +72,20 @@ SUBROUTINE self_hartree (iwann, sh)
     !! The periodic part of the perturbation DeltaV_q(G)
     ! 
     IF (gamma_only) THEN
-      zpom = (0.0_dp, 0.0_dp)
-      !$acc parallel loop reduction(+: zpom) present(rhog, vh_rhog)
+      auxsum = (0.0_dp, 0.0_dp)
+      !$acc parallel loop reduction(+: auxsum) present(rhog, vh_rhog)
       DO ii = 1, ngms
-         zpom = zpom + DBLE (CONJG(rhog (ii,1)) * vh_rhog(ii))
+         auxsum = auxsum + DBLE (CONJG(rhog (ii,1)) * vh_rhog(ii))
       END DO
-      sh = sh + DBLE (zpom) *weight(iq)*omega
+      sh = sh + DBLE (auxsum) *weight(iq)*omega
       IF (gstart == 2) sh = sh - 0.5D0 * DBLE( CONJG(rhog (1,1)) * vh_rhog(1) ) *weight(iq)*omega
     ELSE
-      zpom = (0.0_dp, 0.0_dp)
-      !$acc parallel loop reduction(+: zpom) present(rhog, vh_rhog)
+      auxsum = (0.0_dp, 0.0_dp)
+      !$acc parallel loop reduction(+: auxsum) present(rhog, vh_rhog)
       DO ii = 1, ngms
-         zpom = zpom + CONJG(rhog (ii,1)) * vh_rhog(ii)
+         auxsum = auxsum + CONJG(rhog (ii,1)) * vh_rhog(ii)
       END DO
-      sh = sh + 0.5D0 * zpom*weight(iq)*omega
+      sh = sh + 0.5D0 * auxsum*weight(iq)*omega
     ENDIF
     ! 
   ENDDO ! qpoints
