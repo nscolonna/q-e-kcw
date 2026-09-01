@@ -788,7 +788,6 @@ SUBROUTINE koopmans_ham ()
     !WRITE( stdout, '(5X,"INFO: KC HAMILTONIAN CALCULATION ik= ", i4, " ... DONE")') ik
     !
     deltaH = nqstot*deltaH
-    write(stdout,*) 'BEFORE MP SUM'
     CALL mp_sum (deltaH, intra_bgrp_comm)
     CALL mp_sum (sh, intra_bgrp_comm)
     ! Sum over different processes (G vectors) 
