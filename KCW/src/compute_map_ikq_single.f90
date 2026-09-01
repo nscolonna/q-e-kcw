@@ -20,10 +20,6 @@ SUBROUTINE compute_map_ikq_single (iq,also_minus)
   USE klist,                ONLY : nkstot
   USE io_global,            ONLY : ionode
   USE control_kcw,          ONLY : map_ikq, shift_1bz, kcw_iverbosity, nkstot_eff, map_ikq_minus, shift_1bz_minus, x_q
-  !! NOTE: x_q (not klist's xk) is used here because it holds the FULL k/q mesh on every
-  !! process/pool, whereas xk is truncated to the local-pool subset once pools are active
-  !! (see divide_et_impera). Every process computes its own copy of the map directly
-  !! from x_q below (no communication needed - see note further down).
   USE io_global,            ONLY : stdout
   USE lsda_mod,             ONLY : nspin
   USE cell_base,            ONLY : at
@@ -245,9 +241,6 @@ SUBROUTINE find_index_1bz_iterate(xkq, gvect, ikq)
   USE klist,                ONLY : nkstot
   USE lsda_mod,             ONLY : nspin
   USE control_kcw,          ONLY : x_q
-  !! NOTE: x_q (not klist's xk) is used here: xk is truncated to the local-pool subset
-  !! once pools are active, while x_q holds the full k/q mesh on every process (this
-  !! routine is called on ionode only, then broadcast - see compute_map_ikq_single).
   USE noncollin_module,  ONLY : domag, noncolin, m_loc, angle1, angle2, ux, nspin_lsda, nspin_gga, nspin_mag, npol
   !USE mp_world,             ONLY : mpime
 
