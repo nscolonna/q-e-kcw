@@ -577,6 +577,7 @@ SUBROUTINE koopmans_ham ()
     !
     ALLOCATE ( rhog (ngms,nrho) , delta_vg(ngms,nspin_mag), vh_rhog(ngms), delta_vg_(ngms,nspin_mag) )
     !$acc enter data create(rhor, rhog, vh_rhog, delta_vr, delta_vr_, delta_vg, delta_vg_)
+    !$acc enter data copyin(igk_k_all)
     !
     deltaH = CMPLX(0.D0,0.D0,kind=DP)
     rho_r_nm = CMPLX(0.D0,0.D0,kind=DP)
@@ -784,6 +785,7 @@ SUBROUTINE koopmans_ham ()
       !    
     ENDDO ! qpoints
     !$acc exit data delete(rhor, rhog, delta_vg, vh_rhog, delta_vg_, delta_vr, delta_vr_)
+    !$acc exit data delete(igk_k_all)
 
     !WRITE( stdout, '(5X,"INFO: KC HAMILTONIAN CALCULATION ik= ", i4, " ... DONE")') ik
     !
