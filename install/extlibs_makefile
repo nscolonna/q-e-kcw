@@ -39,7 +39,7 @@ clean_devx:
 	   ( $(MAKE) clean && rm -f make.inc) ; fi
 
 distclean_devx:
-	if test ! -f git_devx; then rm git_devx ; fi
+	rm -f git_devx
 
 ###################################
 # LIBMBD
@@ -66,7 +66,7 @@ clean_mbd:
           $(MAKE) -f ../../mbd.make clean; fi
 
 distclean_mbd:
-	if test ! -f git_mbd; then rm git_mbd ; fi
+	rm -f git_mbd
 
 ###########################################################
 # wannier90
@@ -115,7 +115,7 @@ clean_w90:
 	   ( $(MAKE) veryclean && rm make.inc ) ; fi
 
 distclean_w90:
-	if test ! -f git_w90; then rm git_w90 ; fi
+	rm -f git_w90
 
 ###################################
 # cleaning
