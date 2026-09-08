@@ -90,12 +90,12 @@ make_w90: git_w90
 	cp $(BUILDDIR)/install/make_wannier90.inc \
 	   $(TOPDIR)/external/wannier90/make.inc ; \
 	cd $(TOPDIR)/external/wannier90 ; \
-	rm -f src/obj/*.o src/obj/*mod src/objp/*.o src/objp/*mod *.a *.x ; \
+	rm -rf *.a *.x libwannier.a ; \
 	( $(MAKE) staticlib || exit 1) ; \
-	( $(MAKE) PREFIX=$(BUILDDIR)/wannier90 install || exit 1) ; \
-	touch $(BUILDDIR)/wannier90/make_w90 ; \
-	ln -fs $(BUILDDIR)/wannier90/bin/*.x  $(BUILDDIR)/bin/ ; \
-	mkdir -p $(BUILDDIR)/wannier90/obj ; \
+	( $(MAKE) PREFIX=$(BUILDDIR)/wannier90 install && \
+	  touch $(BUILDDIR)/wannier90/make_w90 && \
+          ( cd $(BUILDDIR)/bin && ln -fs ../wannier90/bin/*.x . ) ) ; \
+	mkdir $(BUILDDIR)/wannier90/obj ; \
 	mv src/obj/*.o src/obj/*mod $(BUILDDIR)/wannier90/obj ; \
 	if test -d src/objp ; then \
 	    mkdir -p $(BUILDDIR)/wannier90/objp ; \
