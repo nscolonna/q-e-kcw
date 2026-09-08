@@ -321,7 +321,12 @@ clean :
 	- /bin/rm -rf bin/*.x tempdir
 
 # remove files produced by "configure" as well
+# the submodule-checkout stamp files (git_devx, git_mbd, git_w90) are removed
+# unconditionally: they live under install/ in whichever tree make was run
+# from (TOPDIR for in-source, BUILDDIR for out-of-source), so this is safe
+# and meaningful in both cases, unlike the rest of this target.
 veryclean : clean
+	- @(cd install ; $(MAKE) -f extlibs_makefile distclean_devx distclean_mbd distclean_w90)
 	-@if test ! $(TOPDIR) -ef $(BUILDDIR) ; then \
 	   echo "make $@ not supported in out-of-source builds" ; \
 	   echo "just re-create $(BUILDDIR) and re-run configure" ; \
