@@ -5112,6 +5112,12 @@ SUBROUTINE compute_vmn(add_nonlocal)
    !! operator v = i [H, r] = p/m + i [V_nl, r], where V_nl is the nonlocal potential.
    !! If add_nonlocal = .FALSE., compute only the momentum operator matrix elements.
    !! Note: QE uses Rydberg units, where m = 0.5. Here we compute p/m = 2*p.
+   !!
+   !! Each record carries its own band and k-point indices, following the amn
+   !! file convention: the bra band m, the ket band n, and the k-point index
+   !! ik_g_w90, followed by the three Cartesian components. Self-identifying
+   !! records are needed because a k point is skipped when it belongs to the
+   !! other spin channel, and because pool files are concatenated afterwards.
    !
    USE kinds,           ONLY : DP
    USE mp,              ONLY : mp_sum, mp_barrier
@@ -5120,7 +5126,7 @@ SUBROUTINE compute_vmn(add_nonlocal)
    USE io_global,       ONLY : stdout, ionode
    USE wvfct,           ONLY : nbnd, npwx
    USE wavefunctions,   ONLY : evc
-   USE klist,           ONLY : ngk, igk_k, nks, xk
+   USE klist,           ONLY : ngk, igk_k, nks, nkstot, xk
    USE io_files,        ONLY : iunwfc, nwordwfc
    USE gvect,           ONLY : g
    USE cell_base,       ONLY : tpiba
@@ -5129,8 +5135,8 @@ SUBROUTINE compute_vmn(add_nonlocal)
    USE noncollin_module,ONLY : noncolin, npol
    USE lsda_mod,        ONLY : lsda, isk
    USE uspp_init,       ONLY : init_us_2
-   USE wannier,         ONLY : excluded_band, num_bands, iknum, ispinw, print_progress, &
-                               utility_merge_files
+   USE wannier,         ONLY : excluded_band, num_bands, iknum, ikstart, ispinw, &
+                               print_progress, utility_merge_files
    !
    IMPLICIT NONE
    !
@@ -5146,6 +5152,8 @@ SUBROUTINE compute_vmn(add_nonlocal)
    !! File IO unit
    INTEGER :: idir
    !! Cartesian direction index
+   INTEGER :: ik_g_w90
+   !! Global k-point index, in the Wannier90 convention used by the amn file
    REAL(DP) :: vpol(3)
    !! Cartesian vector along ipol
    REAL(DP) :: gk_ig(3)
@@ -5156,19 +5164,19 @@ SUBROUTINE compute_vmn(add_nonlocal)
    !! Wavefunction at k multiplied by v or p
    COMPLEX(DP), ALLOCATABLE :: mel_full(:, :)
    !! Matrix elements for all bands, including the excluded ones
-   COMPLEX(DP), ALLOCATABLE :: mel(:, :)
-   !! Calculated matrix elements
+   COMPLEX(DP), ALLOCATABLE :: mel(:, :, :)
+   !! Calculated matrix elements, for the three Cartesian directions
    TYPE(bec_type) :: becp2
    !! Temporary variable used in commutator_Hx_psi
    !
-   ! INTEGER, EXTERNAL :: global_kpoint_index
+   INTEGER, EXTERNAL :: global_kpoint_index
    INTEGER, EXTERNAL :: find_free_unit
    !
    CALL start_clock("compute_vmn")
    !
    iun = find_free_unit()
    !
-   ALLOCATE(mel(num_bands, num_bands), stat=ierr)
+   ALLOCATE(mel(num_bands, num_bands, 3), stat=ierr)
    IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating mel', 1)
    ALLOCATE(v_evc(npol*npwx, nbnd), stat=ierr)
    IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating v_evc', 1)
@@ -5190,7 +5198,7 @@ SUBROUTINE compute_vmn(add_nonlocal)
    ENDIF
    !
    IF (ionode) THEN
-      WRITE (iun, *) num_bands, iknum
+      WRITE (iun, *) num_bands, iknum, 3
    ENDIF
    !
    WRITE(stdout, '(a,i8)') '  Number of local k points = ', nks
@@ -5200,6 +5208,8 @@ SUBROUTINE compute_vmn(add_nonlocal)
       CALL print_progress(ik, nks)
       !
       IF (lsda .AND. isk(ik) /= ispinw) CYCLE
+      !
+      ik_g_w90 = global_kpoint_index(nkstot, ik) - ikstart + 1
       !
       npw = ngk(ik)
       !
@@ -5274,19 +5284,24 @@ SUBROUTINE compute_vmn(add_nonlocal)
             DO m = 1, nbnd
                IF (excluded_band(m)) CYCLE
                ibnd_m = ibnd_m + 1
-               mel(ibnd_m, ibnd_n) = mel_full(m, n)
+               mel(ibnd_m, ibnd_n, idir) = mel_full(m, n)
             ENDDO
          ENDDO
          !
-         CALL mp_sum(mel, intra_pool_comm)
-         !
-         ! Write to file
-         !
-         IF (me_pool == root_pool) THEN
-            CALL utility_write_array(iun, .TRUE., num_bands, num_bands, mel)
-         ENDIF
-         !
       ENDDO ! idir
+      !
+      CALL mp_sum(mel, intra_pool_comm)
+      !
+      ! Write to file. The bra band index runs fastest, as in the amn file.
+      !
+      IF (me_pool == root_pool) THEN
+         DO ibnd_n = 1, num_bands
+            DO ibnd_m = 1, num_bands
+               WRITE(iun, '(3i10,6E20.12)') ibnd_m, ibnd_n, ik_g_w90, &
+                  mel(ibnd_m, ibnd_n, 1:3)
+            ENDDO
+         ENDDO
+      ENDIF
       !
    ENDDO ! ik
    !
@@ -5298,10 +5313,10 @@ SUBROUTINE compute_vmn(add_nonlocal)
    ! to the main output.
    !
    IF (add_nonlocal) THEN
-      CALL utility_merge_files("vmn", .TRUE., 3*num_bands*num_bands)
+      CALL utility_merge_files("vmn", .TRUE.)
       WRITE(stdout, *) ' VMN calculated'
    ELSE
-      CALL utility_merge_files("pmn", .TRUE., 3*num_bands*num_bands)
+      CALL utility_merge_files("pmn", .TRUE.)
       WRITE(stdout, *) ' PMN calculated'
    ENDIF
    !
