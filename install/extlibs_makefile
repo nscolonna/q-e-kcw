@@ -80,17 +80,22 @@ git_w90:
 
 # compile W90 sources, install library, executables, sources,
 # respectively in lib/, bin/, obj/ under $(BUILDDIR)/wannier90
+# Compile W90 sources, install library, executables and sources respectively in
+# lib/, bin/ and obj/ under $(BUILDDIR)/wannier90. W90 builds in place in the shared
+# source tree, so obj/objp/lib/exe files are cleared first and moved out afterwards:
+# otherwise a second, possibly cross-compiler, out-of-source build against the same
+# checkout would pick up stale and incompatible module files.
 make_w90: git_w90
 	if test ! -f $(BUILDDIR)/wannier90/make_w90; then \
 	cp $(BUILDDIR)/install/make_wannier90.inc \
 	   $(TOPDIR)/external/wannier90/make.inc ; \
 	cd $(TOPDIR)/external/wannier90 ; \
-	rm -rf src/obj src/objp *.a *.x libwannier.a ; \
-	( $(MAKE) lib || exit 1) ; \
-	( $(MAKE) PREFIX=$(BUILDDIR)/wannier90 install && \
-	  touch $(BUILDDIR)/wannier90/make_w90 && \
-          ( cd $(BUILDDIR)/bin && ln -fs ../wannier90/bin/*.x . ) ) ; \
-	mkdir $(BUILDDIR)/wannier90/obj ; \
+	rm -f src/obj/*.o src/obj/*mod src/objp/*.o src/objp/*mod *.a *.x ; \
+	( $(MAKE) staticlib || exit 1) ; \
+	( $(MAKE) PREFIX=$(BUILDDIR)/wannier90 install || exit 1) ; \
+	touch $(BUILDDIR)/wannier90/make_w90 ; \
+	ln -fs $(BUILDDIR)/wannier90/bin/*.x  $(BUILDDIR)/bin/ ; \
+	mkdir -p $(BUILDDIR)/wannier90/obj ; \
 	mv src/obj/*.o src/obj/*mod $(BUILDDIR)/wannier90/obj ; \
 	if test -d src/objp ; then \
 	    mkdir -p $(BUILDDIR)/wannier90/objp ; \
