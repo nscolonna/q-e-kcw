@@ -5138,8 +5138,10 @@ SUBROUTINE compute_vmn(add_nonlocal)
    !! If true, add the nonlocal pseudopotential contribution and compute the full velocity,
    !! If false, only compute the mometum operator matrix elements.
    !
-   INTEGER :: npw, m, ibnd, ibnd_m, ierr, ig, ik
+   INTEGER :: npw, m, n, ibnd, ibnd_m, ibnd_n, ierr, ig, ik
    !! Counters
+   INTEGER :: ndim
+   !! Length of the plane-wave contraction: npw, or npwx*npol if noncollinear
    INTEGER :: iun
    !! File IO unit
    INTEGER :: idir
@@ -5152,10 +5154,8 @@ SUBROUTINE compute_vmn(add_nonlocal)
    !! k+G vector for all G projected along vpol
    COMPLEX(DP), ALLOCATABLE :: v_evc(:, :)
    !! Wavefunction at k multiplied by v or p
-   COMPLEX(DP), ALLOCATABLE :: evc_trim(:, :)
-   !! evc with only the included bands
-   COMPLEX(DP), ALLOCATABLE :: v_evc_trim(:, :)
-   !! v_evc with only the included bands
+   COMPLEX(DP), ALLOCATABLE :: mel_full(:, :)
+   !! Matrix elements for all bands, including the excluded ones
    COMPLEX(DP), ALLOCATABLE :: mel(:, :)
    !! Calculated matrix elements
    TYPE(bec_type) :: becp2
@@ -5172,10 +5172,8 @@ SUBROUTINE compute_vmn(add_nonlocal)
    IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating mel', 1)
    ALLOCATE(v_evc(npol*npwx, nbnd), stat=ierr)
    IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating v_evc', 1)
-   ALLOCATE(evc_trim(npol*npwx, num_bands), stat=ierr)
-   IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating evc_trim', 1)
-   ALLOCATE(v_evc_trim(npol*npwx, num_bands), stat=ierr)
-   IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating v_evc_trim', 1)
+   ALLOCATE(mel_full(nbnd, nbnd), stat=ierr)
+   IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating mel_full', 1)
    !
    IF (.NOT. add_nonlocal) THEN
       ALLOCATE(gk_vpol(npwx), stat=ierr)
@@ -5204,6 +5202,16 @@ SUBROUTINE compute_vmn(add_nonlocal)
       IF (lsda .AND. isk(ik) /= ispinw) CYCLE
       !
       npw = ngk(ik)
+      !
+      ! In the noncollinear case the two spinor components sit at offsets 1 and
+      ! npwx+1, so the contraction must span npwx*npol.
+      !
+      IF (noncolin) THEN
+         ndim = npwx * npol
+      ELSE
+         ndim = npw
+      ENDIF
+      !
       CALL davcio(evc, 2*nwordwfc, iunwfc, ik, -1)
       CALL init_us_2(npw, igk_k(1,ik), xk(1,ik), vkb)
       CALL calbec(npw, vkb, evc, becp, nbnd)
@@ -5229,7 +5237,6 @@ SUBROUTINE compute_vmn(add_nonlocal)
             !
             v_evc = (0.d0, 0.d0)
             !
-            npw = ngk(ik)
             DO ig = 1, npw
                gk_ig(1:3) = (xk (1:3, ik) + g (1:3, igk_k(ig,ik) ) ) * tpiba
                !
@@ -5251,21 +5258,25 @@ SUBROUTINE compute_vmn(add_nonlocal)
             ENDDO
          ENDIF
          !
-         ! Trim excluded bands from evc and v_evc
+         ! Compute matrix elements for all bands, then drop the excluded ones.
+         ! Trimming the (nbnd, nbnd) matrix rather than the wavefunctions avoids
+         ! holding trimmed copies of evc and v_evc in memory.
          !
-         ibnd_m = 0
-         DO m = 1, nbnd
-            IF (excluded_band(m)) CYCLE
-            ibnd_m = ibnd_m + 1
-            evc_trim(:, ibnd_m) = evc(:, m)
-            v_evc_trim(:, ibnd_m) = v_evc(:, m)
+         CALL ZGEMM('C', 'N', nbnd, nbnd, ndim, &
+                  (1.d0, 0.d0), evc, npwx*npol, v_evc, npwx*npol, &
+                  (0.d0, 0.d0), mel_full, nbnd)
+         !
+         ibnd_n = 0
+         DO n = 1, nbnd
+            IF (excluded_band(n)) CYCLE
+            ibnd_n = ibnd_n + 1
+            ibnd_m = 0
+            DO m = 1, nbnd
+               IF (excluded_band(m)) CYCLE
+               ibnd_m = ibnd_m + 1
+               mel(ibnd_m, ibnd_n) = mel_full(m, n)
+            ENDDO
          ENDDO
-         !
-         ! Compute matrix elements
-         !
-         CALL ZGEMM('C', 'N', num_bands, num_bands, npwx*npol, &
-                  (1.d0, 0.d0), evc_trim, npwx*npol, v_evc_trim, npwx*npol, &
-                  (0.d0, 0.d0), mel, num_bands)
          !
          CALL mp_sum(mel, intra_pool_comm)
          !
@@ -5294,8 +5305,7 @@ SUBROUTINE compute_vmn(add_nonlocal)
       WRITE(stdout, *) ' PMN calculated'
    ENDIF
    !
-   DEALLOCATE(evc_trim)
-   DEALLOCATE(v_evc_trim)
+   DEALLOCATE(mel_full)
    DEALLOCATE(v_evc)
    DEALLOCATE(mel)
    IF (.NOT. add_nonlocal) DEALLOCATE(gk_vpol)
