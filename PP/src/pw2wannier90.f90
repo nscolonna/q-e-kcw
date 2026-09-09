@@ -5172,13 +5172,15 @@ SUBROUTINE compute_vmn(add_nonlocal)
    REAL(DP), ALLOCATABLE :: et_trim(:)
    !! Eigenvalues of the included bands
    COMPLEX(DP), ALLOCATABLE :: v_evc(:, :)
-   !! Wavefunction at k multiplied by v or p
+   !! Wavefunction at k multiplied by v. Not needed for the momentum operator,
+   !! which is applied directly to the included bands.
    COMPLEX(DP), ALLOCATABLE :: ppsi_us(:, :)
    !! Ultrasoft augmentation term returned by compute_ppsi
    COMPLEX(DP), ALLOCATABLE :: evc_trim(:, :)
    !! evc with only the included bands
    COMPLEX(DP), ALLOCATABLE :: v_evc_trim(:, :)
-   !! v_evc, or ppsi_us, with only the included bands
+   !! v or p applied to the included bands. Also holds the trimmed ppsi_us
+   !! while the augmentation term is computed.
    COMPLEX(DP) :: beta
    !! ZGEMM beta: accumulate onto the augmentation term if there is one
    COMPLEX(DP), ALLOCATABLE :: mel_dir(:, :)
@@ -5192,8 +5194,6 @@ SUBROUTINE compute_vmn(add_nonlocal)
    IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating mel', 1)
    ALLOCATE(mel_dir(num_bands, num_bands), stat=ierr)
    IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating mel_dir', 1)
-   ALLOCATE(v_evc(npol*npwx, nbnd), stat=ierr)
-   IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating v_evc', 1)
    ALLOCATE(evc_trim(npol*npwx, num_bands), stat=ierr)
    IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating evc_trim', 1)
    ALLOCATE(v_evc_trim(npol*npwx, num_bands), stat=ierr)
@@ -5202,16 +5202,25 @@ SUBROUTINE compute_vmn(add_nonlocal)
    IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating et_trim', 1)
    !
    IF (add_nonlocal) THEN
-      ! ppsi_us is an argument of compute_ppsi, so it must be allocated even
-      ! when it is not filled, which is the norm-conserving case.
-      ALLOCATE(ppsi_us(npol*npwx, nbnd), stat=ierr)
+      ALLOCATE(v_evc(npol*npwx, nbnd), stat=ierr)
+      IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating v_evc', 1)
+      !
+      ! ppsi_us is an argument of compute_ppsi, so it must be allocated also
+      ! in the norm-conserving case, where compute_ppsi never touches it. A
+      ! single column is enough there.
+      !
+      IF (okvan) THEN
+         ALLOCATE(ppsi_us(npol*npwx, nbnd), stat=ierr)
+      ELSE
+         ALLOCATE(ppsi_us(npol*npwx, 1), stat=ierr)
+      ENDIF
       IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating ppsi_us', 1)
+      !
+      CALL allocate_bec_type(nkb, nbnd, becp)
    ELSE
       ALLOCATE(gk_vpol(npwx), stat=ierr)
       IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating gk_vpol', 1)
    ENDIF
-   !
-   CALL allocate_bec_type(nkb, nbnd, becp)
    !
    IF (add_nonlocal) THEN
       CALL utility_open_output_file("vmn", .TRUE., iun)
@@ -5248,8 +5257,11 @@ SUBROUTINE compute_vmn(add_nonlocal)
       ENDIF
       !
       CALL davcio(evc, 2*nwordwfc, iunwfc, ik, -1)
-      CALL init_us_2(npw, igk_k(1,ik), xk(1,ik), vkb)
-      CALL calbec(npw, vkb, evc, becp, nbnd)
+      !
+      IF (add_nonlocal) THEN
+         CALL init_us_2(npw, igk_k(1,ik), xk(1,ik), vkb)
+         CALL calbec(npw, vkb, evc, becp, nbnd)
+      ENDIF
       !
       ! Trim excluded bands from evc and et
       !
@@ -5263,6 +5275,8 @@ SUBROUTINE compute_vmn(add_nonlocal)
       !
       DO idir = 1, 3
          !
+         beta = (0.d0, 0.d0)
+         !
          IF (add_nonlocal) THEN
             !
             ! Compute v * evc (v = i * [H, r] = p/m + i [V_nl, r])
@@ -5273,6 +5287,39 @@ SUBROUTINE compute_vmn(add_nonlocal)
             CALL compute_ppsi(v_evc, ppsi_us, ik, idir, nbnd, ispinw)
             v_evc = v_evc * 2.d0
             !
+            IF (okvan) THEN
+               !
+               ! Augmentation-dipole term, weighted by the eigenvalue difference.
+               ! Rows are the bra band, columns the ket band. v_evc_trim is used
+               ! as scratch space here, before it takes the trimmed v_evc.
+               !
+               ibnd_m = 0
+               DO m = 1, nbnd
+                  IF (excluded_band(m)) CYCLE
+                  ibnd_m = ibnd_m + 1
+                  v_evc_trim(:, ibnd_m) = ppsi_us(:, m)
+               ENDDO
+               !
+               CALL ZGEMM('C', 'N', num_bands, num_bands, ndim, &
+                        (1.d0, 0.d0), evc_trim, npwx*npol, v_evc_trim, npwx*npol, &
+                        (0.d0, 0.d0), mel_dir, num_bands)
+               !
+               DO n = 1, num_bands
+                  mel_dir(:, n) = mel_dir(:, n) * (0.d0, 1.d0) * (et_trim(:) - et_trim(n))
+               ENDDO
+               !
+               beta = (1.d0, 0.d0)
+            ENDIF
+            !
+            ! Trim excluded bands from v_evc
+            !
+            ibnd_m = 0
+            DO m = 1, nbnd
+               IF (excluded_band(m)) CYCLE
+               ibnd_m = ibnd_m + 1
+               v_evc_trim(:, ibnd_m) = v_evc(:, m)
+            ENDDO
+            !
          ELSE
             !
             ! Compute p/m * evc (m = 0.5 in Rydberg units)
@@ -5281,8 +5328,6 @@ SUBROUTINE compute_vmn(add_nonlocal)
             vpol(1:3) = 0.d0
             vpol(idir) = 1.d0
             !
-            v_evc = (0.d0, 0.d0)
-            !
             DO ig = 1, npw
                gk_ig(1:3) = (xk (1:3, ik) + g (1:3, igk_k(ig,ik) ) ) * tpiba
                !
@@ -5290,54 +5335,21 @@ SUBROUTINE compute_vmn(add_nonlocal)
                gk_vpol(ig) = SUM(vpol * gk_ig(:))
             ENDDO
             !
+            v_evc_trim = (0.d0, 0.d0)
+            !
             ! Compute 2 * (k+G) * evc. (Factor 2 because p/m with m=0.5)
             !
-            DO ibnd = 1, nbnd
+            DO ibnd = 1, num_bands
                DO ig = 1, npw
-                  v_evc(ig, ibnd) = gk_vpol(ig) * evc(ig, ibnd) * 2.d0
+                  v_evc_trim(ig, ibnd) = gk_vpol(ig) * evc_trim(ig, ibnd) * 2.d0
                ENDDO
                IF (noncolin) THEN
                   DO ig = 1, npw
-                     v_evc(ig+npwx, ibnd) = gk_vpol(ig) * evc(ig+npwx, ibnd) * 2.d0
+                     v_evc_trim(ig+npwx, ibnd) = gk_vpol(ig) * evc_trim(ig+npwx, ibnd) * 2.d0
                   ENDDO
                ENDIF
             ENDDO
          ENDIF
-         !
-         beta = (0.d0, 0.d0)
-         !
-         IF (add_nonlocal .AND. okvan) THEN
-            !
-            ! Augmentation-dipole term, weighted by the eigenvalue difference.
-            ! Rows are the bra band, columns the ket band. v_evc_trim is used
-            ! as scratch space here, before it takes the trimmed v_evc.
-            !
-            ibnd_m = 0
-            DO m = 1, nbnd
-               IF (excluded_band(m)) CYCLE
-               ibnd_m = ibnd_m + 1
-               v_evc_trim(:, ibnd_m) = ppsi_us(:, m)
-            ENDDO
-            !
-            CALL ZGEMM('C', 'N', num_bands, num_bands, ndim, &
-                     (1.d0, 0.d0), evc_trim, npwx*npol, v_evc_trim, npwx*npol, &
-                     (0.d0, 0.d0), mel_dir, num_bands)
-            !
-            DO n = 1, num_bands
-               mel_dir(:, n) = mel_dir(:, n) * (0.d0, 1.d0) * (et_trim(:) - et_trim(n))
-            ENDDO
-            !
-            beta = (1.d0, 0.d0)
-         ENDIF
-         !
-         ! Trim excluded bands from v_evc and compute the matrix elements
-         !
-         ibnd_m = 0
-         DO m = 1, nbnd
-            IF (excluded_band(m)) CYCLE
-            ibnd_m = ibnd_m + 1
-            v_evc_trim(:, ibnd_m) = v_evc(:, m)
-         ENDDO
          !
          CALL ZGEMM('C', 'N', num_bands, num_bands, ndim, &
                   (1.d0, 0.d0), evc_trim, npwx*npol, v_evc_trim, npwx*npol, &
@@ -5374,16 +5386,16 @@ SUBROUTINE compute_vmn(add_nonlocal)
    !
    DEALLOCATE(mel)
    DEALLOCATE(mel_dir)
-   DEALLOCATE(v_evc)
    DEALLOCATE(evc_trim)
    DEALLOCATE(v_evc_trim)
    DEALLOCATE(et_trim)
    IF (add_nonlocal) THEN
+      DEALLOCATE(v_evc)
       DEALLOCATE(ppsi_us)
+      CALL deallocate_bec_type(becp)
    ELSE
       DEALLOCATE(gk_vpol)
    ENDIF
-   CALL deallocate_bec_type(becp)
    !
    CALL stop_clock("compute_vmn")
    !
