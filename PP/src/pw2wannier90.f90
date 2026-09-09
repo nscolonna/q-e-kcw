@@ -5113,18 +5113,20 @@ SUBROUTINE compute_vmn(add_nonlocal)
    !! If add_nonlocal = .FALSE., compute only the momentum operator matrix elements.
    !! Note: QE uses Rydberg units, where m = 0.5. Here we compute p/m = 2*p.
    !!
-   !! For ultrasoft pseudopotentials the velocity carries a further term, the
-   !! dipole of the augmentation charge, which compute_ppsi returns separately
-   !! as ppsi_us because it has to be weighted by the eigenvalue difference:
-   !!   v_mn = 2 <psi_m| ppsi_n> + i (e_m - e_n) <psi_m| ppsi_us_n>.
-   !! The -e*S part of the nonlocal commutator is already inside
-   !! commutator_Hx_psi, through compute_deff.
+   !! The velocity is obtained from compute_ppsi, which returns (i/2) [H, r] psi.
+   !! The -e*S part of the nonlocal commutator is included there, through
+   !! commutator_Hx_psi and compute_deff.
    !!
-   !! Each record carries its own band and k-point indices, following the amn
-   !! file convention: the bra band m, the ket band n, and the k-point index
-   !! ik_g_w90, followed by the three Cartesian components. Self-identifying
-   !! records are needed because a k point is skipped when it belongs to the
-   !! other spin channel, and because pool files are concatenated afterwards.
+   !! For ultrasoft pseudopotentials the velocity carries a further term, the
+   !! dipole of the augmentation charge. compute_ppsi returns it separately as
+   !! ppsi_us because it depends on both band indices through the eigenvalue
+   !! difference, so it can only be applied to the matrix elements:
+   !!   v_mn = 2 <psi_m| ppsi_n> + i (e_m - e_n) <psi_m| ppsi_us_n>.
+   !!
+   !! The file format follows the spn file: one block per k point, written in
+   !! increasing order of the k points of the selected spin channel. Inside a
+   !! block the Cartesian index runs fastest, then the bra band m, then the ket
+   !! band n.
    !
    USE kinds,           ONLY : DP
    USE mp,              ONLY : mp_sum, mp_barrier
@@ -5133,16 +5135,16 @@ SUBROUTINE compute_vmn(add_nonlocal)
    USE io_global,       ONLY : stdout, ionode
    USE wvfct,           ONLY : nbnd, npwx, et
    USE wavefunctions,   ONLY : evc
-   USE klist,           ONLY : ngk, igk_k, nks, nkstot, xk
+   USE klist,           ONLY : ngk, igk_k, nks, xk
    USE io_files,        ONLY : iunwfc, nwordwfc
    USE gvect,           ONLY : g
    USE cell_base,       ONLY : tpiba
    USE uspp,            ONLY : nkb, vkb, okvan
-   USE becmod,          ONLY : bec_type, becp, calbec, allocate_bec_type, deallocate_bec_type
+   USE becmod,          ONLY : becp, calbec, allocate_bec_type, deallocate_bec_type
    USE noncollin_module,ONLY : noncolin, npol
    USE lsda_mod,        ONLY : lsda, isk
    USE uspp_init,       ONLY : init_us_2
-   USE wannier,         ONLY : excluded_band, num_bands, iknum, ikstart, ispinw, &
+   USE wannier,         ONLY : excluded_band, num_bands, iknum, ispinw, &
                                print_progress, utility_merge_files
    !
    IMPLICIT NONE
@@ -5151,7 +5153,7 @@ SUBROUTINE compute_vmn(add_nonlocal)
    !! If true, add the nonlocal pseudopotential contribution and compute the full velocity,
    !! If false, only compute the mometum operator matrix elements.
    !
-   INTEGER :: npw, m, n, ibnd, ibnd_m, ibnd_n, ierr, ig, ik
+   INTEGER :: npw, m, n, ibnd, ibnd_m, ierr, ig, ik
    !! Counters
    INTEGER :: ndim
    !! Length of the plane-wave contraction: npw, or npwx*npol if noncollinear
@@ -5159,53 +5161,55 @@ SUBROUTINE compute_vmn(add_nonlocal)
    !! File IO unit
    INTEGER :: idir
    !! Cartesian direction index
-   INTEGER :: ik_g_w90
-   !! Global k-point index, in the Wannier90 convention used by the amn file
    REAL(DP) :: vpol(3)
    !! Cartesian vector along ipol
    REAL(DP) :: gk_ig(3)
    !! k+G vector
    REAL(DP), ALLOCATABLE  :: gk_vpol(:)
    !! k+G vector for all G projected along vpol
+   REAL(DP), ALLOCATABLE :: et_trim(:)
+   !! Eigenvalues of the included bands
    COMPLEX(DP), ALLOCATABLE :: v_evc(:, :)
    !! Wavefunction at k multiplied by v or p
    COMPLEX(DP), ALLOCATABLE :: ppsi_us(:, :)
    !! Ultrasoft augmentation term returned by compute_ppsi
+   COMPLEX(DP), ALLOCATABLE :: evc_trim(:, :)
+   !! evc with only the included bands
+   COMPLEX(DP), ALLOCATABLE :: v_evc_trim(:, :)
+   !! v_evc, or ppsi_us, with only the included bands
    COMPLEX(DP) :: beta
    !! ZGEMM beta: accumulate onto the augmentation term if there is one
-   COMPLEX(DP), ALLOCATABLE :: mel_full(:, :)
-   !! Matrix elements for all bands, including the excluded ones
+   COMPLEX(DP), ALLOCATABLE :: mel_dir(:, :)
+   !! Matrix elements for a single Cartesian direction
    COMPLEX(DP), ALLOCATABLE :: mel(:, :, :)
    !! Calculated matrix elements, for the three Cartesian directions
-   TYPE(bec_type) :: becp2
-   !! Temporary variable used in commutator_Hx_psi
-   !
-   INTEGER, EXTERNAL :: global_kpoint_index
-   INTEGER, EXTERNAL :: find_free_unit
    !
    CALL start_clock("compute_vmn")
    !
-   iun = find_free_unit()
-   !
-   ALLOCATE(mel(num_bands, num_bands, 3), stat=ierr)
+   ALLOCATE(mel(3, num_bands, num_bands), stat=ierr)
    IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating mel', 1)
+   ALLOCATE(mel_dir(num_bands, num_bands), stat=ierr)
+   IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating mel_dir', 1)
    ALLOCATE(v_evc(npol*npwx, nbnd), stat=ierr)
    IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating v_evc', 1)
-   ALLOCATE(mel_full(nbnd, nbnd), stat=ierr)
-   IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating mel_full', 1)
+   ALLOCATE(evc_trim(npol*npwx, num_bands), stat=ierr)
+   IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating evc_trim', 1)
+   ALLOCATE(v_evc_trim(npol*npwx, num_bands), stat=ierr)
+   IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating v_evc_trim', 1)
+   ALLOCATE(et_trim(num_bands), stat=ierr)
+   IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating et_trim', 1)
    !
-   IF (add_nonlocal .AND. okvan) THEN
+   IF (add_nonlocal) THEN
+      ! ppsi_us is an argument of compute_ppsi, so it must be allocated even
+      ! when it is not filled, which is the norm-conserving case.
       ALLOCATE(ppsi_us(npol*npwx, nbnd), stat=ierr)
       IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating ppsi_us', 1)
-   ENDIF
-   !
-   IF (.NOT. add_nonlocal) THEN
+   ELSE
       ALLOCATE(gk_vpol(npwx), stat=ierr)
       IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating gk_vpol', 1)
    ENDIF
    !
    CALL allocate_bec_type(nkb, nbnd, becp)
-   CALL allocate_bec_type(nkb, nbnd, becp2)
    !
    IF (add_nonlocal) THEN
       CALL utility_open_output_file("vmn", .TRUE., iun)
@@ -5225,8 +5229,6 @@ SUBROUTINE compute_vmn(add_nonlocal)
       !
       IF (lsda .AND. isk(ik) /= ispinw) CYCLE
       !
-      ik_g_w90 = global_kpoint_index(nkstot, ik) - ikstart + 1
-      !
       npw = ngk(ik)
       !
       ! In the noncollinear case the two spinor components sit at offsets 1 and
@@ -5242,34 +5244,34 @@ SUBROUTINE compute_vmn(add_nonlocal)
       CALL init_us_2(npw, igk_k(1,ik), xk(1,ik), vkb)
       CALL calbec(npw, vkb, evc, becp, nbnd)
       !
+      ! Trim excluded bands from evc and et
+      !
+      ibnd_m = 0
+      DO m = 1, nbnd
+         IF (excluded_band(m)) CYCLE
+         ibnd_m = ibnd_m + 1
+         evc_trim(:, ibnd_m) = evc(:, m)
+         et_trim(ibnd_m) = et(m, ik)
+      ENDDO
+      !
       DO idir = 1, 3
-         !
-         vpol(1:3) = 0.d0
-         vpol(idir) = 1.d0
          !
          IF (add_nonlocal) THEN
             !
             ! Compute v * evc (v = i * [H, r] = p/m + i [V_nl, r])
+            ! compute_ppsi returns (i/2) [H, r] psi, so scale to i [H, r] psi.
+            ! Its current_spin argument is unused.
             !
-            IF (okvan) THEN
-               !
-               ! compute_ppsi returns (i/2) [H, r] psi, and separately the
-               ! ultrasoft augmentation term. Scale to i [H, r] psi.
-               ! Its current_spin argument is unused.
-               !
-               CALL compute_ppsi(v_evc, ppsi_us, ik, idir, nbnd, ispinw)
-               v_evc = v_evc * 2.d0
-            ELSE
-               CALL commutator_Hx_psi(ik, nbnd, vpol, becp, becp2, v_evc)
-               !
-               ! commutator_Hx_psi computes [H, r] = -i * v. We multiply +i to get v.
-               v_evc = v_evc * (0.d0, 1.d0)
-            ENDIF
+            CALL compute_ppsi(v_evc, ppsi_us, ik, idir, nbnd, ispinw)
+            v_evc = v_evc * 2.d0
             !
          ELSE
             !
             ! Compute p/m * evc (m = 0.5 in Rydberg units)
             ! Code taken from the first part of commutator_Hx_psi
+            !
+            vpol(1:3) = 0.d0
+            vpol(idir) = 1.d0
             !
             v_evc = (0.d0, 0.d0)
             !
@@ -5299,52 +5301,50 @@ SUBROUTINE compute_vmn(add_nonlocal)
          IF (add_nonlocal .AND. okvan) THEN
             !
             ! Augmentation-dipole term, weighted by the eigenvalue difference.
-            ! Rows are the bra band, columns the ket band.
+            ! Rows are the bra band, columns the ket band. v_evc_trim is used
+            ! as scratch space here, before it takes the trimmed v_evc.
             !
-            CALL ZGEMM('C', 'N', nbnd, nbnd, ndim, &
-                     (1.d0, 0.d0), evc, npwx*npol, ppsi_us, npwx*npol, &
-                     (0.d0, 0.d0), mel_full, nbnd)
+            ibnd_m = 0
+            DO m = 1, nbnd
+               IF (excluded_band(m)) CYCLE
+               ibnd_m = ibnd_m + 1
+               v_evc_trim(:, ibnd_m) = ppsi_us(:, m)
+            ENDDO
             !
-            DO n = 1, nbnd
-               mel_full(:, n) = mel_full(:, n) * (0.d0, 1.d0) * (et(:, ik) - et(n, ik))
+            CALL ZGEMM('C', 'N', num_bands, num_bands, ndim, &
+                     (1.d0, 0.d0), evc_trim, npwx*npol, v_evc_trim, npwx*npol, &
+                     (0.d0, 0.d0), mel_dir, num_bands)
+            !
+            DO n = 1, num_bands
+               mel_dir(:, n) = mel_dir(:, n) * (0.d0, 1.d0) * (et_trim(:) - et_trim(n))
             ENDDO
             !
             beta = (1.d0, 0.d0)
          ENDIF
          !
-         ! Compute matrix elements for all bands, then drop the excluded ones.
-         ! Trimming the (nbnd, nbnd) matrix rather than the wavefunctions avoids
-         ! holding trimmed copies of evc and v_evc in memory.
+         ! Trim excluded bands from v_evc and compute the matrix elements
          !
-         CALL ZGEMM('C', 'N', nbnd, nbnd, ndim, &
-                  (1.d0, 0.d0), evc, npwx*npol, v_evc, npwx*npol, &
-                  beta, mel_full, nbnd)
-         !
-         ibnd_n = 0
-         DO n = 1, nbnd
-            IF (excluded_band(n)) CYCLE
-            ibnd_n = ibnd_n + 1
-            ibnd_m = 0
-            DO m = 1, nbnd
-               IF (excluded_band(m)) CYCLE
-               ibnd_m = ibnd_m + 1
-               mel(ibnd_m, ibnd_n, idir) = mel_full(m, n)
-            ENDDO
+         ibnd_m = 0
+         DO m = 1, nbnd
+            IF (excluded_band(m)) CYCLE
+            ibnd_m = ibnd_m + 1
+            v_evc_trim(:, ibnd_m) = v_evc(:, m)
          ENDDO
+         !
+         CALL ZGEMM('C', 'N', num_bands, num_bands, ndim, &
+                  (1.d0, 0.d0), evc_trim, npwx*npol, v_evc_trim, npwx*npol, &
+                  beta, mel_dir, num_bands)
+         !
+         mel(idir, :, :) = mel_dir(:, :)
          !
       ENDDO ! idir
       !
       CALL mp_sum(mel, intra_pool_comm)
       !
-      ! Write to file. The bra band index runs fastest, as in the amn file.
+      ! Write to file. The Cartesian index runs fastest, then the bra band.
       !
       IF (me_pool == root_pool) THEN
-         DO ibnd_n = 1, num_bands
-            DO ibnd_m = 1, num_bands
-               WRITE(iun, '(3i10,6E20.12)') ibnd_m, ibnd_n, ik_g_w90, &
-                  mel(ibnd_m, ibnd_n, 1:3)
-            ENDDO
-         ENDDO
+         CALL utility_write_array(iun, .TRUE., 3, num_bands * num_bands, mel)
       ENDIF
       !
    ENDDO ! ik
@@ -5364,13 +5364,18 @@ SUBROUTINE compute_vmn(add_nonlocal)
       WRITE(stdout, *) ' PMN calculated'
    ENDIF
    !
-   DEALLOCATE(mel_full)
-   DEALLOCATE(v_evc)
-   IF (add_nonlocal .AND. okvan) DEALLOCATE(ppsi_us)
    DEALLOCATE(mel)
-   IF (.NOT. add_nonlocal) DEALLOCATE(gk_vpol)
+   DEALLOCATE(mel_dir)
+   DEALLOCATE(v_evc)
+   DEALLOCATE(evc_trim)
+   DEALLOCATE(v_evc_trim)
+   DEALLOCATE(et_trim)
+   IF (add_nonlocal) THEN
+      DEALLOCATE(ppsi_us)
+   ELSE
+      DEALLOCATE(gk_vpol)
+   ENDIF
    CALL deallocate_bec_type(becp)
-   CALL deallocate_bec_type(becp2)
    !
    CALL stop_clock("compute_vmn")
    !
