@@ -69,6 +69,12 @@ if(QE_WANNIER90_INTERNAL)
         # Executables
         Wannier90_exe Wannier90_post qe_w90chk2chk_exe)
 else()
-    find_package(Wannier90 REQUIRED)
-    target_link_libraries(qe_wannier90 INTERFACE Wannier90::Wannier90)
+    # Wannier90 v4 installs its own CMake package -- Wannier90Config.cmake with
+    # the Wannier90::wannier90 target -- so the hand-written FindWannier90
+    # module is no longer needed and the same target name serves both branches.
+    # WANNIER90_ROOT is passed as a hint explicitly: CMake only honours the
+    # upper-case spelling of <PackageName>_ROOT from 3.27 (CMP0144), and QE
+    # still supports older CMake.
+    find_package(Wannier90 CONFIG REQUIRED HINTS ${WANNIER90_ROOT})
+    target_link_libraries(qe_wannier90 INTERFACE Wannier90::wannier90)
 endif()
