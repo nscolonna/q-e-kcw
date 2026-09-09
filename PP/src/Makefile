@@ -10,6 +10,16 @@ MODFLAGS= $(BASEMOD_FLAGS) \
           $(MOD_FLAG)../../Modules/ \
           $(MOD_FLAG)../../dft-d3/
 
+# -D__WANLIB makes pw2wannier90 drive Wannier90 through w90_library instead of
+# writing .nnkp/.amn/.mmn files, so it needs Wannier90's module files and the
+# library itself. v4 suffixes the library name with _mpi when built with COMMS
+# set, the same condition install/make_wannier90.inc.in uses.
+ifneq (,$(findstring -D__WANLIB,$(DFLAGS)))
+MODFLAGS += $(MOD_FLAG)../../wannier90/obj
+W90_LIBSUFFIX = $(if $(findstring -D__MPI,$(DFLAGS)),_mpi,)
+W90LIB = ../../wannier90/lib/libwannier90$(W90_LIBSUFFIX).a
+endif
+
 PPOBJS = \
 adduscore.o \
 addusdens1d.o \
@@ -74,6 +84,9 @@ MODULES = $(PWOBJS) $(QEMODS)
 # see comments in file tldeps for explanations
 include ../../install/tldeps
 TLDEPS=pwlibs
+ifneq (,$(findstring -D__WANLIB,$(DFLAGS)))
+TLDEPS += libw90
+endif
 
 all : open_grid.x average.x bands.x band_interpolation.x dos.x epsilon.x initial_state.x fs.x \
       plan_avg.x plotband.x plotproj.x plotrho.x pmw.x pp.x projwfc.x \
@@ -162,9 +175,9 @@ projwfc.x : projwfc.o libpp.a $(MODULES)
 		projwfc.o libpp.a $(MODULES) $(QELIBS)
 	- ( cd ../../bin ; ln -fs ../PP/src/$@ . )
 
-pw2wannier90.x : pw2wannier90.o libpp.a $(MODULES) 
+pw2wannier90.x : pw2wannier90.o libpp.a $(MODULES) $(W90LIB)
 	$(LD) $(LDFLAGS) -o $@ \
-		pw2wannier90.o libpp.a $(MODULES) $(QELIBS)
+		pw2wannier90.o libpp.a $(MODULES) $(W90LIB) $(QELIBS)
 	- ( cd ../../bin ; ln -fs ../PP/src/$@ . )
 
 wannier2pw.x : wannier2pw.o libpp.a $(MODULES)

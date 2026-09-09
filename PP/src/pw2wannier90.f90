@@ -1179,9 +1179,10 @@ SUBROUTINE setup_nnkp
   USE mp,        ONLY : mp_bcast, mp_sum
 #if defined(__WANLIB)
   USE mp,        ONLY : mp_get_comm_self
-  USE w90_library, ONLY : w90_set_comm, w90_set_option, w90_input_setopt,      &
-                          w90_input_reader, w90_print_info, w90_get_nn,        &
-                          w90_get_nnkp, w90_get_gkpb, w90_get_proj
+  USE w90_library, ONLY : w90_set_comm, w90_input_reader, w90_print_info,      &
+                          w90_get_nn, w90_get_nnkp, w90_get_gkpb, w90_get_proj,&
+                          w90_distribute_kpts
+  USE w90_library_extra, ONLY : input_reader_special, set_kpoint_distribution
 #endif
   USE mp_pools,  ONLY : intra_pool_comm
   USE mp_world,  ONLY : world_comm
@@ -1192,13 +1193,13 @@ SUBROUTINE setup_nnkp
 
   IMPLICIT NONE
   real(DP) :: g_(3), gg_
-  INTEGER  :: ik, ib, ig, iw, ia, indexb, TYPE, ierr
+  INTEGER  :: ik, ib, ig, iw, indexb, ierr
   INTEGER, ALLOCATABLE :: ig_check(:,:)
   real(DP) :: xnorm, znorm, coseno
   INTEGER  :: exclude_bands(nbnd)
 #if defined(__WANLIB)
   INTEGER  :: n_proj_found, nexcl
-  INTEGER, ALLOCATABLE :: kpb_(:,:), g_kpb_(:,:,:)
+  INTEGER, ALLOCATABLE :: kpb_(:,:), g_kpb_(:,:,:), dist_k(:)
 #endif
 
   ! aam: translations between PW2Wannier90 and Wannier90
@@ -1220,13 +1221,9 @@ SUBROUTINE setup_nnkp
   !    xaxis,zaxis         proj_x,proj_z
   !    alpha_w             proj_zona
   !    exclude_bands       exclude_bands
-  !    atcart              atoms_cart
-  !    atsym               atom_symbols
 
   ALLOCATE( kpt_latt(3,iknum), stat=ierr)
   IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating kpt_latt', 1)
-  ALLOCATE( atcart(3,nat), atsym(nat), stat=ierr)
-  IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating atcart/atsym', 1)
   ALLOCATE( kpb(iknum,num_nnmax), g_kpb(3,iknum,num_nnmax), stat=ierr)
   IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating kpb/g_kpb', 1)
   ALLOCATE( center_w(3,nbnd), alpha_w(nbnd), l_w(nbnd), &
@@ -1240,20 +1237,11 @@ SUBROUTINE setup_nnkp
   ALLOCATE( spin_eig(nbnd), spin_qaxis(3,nbnd), stat=ierr)
   IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating spin_eig/spin_qaxis', 1)
 
-  ! real lattice (Cartesians, Angstrom)
+  ! real lattice (Cartesians, Angstrom), for the cross-check against the .win
   rlatt(:,:) = transpose(at(:,:))*alat*bohr
-  ! reciprocal lattice (Cartesians, Angstrom)
-  glatt(:,:) = transpose(bg(:,:))*tpi/(alat*bohr)
   ! convert Cartesian k-points to crystallographic co-ordinates
   kpt_latt(:,1:iknum)=xk(:,1:iknum)
   CALL cryst_to_cart(iknum,kpt_latt,at,-1)
-  ! atom co-ordinates in Cartesian co-ords and Angstrom units
-  atcart(:,:) = tau(:,:)*bohr*alat
-  ! atom symbols
-  DO ia=1,nat
-     TYPE=ityp(ia)
-     atsym(ia)=atm(TYPE)
-  ENDDO
 
   ! MP grid dimensions
   CALL find_mp_grid()
@@ -1263,32 +1251,23 @@ SUBROUTINE setup_nnkp
 #if defined(__WANLIB)
   IF (ionode) THEN
      !
-     ! Wannier90 v4 has no wannier_setup(). The geometry it used to take as
-     ! arguments is queued as input options, the .win file is read by
-     ! w90_input_reader, and what it used to return is read back through the
-     ! getters below. The library is given MPI_COMM_SELF so that it stays
-     ! serial on this rank, as wannier_setup was, and the mp_bcast calls that
-     ! follow still distribute everything it produced. npool > 1 is already
-     ! rejected for library mode when the input is read.
+     ! Wannier90 v4 has no wannier_setup(). The .win file is the input, read
+     ! here by input_reader_special followed by w90_input_reader -- the sequence
+     ! wannier90.x itself uses -- and what wannier_setup used to return is read
+     ! back through the getters below. The queued-option interface cannot serve
+     ! here: w90_input_setopt validates num_wann, which in library mode is only
+     ! known once the .win has been read, and input_reader_special is also the
+     ! only one of the two that takes the seedname.
+     ! The library is given MPI_COMM_SELF so that it stays serial on this rank,
+     ! as wannier_setup was, and the mp_bcast calls that follow still distribute
+     ! everything it produced. npool > 1 is already rejected for library mode
+     ! when the input is read.
      OPEN(NEWUNIT=w90out, FILE=TRIM(seedname)//'.wout', STATUS='replace')
      OPEN(NEWUNIT=w90err, FILE=TRIM(seedname)//'.werr', STATUS='replace')
      CALL w90_set_comm(w90main, mp_get_comm_self())
      !
-     ! Lattice vectors in Angstrom, one per column: w90_readwrite transposes the
-     ! unit_cell_cart block internally, giving the real_lattice that v3 was
-     ! handed directly as rlatt
-     CALL w90_set_option(w90main, 'unit_cell_cart', at(:,:)*alat*bohr)
-     CALL w90_set_option(w90main, 'kpoints', kpt_latt)
-     CALL w90_set_option(w90main, 'mp_grid', mp_grid)
-     CALL w90_set_option(w90main, 'total_bands', nbnd)
-     CALL w90_set_option(w90main, 'atoms_cart', atcart)
-     CALL w90_set_option(w90main, 'symbols', atsym)
-     CALL w90_set_option(w90main, 'gamma_only', gamma_only)
-     CALL w90_set_option(w90main, 'spinors', noncolin)
-     !
-     CALL w90_input_setopt(w90main, TRIM(seedname), w90out, w90err, ierr)
-     IF (ierr /= 0) CALL errore('setup_nnkp', 'Error in w90_input_setopt', ierr)
-     ! num_wann, the projections and the disentanglement windows come from the .win
+     CALL input_reader_special(w90main, TRIM(seedname), w90out, w90err, ierr)
+     IF (ierr /= 0) CALL errore('setup_nnkp', 'Error in input_reader_special', ierr)
      CALL w90_input_reader(w90main, w90out, w90err, ierr)
      IF (ierr /= 0) CALL errore('setup_nnkp', 'Error in w90_input_reader', ierr)
      CALL w90_print_info(w90main, w90out, w90err, ierr)
@@ -1296,6 +1275,30 @@ SUBROUTINE setup_nnkp
      !
      num_bands = w90main%num_bands
      n_wannier = w90main%num_wann
+     !
+     ! The k-mesh now comes from the .win rather than from the arguments v3
+     ! passed, and the b-vectors are built from it, so check it against the
+     ! ground state instead of trusting it -- as read_nnkp does for the
+     ! standalone path
+     IF (w90main%num_kpts /= iknum) CALL errore('setup_nnkp', &
+        ' number of k-points in .win does not match the calculation', 1)
+     ! rows of Wannier90's real_lattice are the lattice vectors in Angstrom
+     ! (see utility_frac_to_cart), which is how rlatt is laid out
+     IF (ANY(ABS(w90main%real_lattice - rlatt) > eps6)) CALL errore('setup_nnkp', &
+        ' unit cell in .win does not match the calculation', 1)
+     DO ik = 1, iknum
+        IF (ANY(ABS(w90main%kpt_latt(:,ik) - kpt_latt(:,ik)) > eps6)) &
+           CALL errore('setup_nnkp', ' k-point in .win does not match the calculation', ik)
+     ENDDO
+     !
+     ! One rank, so every k-point is local to it
+     ALLOCATE( dist_k(iknum), stat=ierr)
+     IF (ierr /= 0) CALL errore('setup_nnkp', 'Error allocating dist_k', 1)
+     CALL w90_distribute_kpts(w90main, iknum, 1, dist_k, w90out, w90err, ierr)
+     IF (ierr /= 0) CALL errore('setup_nnkp', 'Error in w90_distribute_kpts', ierr)
+     CALL set_kpoint_distribution(w90main, dist_k, w90out, w90err, ierr)
+     IF (ierr /= 0) CALL errore('setup_nnkp', 'Error in set_kpoint_distribution', ierr)
+     DEALLOCATE( dist_k)
      !
      ! The band_loop below expects the v3 convention: an index list padded with
      ! zeros to nbnd
