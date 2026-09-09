@@ -130,7 +130,7 @@ epw: pw ph pp ld1 libw90
 	( cd EPW ; $(MAKE) all || exit 1; \
 		cd ../bin; ln -fs ../EPW/bin/epw.x . ); fi
 
-all_currents:
+all_currents: phlibs
 	if test -d QEHeat ; then \
 	( cd QEHeat ; $(MAKE) all || exit 1; ) ; fi
 
