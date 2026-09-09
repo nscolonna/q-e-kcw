@@ -56,8 +56,11 @@ endif()
 qe_enable_cuda_fortran("${src_pp}")
 
 qe_add_library(qe_pp ${src_pp})
+# wannier_mod.f90 declares the Wannier90 library handle, so qe_pp needs the
+# Wannier90 modules as well, not just the pw2wannier90.x executable
 target_link_libraries(qe_pp
     PRIVATE
+        qe_wannier90
         qe_openmp_fortran
         qe_pw
         qe_modules
@@ -245,7 +248,12 @@ target_link_libraries(qe_pp_pw2wannier90_exe
         qe_fftx
         qe_upflib
         qe_xclib
-        qe_lapack)
+        qe_lapack
+        qe_wannier90)
+# wan_mode='library' drives Wannier90 through w90_library instead of writing
+# .nnkp/.amn/.mmn. qe_wannier90 is an INTERFACE target carrying the library and
+# its module directory, for the submodule and for -DWANNIER90_ROOT alike, so
+# the dependency is all that is needed.
 
 ###########################################################
 # wannier2pw.x

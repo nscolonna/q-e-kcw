@@ -1177,13 +1177,11 @@ SUBROUTINE setup_nnkp
   USE ions_base, ONLY : nat, tau, ityp, atm
   USE klist,     ONLY : xk
   USE mp,        ONLY : mp_bcast, mp_sum
-#if defined(__WANLIB)
   USE mp,        ONLY : mp_get_comm_self
   USE w90_library, ONLY : w90_set_comm, w90_input_reader, w90_print_info,      &
                           w90_get_nn, w90_get_nnkp, w90_get_gkpb, w90_get_proj,&
                           w90_distribute_kpts
   USE w90_library_extra, ONLY : input_reader_special, set_kpoint_distribution
-#endif
   USE mp_pools,  ONLY : intra_pool_comm
   USE mp_world,  ONLY : world_comm
   USE wvfct,     ONLY : nbnd,npwx
@@ -1197,10 +1195,8 @@ SUBROUTINE setup_nnkp
   INTEGER, ALLOCATABLE :: ig_check(:,:)
   real(DP) :: xnorm, znorm, coseno
   INTEGER  :: exclude_bands(nbnd)
-#if defined(__WANLIB)
   INTEGER  :: n_proj_found, nexcl
   INTEGER, ALLOCATABLE :: kpb_(:,:), g_kpb_(:,:,:), dist_k(:)
-#endif
 
   ! aam: translations between PW2Wannier90 and Wannier90
   ! pw2wannier90   <==>   Wannier90
@@ -1248,7 +1244,6 @@ SUBROUTINE setup_nnkp
 
   WRITE(stdout,'("  - Number of atoms is (",i3,")")') nat
 
-#if defined(__WANLIB)
   IF (ionode) THEN
      !
      ! Wannier90 v4 has no wannier_setup(). The .win file is the input, read
@@ -1338,7 +1333,6 @@ SUBROUTINE setup_nnkp
      !
      ! w90out and w90err stay open for run_wannier, which closes them
   ENDIF
-#endif
 
   CALL mp_bcast(nnb,ionode_id, world_comm)
   CALL mp_bcast(kpb,ionode_id, world_comm)
@@ -1457,12 +1451,10 @@ SUBROUTINE run_wannier
   USE io_global, ONLY : ionode, ionode_id
   USE mp,        ONLY : mp_bcast
   USE mp_world,  ONLY : world_comm
-#if defined(__WANLIB)
   USE w90_library, ONLY : w90_set_m_local, w90_set_eigval, w90_set_u_opt,      &
                           w90_set_u_matrix, w90_disentangle,                   &
                           w90_project_overlap, w90_wannierise, w90_plot,       &
                           w90_get_centres, w90_get_spreads
-#endif
   USE wannier
 
   IMPLICIT NONE
@@ -1480,7 +1472,6 @@ SUBROUTINE run_wannier
   ALLOCATE(wann_spreads(n_wannier), stat=ierr)
   IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating wann_spreads', 1)
 
-#if defined(__WANLIB)
   IF (ionode) THEN
      !
      ! Wannier90 v4 has no wannier_run() either: the minimisation steps are
@@ -1516,7 +1507,6 @@ SUBROUTINE run_wannier
      CLOSE(w90out)
      CLOSE(w90err, STATUS='DELETE')
   ENDIF
-#endif
 
   CALL mp_bcast(u_mat,ionode_id, world_comm)
   CALL mp_bcast(u_mat_opt,ionode_id, world_comm)

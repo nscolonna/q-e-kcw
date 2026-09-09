@@ -10,15 +10,13 @@ MODFLAGS= $(BASEMOD_FLAGS) \
           $(MOD_FLAG)../../Modules/ \
           $(MOD_FLAG)../../dft-d3/
 
-# -D__WANLIB makes pw2wannier90 drive Wannier90 through w90_library instead of
-# writing .nnkp/.amn/.mmn files, so it needs Wannier90's module files and the
-# library itself. v4 suffixes the library name with _mpi when built with COMMS
-# set, the same condition install/make_wannier90.inc.in uses.
-ifneq (,$(findstring -D__WANLIB,$(DFLAGS)))
+# wan_mode='library' drives Wannier90 through w90_library instead of writing
+# .nnkp/.amn/.mmn files, so PP needs the library and its module files. v4
+# suffixes the library name with _mpi when built with COMMS set, the same
+# condition install/make_wannier90.inc.in uses.
 MODFLAGS += $(MOD_FLAG)../../wannier90/obj
 W90_LIBSUFFIX = $(if $(findstring -D__MPI,$(DFLAGS)),_mpi,)
 W90LIB = ../../wannier90/lib/libwannier90$(W90_LIBSUFFIX).a
-endif
 
 PPOBJS = \
 adduscore.o \
@@ -83,10 +81,7 @@ MODULES = $(PWOBJS) $(QEMODS)
 
 # see comments in file tldeps for explanations
 include ../../install/tldeps
-TLDEPS=pwlibs
-ifneq (,$(findstring -D__WANLIB,$(DFLAGS)))
-TLDEPS += libw90
-endif
+TLDEPS=pwlibs libw90
 
 all : open_grid.x average.x bands.x band_interpolation.x dos.x epsilon.x initial_state.x fs.x \
       plan_avg.x plotband.x plotproj.x plotrho.x pmw.x pp.x projwfc.x \

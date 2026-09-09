@@ -11,9 +11,7 @@ module wannier
    !
    USE kinds,      ONLY : DP
    USE fft_types,  ONLY : fft_type_descriptor
-#if defined(__WANLIB)
    USE w90_library, ONLY : lib_common_type
-#endif
    !
    !integer, allocatable :: nnb(:)       ! #b  (ik)
    integer              :: nnb          ! #b
@@ -77,13 +75,11 @@ module wannier
    complex(DP), allocatable, target :: u_mat(:,:,:), u_mat_opt(:,:,:)
    logical, allocatable     :: lwindow(:,:)
    real(DP), allocatable    :: wann_centers(:,:),wann_spreads(:)
-#if defined(__WANLIB)
    ! Wannier90 v4 replaces the stateless wannier_setup()/wannier_run() entry
    ! points with a data object, which therefore has to survive from
    ! setup_nnkp() until run_wannier() has finished with it.
    TYPE(lib_common_type), TARGET :: w90main
    integer                  :: w90out, w90err  ! library output and error streams
-#endif
    real(DP), allocatable, target :: eigval(:,:)
    logical                  :: old_spinor_proj  ! for compatability for nnkp files prior to W90v2.0
    integer,allocatable :: rir(:,:)
