@@ -872,6 +872,8 @@ PROGRAM pw2wannier90
        'gamma_only and atom_proj_frozen not implemented',1)
   IF (gamma_only .AND. write_unkg) CALL errore('pw2wannier90',&
        'gamma_only and write_unkg not implemented',1)
+  IF (gamma_only .AND. (write_vmn .OR. write_pmn)) CALL errore('pw2wannier90',&
+       'gamma_only and write_vmn or write_pmn not implemented',1)
   IF (scdm_proj) then
     IF ((trim(scdm_entanglement) /= 'isolated') .AND. &
         (trim(scdm_entanglement) /= 'erfc') .AND. &
@@ -5142,7 +5144,7 @@ SUBROUTINE compute_vmn(add_nonlocal)
    USE uspp,            ONLY : nkb, vkb, okvan
    USE becmod,          ONLY : becp, calbec, allocate_bec_type, deallocate_bec_type
    USE noncollin_module,ONLY : noncolin, npol
-   USE lsda_mod,        ONLY : lsda, isk
+   USE lsda_mod,        ONLY : lsda, isk, current_spin
    USE uspp_init,       ONLY : init_us_2
    USE wannier,         ONLY : excluded_band, num_bands, iknum, ispinw, &
                                print_progress, utility_merge_files
@@ -5229,6 +5231,11 @@ SUBROUTINE compute_vmn(add_nonlocal)
       !
       IF (lsda .AND. isk(ik) /= ispinw) CYCLE
       !
+      ! compute_deff, called deep inside compute_ppsi, takes the spin channel
+      ! from the module variable current_spin.
+      !
+      IF (lsda) current_spin = isk(ik)
+      !
       npw = ngk(ik)
       !
       ! In the noncollinear case the two spinor components sit at offsets 1 and
@@ -5260,7 +5267,8 @@ SUBROUTINE compute_vmn(add_nonlocal)
             !
             ! Compute v * evc (v = i * [H, r] = p/m + i [V_nl, r])
             ! compute_ppsi returns (i/2) [H, r] psi, so scale to i [H, r] psi.
-            ! Its current_spin argument is unused.
+            ! Its current_spin argument is unused; the spin channel used by
+            ! compute_deff is the module variable set above.
             !
             CALL compute_ppsi(v_evc, ppsi_us, ik, idir, nbnd, ispinw)
             v_evc = v_evc * 2.d0
