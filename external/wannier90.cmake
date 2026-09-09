@@ -13,6 +13,18 @@ if(QE_WANNIER90_INTERNAL)
     # cannot be exported as part of qeTargets.
     set(WANNIER90_INSTALL ON)
     set(WANNIER90_TEST OFF)
+    # Wannier90 defaults WANNIER90_MPI to OFF, so it has to be told to follow QE:
+    # a serial library in an MPI build would take the per-rank m_local array that
+    # EPW hands it via w90_set_m_local for the whole matrix, and would not report
+    # anything, since valid_communicator() is unconditionally true without MPI.
+    # WANNIER90_MPIH selects mpif.h over "use mpi", mirroring the COMMS=mpih vs
+    # mpi90 choice in install/make_wannier90.inc.in. Setting these as normal
+    # variables wins over Wannier90's option() calls because its own
+    # cmake_minimum_required leaves CMP0077 at NEW.
+    set(WANNIER90_MPI ${QE_ENABLE_MPI})
+    if(QE_ENABLE_MPI AND NOT QE_ENABLE_MPI_MODULE)
+        set(WANNIER90_MPIH ON)
+    endif()
     add_subdirectory(wannier90)
 
     target_link_libraries(qe_wannier90 INTERFACE Wannier90::wannier90)
