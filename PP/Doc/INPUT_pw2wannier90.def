@@ -217,6 +217,35 @@ input_description -distribution {Quantum ESPRESSO} -package PWscf -program pw2wa
             default { .FALSE. }
         }
 
+        var write_vmn -type LOGICAL {
+            info {
+                Set to .true. to write out the matrix elements of the velocity
+                operator v = i [H, r] between Bloch states, to seedname.vmn.
+                For ultrasoft pseudopotentials the augmentation term is included.
+                Not implemented for gamma_only or @ref irr_bz.
+
+                Written in eV*Angstrom, i.e. hbar*v, matching the units of
+                the eig file.
+            }
+            default { .FALSE. }
+        }
+
+        var write_pmn -type LOGICAL {
+            info {
+                Set to .true. to write out the matrix elements of the momentum
+                operator divided by the electron mass, p/m, between Bloch states,
+                to seedname.pmn.
+                This is the velocity without the commutator of the nonlocal
+                potential, so it differs from @ref write_vmn whenever the
+                pseudopotential has a nonlocal part.
+                Not implemented for gamma_only or @ref irr_bz.
+
+                Same units as @ref write_vmn, eV*Angstrom, so the two files
+                may be compared directly without rescaling.
+            }
+            default { .FALSE. }
+        }
+
         var write_uHu -type LOGICAL {
             info {
                 Set to .true. to write out the matrix elements of

@@ -5125,12 +5125,16 @@ SUBROUTINE compute_vmn(add_nonlocal)
    !! difference, so it can only be applied to the matrix elements:
    !!   v_mn = 2 <psi_m| ppsi_n> + i (e_m - e_n) <psi_m| ppsi_us_n>.
    !!
+   !! The matrix elements are computed in Rydberg atomic units and written in
+   !! eV * Angstrom, matching the eig file.
+   !!
    !! The file format follows the spn file: one block per k point, written in
    !! increasing order of the k points of the selected spin channel. Inside a
    !! block the Cartesian index runs fastest, then the bra band m, then the ket
    !! band n.
    !
    USE kinds,           ONLY : DP
+   USE constants,       ONLY : rytoev, BOHR_RADIUS_ANGS
    USE mp,              ONLY : mp_sum, mp_barrier
    USE mp_world,        ONLY : world_comm
    USE mp_pools,        ONLY : intra_pool_comm, me_pool, root_pool
@@ -5360,6 +5364,10 @@ SUBROUTINE compute_vmn(add_nonlocal)
       ENDDO ! idir
       !
       CALL mp_sum(mel, intra_pool_comm)
+      !
+      ! Convert from Rydberg atomic units (Ry * bohr) to eV * Angstrom.
+      !
+      mel = mel * rytoev * BOHR_RADIUS_ANGS
       !
       ! Write to file. The Cartesian index runs fastest, then the bra band.
       !
