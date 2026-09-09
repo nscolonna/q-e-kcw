@@ -91,7 +91,7 @@ tddfpt : lrmods
 	if test -d TDDFPT; then \
 	( cd TDDFPT; $(MAKE) all || exit 1) ; fi
 
-pp : pwlibs
+pp : pwlibs libw90
 	if test -d PP ; then \
 	( cd PP ; $(MAKE) all || exit 1 ) ; fi
 
