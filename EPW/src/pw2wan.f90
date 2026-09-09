@@ -233,7 +233,6 @@
     CALL w90_set_option(w90main, 'mp_grid', mp_grid)
     CALL w90_set_option(w90main, 'total_bands', nbnd)
     CALL w90_set_option(w90main, 'num_iter', num_iter)
-    CALL w90_set_option(w90main, 'num_kpts', iknum)
     CALL w90_set_option(w90main, 'num_wann', n_wannier)
     CALL w90_set_option(w90main, 'spinors', noncolin)
     ! Lattice vectors in Angstrom, one per column as the W90 input block expects (W90 transposes it internally)
