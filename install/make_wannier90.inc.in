@@ -19,7 +19,6 @@ COMMS=mpih
 endif
 endif
 
-
 F90=@mpif90@
 MPIF90=@mpif90@
 FCOPTS=@f90flags@ 

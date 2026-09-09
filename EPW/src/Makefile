@@ -100,7 +100,10 @@ onemkl_wrappers.f90 \
 #default : epw
 
 PHOBJS = ../../PHonon/PH/libph.a
-W90LIB = ../../wannier90/lib/libwannier.a
+# Wannier90 v4 suffixes the library name with _mpi when built with COMMS set;
+# mirror the same condition used in install/make_wannier90.inc.in.
+W90_LIBSUFFIX = $(if $(findstring -D__MPI,$(DFLAGS)),_mpi,)
+W90LIB = ../../wannier90/lib/libwannier90$(W90_LIBSUFFIX).a
 LRMODS = ../../LR_Modules/liblrmod.a
 PWOBJS = ../../PW/src/libpw.a ../../KS_Solvers/libks_solvers.a ../../dft-d3/libdftd3qe.a
 QEMODS = $(BASEMODS)
