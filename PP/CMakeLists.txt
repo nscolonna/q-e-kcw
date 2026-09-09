@@ -271,7 +271,11 @@ target_link_libraries(qe_pp_wannier2pw_exe
         qe_fftx
         qe_upflib
         qe_xclib
-        qe_lapack)
+        qe_lapack
+        qe_wannier90)
+# wannier_mod.f90 (part of qe_pp) uses w90_library, same as pw2wannier90.x's
+# wan_mode='library' path above -- qe_wannier90 is needed here too so the
+# w90_library.mod dependency chain (e.g. w90_comms.mod) is on the include path.
 
 ###########################################################
 # pw2critic.x
