@@ -46,7 +46,7 @@ variables see the bottom of this file)
 4) LIBRARY MODE 
 
 !! pw2wannier90.x has to be compiled with the -D__WANLIB and
-!! libwannier.a has to be linked
+!! libwannier90.a has to be linked
 
    (4a) run pw2wannier90 in library mode to obtain the MLWF centres 
         and spreads (input=diamond.lib.win, diamond.pw2wan.lib.in, 
@@ -61,9 +61,10 @@ N.B.
       is not yet supported, only G-vectors.
 
  (iii) To run in library mode, pw2wannier90 must be linked to the wannier
-       library. To do so, compile the Wannier90 library, libwannier.a, 
+       library. To do so, compile the Wannier90 library, libwannier90.a, 
        following the instructions in the Wannier90 documentation (for the 
-       impatient, type 'make lib' in the Wannier90 root directory). Then make 
+       impatient, type 'make staticlib' in the Wannier90 root directory; the 
+       library is named libwannier90_mpi.a when built with COMMS set). Then make 
        the following changes to the espresso make.sys file, and recompile 
        pw2wannier90:
 
@@ -71,7 +72,7 @@ N.B.
            DFLAGS = -D__WANLIB ...
 
          + Add a new variable WANLIB to specify location of Wannier library
-           WANLIB = -L/path/of/wannier/library -lwannier
+           WANLIB = -L/path/of/wannier/library -lwannier90
 
          + Add $(WANLIB) to the LIBS variable
            LIBS   = $(WANLIB) $(LAPACK_LIBS) $(BLAS_LIBS) ...

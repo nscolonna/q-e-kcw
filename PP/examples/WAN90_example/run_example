@@ -19,7 +19,7 @@ $ECHO "Wannier functions (MLWFs) for the valence bands of diamond."
 $ECHO "Wannier90 may be run in two modes, 'library' and 'standalone',"
 $ECHO "and both of these are demonstrated."
 $ECHO "for library mode pw2wannier90 has to be compile with -D__WANLIB flag,"
-$ECHO "libwannier.a has to be linked. Uncomment related lines below."
+$ECHO "libwannier90.a has to be linked. Uncomment related lines below."
 
 # set the needed environment variables
 . ../../../environment_variables

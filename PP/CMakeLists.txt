@@ -56,7 +56,6 @@ endif()
 qe_enable_cuda_fortran("${src_pp}")
 
 qe_add_library(qe_pp ${src_pp})
-target_compile_definitions(qe_pp PRIVATE "__WANLIB")
 target_link_libraries(qe_pp
     PRIVATE
         qe_openmp_fortran
