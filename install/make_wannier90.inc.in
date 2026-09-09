@@ -21,7 +21,14 @@ endif
 
 F90=@mpif90@
 MPIF90=@mpif90@
-FCOPTS=@f90flags@ 
+# f90flags is "$(FFLAGS) -cpp" and, on ARM with ArmPL, ldflags ends in
+# "$(FFLAGS)" as well; both only resolve where FFLAGS is defined, and this
+# make.inc is Wannier90's own, so it has to be set here too. Without it FCOPTS
+# collapses to just -cpp and the library is built with no optimisation at all.
+FFLAGS=@fflags@
+FCOPTS=@f90flags@
 LDOPTS=@ldflags@
+AR=@ar@
+ARFLAGS=@arflags@
 
 LIBS = @lapack_libs@ @blas_libs@ @mass_libs@
