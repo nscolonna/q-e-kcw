@@ -331,13 +331,13 @@ veryclean : clean
 	   echo "make $@ not supported in out-of-source builds" ; \
 	   echo "just re-create $(BUILDDIR) and re-run configure" ; \
 	else \
-	- @(cd install ; $(MAKE) -f plugins_makefile veryclean) ; \
-	- (cd install ; rm -rf config.log configure.msg config.status \
+	   (cd install ; $(MAKE) -f plugins_makefile veryclean) ; \
+	   (cd install ; rm -rf config.log configure.msg config.status \
 		make_wannier90.inc autom4te.cache ) ; \
-	- rm -f espresso.tar.gz ; \
-	- rm -rf make.inc ; \
-	- rm -rf MBD wannier90 devxlib ;\
-	- rm -rf FoX lapack ; \
+	   rm -f espresso.tar.gz ; \
+	   rm -rf make.inc ; \
+	   rm -rf MBD wannier90 devxlib ; \
+	   rm -rf FoX lapack ; \
 	fi
 # remove everything not in the original distribution
 # place deinit at the very end such that makefiles clean up as much as possible.
