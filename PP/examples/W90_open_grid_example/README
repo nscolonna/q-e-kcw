@@ -73,6 +73,12 @@ N.B.
          + Add -D__WANLIB to the DFLAGS variable
            DFLAGS = -D__WANLIB ...
 
+         + Add the directory holding Wannier90's module files to IFLAGS. The
+           v4 library is called through its module interface, so USE
+           w90_library has to resolve; v3's wannier_setup/wannier_run were
+           external subroutines and needed no module path.
+           IFLAGS = ... -I/path/of/wannier/modules
+
          + Add a new variable WANLIB to specify location of Wannier library
            WANLIB = -L/path/of/wannier/library -lwannier90
 

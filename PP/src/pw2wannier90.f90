@@ -1177,6 +1177,12 @@ SUBROUTINE setup_nnkp
   USE ions_base, ONLY : nat, tau, ityp, atm
   USE klist,     ONLY : xk
   USE mp,        ONLY : mp_bcast, mp_sum
+#if defined(__WANLIB)
+  USE mp,        ONLY : mp_get_comm_self
+  USE w90_library, ONLY : w90_set_comm, w90_set_option, w90_input_setopt,      &
+                          w90_input_reader, w90_print_info, w90_get_nn,        &
+                          w90_get_nnkp, w90_get_gkpb, w90_get_proj
+#endif
   USE mp_pools,  ONLY : intra_pool_comm
   USE mp_world,  ONLY : world_comm
   USE wvfct,     ONLY : nbnd,npwx
@@ -1190,6 +1196,10 @@ SUBROUTINE setup_nnkp
   INTEGER, ALLOCATABLE :: ig_check(:,:)
   real(DP) :: xnorm, znorm, coseno
   INTEGER  :: exclude_bands(nbnd)
+#if defined(__WANLIB)
+  INTEGER  :: n_proj_found, nexcl
+  INTEGER, ALLOCATABLE :: kpb_(:,:), g_kpb_(:,:,:)
+#endif
 
   ! aam: translations between PW2Wannier90 and Wannier90
   ! pw2wannier90   <==>   Wannier90
@@ -1224,6 +1234,11 @@ SUBROUTINE setup_nnkp
        IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating center_w/alpha_w/l_w/...', 1)
   ALLOCATE( excluded_band(nbnd), stat=ierr)
   IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating excluded_band', 1)
+  ! Wannier90 v4 reports the spin numbers and quantisation axes of the
+  ! projections, which wannier_setup did not: library mode used to reach the
+  ! spinor projection factors in compute_amn with these unallocated
+  ALLOCATE( spin_eig(nbnd), spin_qaxis(3,nbnd), stat=ierr)
+  IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating spin_eig/spin_qaxis', 1)
 
   ! real lattice (Cartesians, Angstrom)
   rlatt(:,:) = transpose(at(:,:))*alat*bohr
@@ -1247,10 +1262,73 @@ SUBROUTINE setup_nnkp
 
 #if defined(__WANLIB)
   IF (ionode) THEN
-     CALL wannier_setup(seedname,mp_grid,iknum,rlatt, &               ! input
-          glatt,kpt_latt,nbnd,nat,atsym,atcart,gamma_only,noncolin, & ! input
-          nnb,kpb,g_kpb,num_bands,n_wannier,center_w, &               ! output
-          l_w,mr_w,r_w,zaxis,xaxis,alpha_w,exclude_bands)             ! output
+     !
+     ! Wannier90 v4 has no wannier_setup(). The geometry it used to take as
+     ! arguments is queued as input options, the .win file is read by
+     ! w90_input_reader, and what it used to return is read back through the
+     ! getters below. The library is given MPI_COMM_SELF so that it stays
+     ! serial on this rank, as wannier_setup was, and the mp_bcast calls that
+     ! follow still distribute everything it produced. npool > 1 is already
+     ! rejected for library mode when the input is read.
+     OPEN(NEWUNIT=w90out, FILE=TRIM(seedname)//'.wout', STATUS='replace')
+     OPEN(NEWUNIT=w90err, FILE=TRIM(seedname)//'.werr', STATUS='replace')
+     CALL w90_set_comm(w90main, mp_get_comm_self())
+     !
+     ! Lattice vectors in Angstrom, one per column: w90_readwrite transposes the
+     ! unit_cell_cart block internally, giving the real_lattice that v3 was
+     ! handed directly as rlatt
+     CALL w90_set_option(w90main, 'unit_cell_cart', at(:,:)*alat*bohr)
+     CALL w90_set_option(w90main, 'kpoints', kpt_latt)
+     CALL w90_set_option(w90main, 'mp_grid', mp_grid)
+     CALL w90_set_option(w90main, 'total_bands', nbnd)
+     CALL w90_set_option(w90main, 'atoms_cart', atcart)
+     CALL w90_set_option(w90main, 'symbols', atsym)
+     CALL w90_set_option(w90main, 'gamma_only', gamma_only)
+     CALL w90_set_option(w90main, 'spinors', noncolin)
+     !
+     CALL w90_input_setopt(w90main, TRIM(seedname), w90out, w90err, ierr)
+     IF (ierr /= 0) CALL errore('setup_nnkp', 'Error in w90_input_setopt', ierr)
+     ! num_wann, the projections and the disentanglement windows come from the .win
+     CALL w90_input_reader(w90main, w90out, w90err, ierr)
+     IF (ierr /= 0) CALL errore('setup_nnkp', 'Error in w90_input_reader', ierr)
+     CALL w90_print_info(w90main, w90out, w90err, ierr)
+     IF (ierr /= 0) CALL errore('setup_nnkp', 'Error in w90_print_info', ierr)
+     !
+     num_bands = w90main%num_bands
+     n_wannier = w90main%num_wann
+     !
+     ! The band_loop below expects the v3 convention: an index list padded with
+     ! zeros to nbnd
+     exclude_bands(:) = 0
+     IF (ALLOCATED(w90main%exclude_bands)) THEN
+        nexcl = SIZE(w90main%exclude_bands)
+        IF (nexcl > nbnd) CALL errore('setup_nnkp',' too many excluded bands',nexcl)
+        exclude_bands(1:nexcl) = w90main%exclude_bands(:)
+     ENDIF
+     !
+     CALL w90_get_nn(w90main, nnb, w90out, w90err, ierr)
+     IF (ierr /= 0) CALL errore('setup_nnkp', 'Error in w90_get_nn', ierr)
+     IF (nnb > num_nnmax) CALL errore('setup_nnkp',' nnb exceeds num_nnmax',nnb)
+     !
+     ! kpb and g_kpb are dimensioned num_nnmax and broadcast at that size, while
+     ! the getters want arrays of exactly nnb neighbours
+     ALLOCATE( kpb_(iknum,nnb), g_kpb_(3,iknum,nnb), stat=ierr)
+     IF (ierr /= 0) CALL errore('setup_nnkp', 'Error allocating kpb_/g_kpb_', 1)
+     CALL w90_get_nnkp(w90main, kpb_, w90out, w90err, ierr)
+     IF (ierr /= 0) CALL errore('setup_nnkp', 'Error in w90_get_nnkp', ierr)
+     CALL w90_get_gkpb(w90main, g_kpb_, w90out, w90err, ierr)
+     IF (ierr /= 0) CALL errore('setup_nnkp', 'Error in w90_get_gkpb', ierr)
+     kpb(:,1:nnb) = kpb_(:,:)
+     g_kpb(:,:,1:nnb) = g_kpb_(:,:,:)
+     DEALLOCATE( kpb_, g_kpb_)
+     !
+     ! n_proj_found is pure output here; the arrays only have to be large enough
+     CALL w90_get_proj(w90main, n_proj_found, center_w, l_w, mr_w, spin_eig,   &
+                       r_w, xaxis, zaxis, spin_qaxis, alpha_w,                &
+                       w90out, w90err, ierr)
+     IF (ierr /= 0) CALL errore('setup_nnkp', 'Error in w90_get_proj', ierr)
+     !
+     ! w90out and w90err stay open for run_wannier, which closes them
   ENDIF
 #endif
 
@@ -1266,6 +1344,8 @@ SUBROUTINE setup_nnkp
   CALL mp_bcast(zaxis,ionode_id, world_comm)
   CALL mp_bcast(xaxis,ionode_id, world_comm)
   CALL mp_bcast(alpha_w,ionode_id, world_comm)
+  CALL mp_bcast(spin_eig,ionode_id, world_comm)
+  CALL mp_bcast(spin_qaxis,ionode_id, world_comm)
   CALL mp_bcast(exclude_bands,ionode_id, world_comm)
 
   IF(noncolin) THEN
@@ -1364,10 +1444,14 @@ SUBROUTINE run_wannier
   !-----------------------------------------------------------------------
   !
   USE io_global, ONLY : ionode, ionode_id
-  USE ions_base, ONLY : nat
   USE mp,        ONLY : mp_bcast
   USE mp_world,  ONLY : world_comm
-  USE control_flags, ONLY : gamma_only
+#if defined(__WANLIB)
+  USE w90_library, ONLY : w90_set_m_local, w90_set_eigval, w90_set_u_opt,      &
+                          w90_set_u_matrix, w90_disentangle,                   &
+                          w90_project_overlap, w90_wannierise, w90_plot,       &
+                          w90_get_centres, w90_get_spreads
+#endif
   USE wannier
 
   IMPLICIT NONE
@@ -1387,10 +1471,39 @@ SUBROUTINE run_wannier
 
 #if defined(__WANLIB)
   IF (ionode) THEN
-     CALL wannier_run(seedname,mp_grid,iknum,rlatt, &                ! input
-          glatt,kpt_latt,num_bands,n_wannier,nnb,nat, &              ! input
-          atsym,atcart,gamma_only,m_mat,a_mat,eigval, &              ! input
-          u_mat,u_mat_opt,lwindow,wann_centers,wann_spreads,spreads) ! output
+     !
+     ! Wannier90 v4 has no wannier_run() either: the minimisation steps are
+     ! called individually, on arrays that stay owned here. The setters hand the
+     ! library pointers to them, and the results come back in place.
+     CALL w90_set_m_local(w90main, m_mat)
+     CALL w90_set_eigval(w90main, eigval)
+     CALL w90_set_u_opt(w90main, u_mat_opt)
+     CALL w90_set_u_matrix(w90main, u_mat)
+     !
+     ! the initial projections are where the minimisation starts
+     u_mat_opt(:,:,:) = a_mat(:,:,:)
+     !
+     CALL w90_disentangle(w90main, w90out, w90err, ierr)
+     IF (ierr /= 0) CALL errore('run_wannier', 'Error in w90_disentangle', ierr)
+     CALL w90_project_overlap(w90main, w90out, w90err, ierr)
+     IF (ierr /= 0) CALL errore('run_wannier', 'Error in w90_project_overlap', ierr)
+     CALL w90_wannierise(w90main, w90out, w90err, ierr)
+     IF (ierr /= 0) CALL errore('run_wannier', 'Error in w90_wannierise', ierr)
+     CALL w90_plot(w90main, w90out, w90err, ierr)
+     IF (ierr /= 0) CALL errore('run_wannier', 'Error in w90_plot', ierr)
+     !
+     CALL w90_get_centres(w90main, wann_centers)
+     CALL w90_get_spreads(w90main, wann_spreads)
+     !
+     ! lwindow is only filled by the disentanglement step
+     IF (num_bands > n_wannier) THEN
+        lwindow = w90main%dis_manifold%lwindow
+     ELSE
+        lwindow = .true.
+     ENDIF
+     !
+     CLOSE(w90out)
+     CLOSE(w90err, STATUS='DELETE')
   ENDIF
 #endif
 
@@ -1399,7 +1512,6 @@ SUBROUTINE run_wannier
   CALL mp_bcast(lwindow,ionode_id, world_comm)
   CALL mp_bcast(wann_centers,ionode_id, world_comm)
   CALL mp_bcast(wann_spreads,ionode_id, world_comm)
-  CALL mp_bcast(spreads,ionode_id, world_comm)
 
   RETURN
 END SUBROUTINE run_wannier
