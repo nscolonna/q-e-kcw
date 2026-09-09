@@ -220,7 +220,9 @@ input_description -distribution {Quantum ESPRESSO} -package PWscf -program pw2wa
         var write_vmn -type LOGICAL {
             info {
                 Set to .true. to write out the matrix elements of the velocity
-                operator v = i [H, r] between Bloch states, to seedname.vmn.
+                operator between Bloch states, to seedname.vmn:
+                    v = i [H, r] = p/m + i [V_nl, r]
+                where V_nl is the nonlocal part of the pseudopotential.
                 For ultrasoft pseudopotentials the augmentation term is included.
                 Not implemented for gamma_only or @ref irr_bz.
 
@@ -234,10 +236,10 @@ input_description -distribution {Quantum ESPRESSO} -package PWscf -program pw2wa
             info {
                 Set to .true. to write out the matrix elements of the momentum
                 operator divided by the electron mass, p/m, between Bloch states,
-                to seedname.pmn.
-                This is the velocity without the commutator of the nonlocal
-                potential, so it differs from @ref write_vmn whenever the
-                pseudopotential has a nonlocal part.
+                to seedname.pmn. This is the first term of the velocity
+                operator, i.e. @ref write_vmn without the i [V_nl, r]
+                commutator, so the two differ whenever the pseudopotential
+                has a nonlocal part.
                 Not implemented for gamma_only or @ref irr_bz.
 
                 Same units as @ref write_vmn, eV*Angstrom, so the two files
