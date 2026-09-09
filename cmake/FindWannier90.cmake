@@ -35,15 +35,26 @@ This module will set the following variables in your project:
 
 #]=======================================================================]
 
+# Wannier90 v4 renamed the library from libwannier.a to libwannier90.a. Its own
+# Makefile appends _mpi when COMMS is set, while its CMake build does not, so an
+# MPI-capable install may carry either name and both have to be tried. A serial
+# QE, on the other hand, must not pick up an MPI build: Wannier90 would then
+# expect a communicator QE never sets.
+if(QE_ENABLE_MPI)
+  set(_wannier90_lib_name "wannier90_mpi" "wannier90")
+else()
+  set(_wannier90_lib_name "wannier90")
+endif()
+
 find_library(
   WANNIER90_LIBRARIES
-  NAMES "wannier"
+  NAMES ${_wannier90_lib_name}
   HINTS ${WANNIER90_ROOT}
   PATH_SUFFIXES "lib")
 
 find_path(
   WANNIER90_INCLUDE_DIRS
-  NAMES "w90_io.mod"
+  NAMES "w90_library.mod"
   HINTS ${WANNIER90_ROOT}
   PATH_SUFFIXES 
       "include"
