@@ -1330,6 +1330,11 @@ SUBROUTINE setup_nnkp
                        r_w, xaxis, zaxis, spin_qaxis, alpha_w,                &
                        w90out, w90err, ierr)
      IF (ierr /= 0) CALL errore('setup_nnkp', 'Error in w90_get_proj', ierr)
+     ! library mode cannot represent more projections than Wannier functions:
+     ! u_matrix_opt is (num_bands, num_wann, num_kpts), with no room for the
+     ! select_projections step standalone wannier90.x applies
+     IF (n_proj_found /= n_wannier) CALL errore('setup_nnkp', &
+        ' number of projections in .win does not equal num_wann', n_proj_found)
      !
      ! w90out and w90err stay open for run_wannier, which closes them
   ENDIF
@@ -1351,11 +1356,14 @@ SUBROUTINE setup_nnkp
   CALL mp_bcast(spin_qaxis,ionode_id, world_comm)
   CALL mp_bcast(exclude_bands,ionode_id, world_comm)
 
-  IF(noncolin) THEN
-     n_proj=n_wannier/2
-  ELSE
-     n_proj=n_wannier
-  ENDIF
+  ! n_proj = n_wannier/2 is the v3 convention, where wannier_setup returned one
+  ! entry per projection line. w90_get_proj instead returns num_wann entries for
+  ! spinors, two per line, so half of a_mat would be left zero here. Library
+  ! mode has never supported spinor projections; refuse it rather than return
+  ! silently wrong overlaps.
+  IF(noncolin) CALL errore('setup_nnkp', &
+     ' noncollinear spinor projections are not supported in library mode, use wan_mode=standalone', 1)
+  n_proj=n_wannier
 
   ALLOCATE( gf(npwx,n_proj), csph(16,n_proj), stat=ierr)
   IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating gf/csph', 1)
