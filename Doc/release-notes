@@ -4,7 +4,8 @@ Incompatible changes in 8.0 version
   * ...
 New in 8.0 version 
   * pw2wannier90: new write_vmn, write_pmn options for velocity and momentum
-    matrix elements, written in eV*Angstrom (Jae-Mo Lihm)
+    matrix elements (Martin Thümmler and Jae-Mo Lihm)
+  * ...
 
 Fixed in 7.6.1 version(s)
   * Missing initialization of some PAW arrays (issue #863, courtesy Minkyu Park)
