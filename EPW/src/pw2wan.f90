@@ -63,7 +63,8 @@
                                  w90_input_setopt, w90_get_nn, w90_get_nnkp, w90_get_gkpb, &
                                  w90_get_proj, w90_get_centres, w90_get_spreads, w90_plot, &
                                  w90_set_eigval, w90_set_u_opt, w90_set_m_local,           &
-                                 w90_set_u_matrix, w90_input_reader, w90_print_info
+                                 w90_set_u_matrix, w90_input_reader, w90_print_info,       &
+                                 w90_print_timings
     USE kinds,            ONLY : DP
     USE cell_base,        ONLY : at, alat, bg 
     USE ions_base,        ONLY : nat, tau, ityp, atm
@@ -468,6 +469,8 @@
     !
     CALL w90_plot(w90main, w90out, w90err, ierr)
     IF (ierr /= 0) CALL errore('pw2wan90epw', 'Error in w90_plot call', ierr)
+    !
+    CALL w90_print_timings(w90main, w90out)
     !
     IF (ionode) CLOSE(w90out) ! library call is finished, close output and error streams
     IF (ionode) CLOSE(w90err, STATUS='DELETE') ! if we reach here, error log should be empty

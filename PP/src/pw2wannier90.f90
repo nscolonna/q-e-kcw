@@ -1475,7 +1475,7 @@ SUBROUTINE run_wannier
   USE w90_library, ONLY : w90_set_m_local, w90_set_eigval, w90_set_u_opt,      &
                           w90_set_u_matrix, w90_disentangle,                   &
                           w90_project_overlap, w90_wannierise, w90_plot,       &
-                          w90_get_centres, w90_get_spreads
+                          w90_get_centres, w90_get_spreads, w90_print_timings
   USE wannier
 
   IMPLICIT NONE
@@ -1526,6 +1526,8 @@ SUBROUTINE run_wannier
      ELSE
         lwindow = .true.
      ENDIF
+     !
+     CALL w90_print_timings(w90main, w90out)
      !
      CLOSE(w90out)
      CLOSE(w90err, STATUS='DELETE')
