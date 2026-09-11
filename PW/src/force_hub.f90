@@ -239,7 +239,7 @@ SUBROUTINE force_hub( forceh )
                   ELSE            
                       CALL dndtau_k    ( ldim, proj%k, spsi, alpha, ijkb0, ipol, ik, &
                                          nb_s, nb_e, mykey, 1, dns )
-                  ENDIF            
+                  ENDIF
                   DO na = 1, nat
                      nt = ityp(na)
                      IF ( is_hubbard(nt) ) THEN
@@ -492,6 +492,7 @@ SUBROUTINE dndtau_k( ldim, proj, spsi, alpha, jkb0, ipol, ik, nb_s, &
    !
    IF (Hubbard_projectors.EQ."ortho-atomic") THEN
       ALLOCATE( doverlap_inv(natomwfc,natomwfc) )
+      !$acc enter data create(doverlap_inv)
       CALL calc_doverlap_inv( alpha, ipol, ik, jkb0 )
       CALL compute_dproj_atom( alpha, ipol, ik, spsi )
    ENDIF
@@ -575,7 +576,10 @@ SUBROUTINE dndtau_k( ldim, proj, spsi, alpha, jkb0, ipol, ik, nb_s, &
    !
    !$acc end data
    DEALLOCATE( dproj )
-   IF (ALLOCATED(doverlap_inv)) DEALLOCATE( doverlap_inv )
+   IF (ALLOCATED(doverlap_inv)) THEN
+      !$acc exit data delete(doverlap_inv)
+      DEALLOCATE( doverlap_inv )
+   END IF
    IF (ALLOCATED(dproj_atom)) THEN
       !$acc exit data delete(dproj_atom)
       DEALLOCATE( dproj_atom )
@@ -696,6 +700,7 @@ SUBROUTINE dndtau_k_nc ( ldim, proj, spsi, alpha, jkb0, ipol, ik, nb_s, &
    !
    IF (Hubbard_projectors.EQ."ortho-atomic") THEN
       ALLOCATE ( doverlap_inv(natomwfc,natomwfc) )
+      !$acc enter data create(doverlap_inv)
       CALL calc_doverlap_inv (alpha, ipol, ik, jkb0)
    ENDIF
    !
@@ -736,7 +741,10 @@ SUBROUTINE dndtau_k_nc ( ldim, proj, spsi, alpha, jkb0, ipol, ik, nb_s, &
    !
    !$acc end data
    DEALLOCATE( dproj )
-   IF (ALLOCATED(doverlap_inv)) DEALLOCATE( doverlap_inv )
+   IF (ALLOCATED(doverlap_inv)) THEN
+      !$acc exit data delete(doverlap_inv)
+      DEALLOCATE( doverlap_inv )
+   END IF
    IF (okvan) DEALLOCATE (dproj_us)
    !
    10 CONTINUE
@@ -1027,6 +1035,7 @@ SUBROUTINE dngdtau_k( ldim, proj, spsi, alpha, jkb0, ipol, ik, nb_s, &
    ELSEIF (Hubbard_projectors.EQ."ortho-atomic") THEN
       ! ... In the 'ortho-atomic' case calculate d[(O^{-1/2})^T]
       ALLOCATE( doverlap_inv(natomwfc,natomwfc) )
+      !$acc enter data create(doverlap_inv)
       CALL calc_doverlap_inv( alpha, ipol, ik, jkb0 )
       ! ... Precompute dproj_atom to enable the fast path in dprojdtau_k
       CALL compute_dproj_atom( alpha, ipol, ik, spsi )
@@ -1114,7 +1123,10 @@ SUBROUTINE dngdtau_k( ldim, proj, spsi, alpha, jkb0, ipol, ik, nb_s, &
    !$acc end data
    DEALLOCATE( dproj1 )
    DEALLOCATE( dproj2 )
-   IF (ALLOCATED(doverlap_inv)) DEALLOCATE( doverlap_inv )
+   IF (ALLOCATED(doverlap_inv)) THEN
+      !$acc exit data delete(doverlap_inv)
+      DEALLOCATE( doverlap_inv )
+   END IF
    IF (ALLOCATED(dproj_atom)) THEN
       !$acc exit data delete(dproj_atom)
       DEALLOCATE( dproj_atom )
@@ -1261,6 +1273,7 @@ SUBROUTINE dngdtau_k_nc ( ldim, proj, spsi, alpha, jkb0, ipol, ik, nb_s, &
    ELSEIF (Hubbard_projectors.EQ."ortho-atomic") THEN
       ! In the 'ortho-atomic' case calculate d[(O^{-1/2})^T]
       ALLOCATE ( doverlap_inv(natomwfc,natomwfc) )
+      !$acc enter data create(doverlap_inv)
       CALL calc_doverlap_inv (alpha, ipol, ik, jkb0)
    ENDIF
    !
@@ -1341,7 +1354,10 @@ SUBROUTINE dngdtau_k_nc ( ldim, proj, spsi, alpha, jkb0, ipol, ik, nb_s, &
    IF (okvan) DEALLOCATE( dproj_us )
    DEALLOCATE ( dproj1 ) 
    DEALLOCATE ( dproj2 ) 
-   IF (ALLOCATED(doverlap_inv)) DEALLOCATE( doverlap_inv )
+   IF (ALLOCATED(doverlap_inv)) THEN
+      !$acc exit data delete(doverlap_inv)
+      DEALLOCATE( doverlap_inv )
+   END IF
    !
    CALL mp_sum(dnsg, intra_pool_comm)
    !
