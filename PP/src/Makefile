@@ -11,12 +11,9 @@ MODFLAGS= $(BASEMOD_FLAGS) \
           $(MOD_FLAG)../../dft-d3/
 
 # wan_mode='library' drives Wannier90 through w90_library instead of writing
-# .nnkp/.amn/.mmn files, so PP needs the library and its module files. v4
-# suffixes the library name with _mpi when built with COMMS set, the same
-# condition install/make_wannier90.inc.in uses.
+# .nnkp/.amn/.mmn files, so PP needs the library and its module files.
 MODFLAGS += $(MOD_FLAG)../../wannier90/obj
-W90_LIBSUFFIX = $(if $(findstring -D__MPI,$(DFLAGS)),_mpi,)
-W90LIB = ../../wannier90/lib/libwannier90$(W90_LIBSUFFIX).a
+W90LIB = ../../wannier90/lib/libwannier90.a
 
 PPOBJS = \
 adduscore.o \

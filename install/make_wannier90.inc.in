@@ -6,8 +6,7 @@ TOPDIR = @topdir@
 BUILDDIR = @topbuilddir@
 
 # Build Wannier90 in the same parallelisation mode as QE. COMMS must stay unset
-# for a serial build: Wannier90 tests it with ifdef, and it also selects the
-# library name (libwannier90_mpi.a vs libwannier90.a) via LIBSUFFIX.
+# for a serial build: Wannier90 tests it with ifdef to select the MPI defines.
 # Follow QE's choice of Fortran binding too: __MPI_MODULE means the "use mpi" module
 # (Wannier90 mpi90), otherwise mpif.h (Wannier90 mpih).
 QE_DFLAGS = @dflags@
