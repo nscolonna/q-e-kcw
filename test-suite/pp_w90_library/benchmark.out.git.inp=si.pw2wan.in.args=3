@@ -1,5 +1,5 @@
 
-     Program PW2WANNIER v.8.0dev starts on 11Sep2026 at  4:37: 7 
+     Program PW2WANNIER v.8.0dev starts on 11Sep2026 at  6:37:30 
 
      This program is part of the open-source Quantum ESPRESSO suite
      for quantum simulation of materials; please cite
@@ -13,7 +13,7 @@
      Parallel version (MPI), running on     1 processors
 
      MPI processes distributed on     1 nodes
-     149604 MiB available memory on the printing compute node when the environment starts
+     142744 MiB available memory on the printing compute node when the environment starts
 
 
      Reading nscf_save data
@@ -70,18 +70,18 @@
   Wannier90 run finished, see si.wout
 
 
-     init_pw2wan  :      0.03s CPU      0.06s WALL (       1 calls)
-     compute_amn  :      0.65s CPU      0.66s WALL (       1 calls)
-     compute_mmn  :      0.10s CPU      0.11s WALL (       1 calls)
-     run_wannier  :      0.03s CPU      0.04s WALL (       1 calls)
+     init_pw2wan  :      0.04s CPU      0.20s WALL (       1 calls)
+     compute_amn  :      1.05s CPU      1.06s WALL (       1 calls)
+     compute_mmn  :      0.14s CPU      0.15s WALL (       1 calls)
+     run_wannier  :      0.05s CPU      0.07s WALL (       1 calls)
 
      Internal routines:
-     compute_u_kb :      0.10s CPU      0.10s WALL (     216 calls)
+     compute_u_kb :      0.14s CPU      0.14s WALL (     216 calls)
 
-     PW2WANNIER   :      0.86s CPU      0.92s WALL
+     PW2WANNIER   :      1.32s CPU      1.55s WALL
 
 
-   This run was terminated on:   4:37: 8  11Sep2026            
+   This run was terminated on:   6:37:31  11Sep2026            
 
 =------------------------------------------------------------------------------=
    JOB DONE.
@@ -141,7 +141,7 @@ Note: all k-points handled by MPI rank 0
              |        The Wannier90 Developer Group and          |
              |        individual contributors                    |
              |                                                   |
-             |      Release: 4.0.1        27th July    2026      |
+             |      Release: 4.0.3        27th July    2026      |
              |                                                   |
              | This program is free software; you can            |
              | redistribute it and/or modify it under the terms  |
@@ -160,7 +160,7 @@ Note: all k-points handled by MPI rank 0
              | Inc., 675 Mass Ave, Cambridge, MA 02139, USA.     |
              |                                                   |
              +---------------------------------------------------+
-             |    Execution started on 11Sep2026 at 04:37:07     |
+             |    Execution started on 11Sep2026 at 06:37:30     |
              +---------------------------------------------------+
  
  ******************************************************************************
@@ -336,7 +336,7 @@ Note: all k-points handled by MPI rank 0
        2       9.84830116       9.76709340       8.314E-03      0.00    <-- DIS
        3       9.80556658       9.75290604       5.399E-03      0.00    <-- DIS
        4       9.77777124       9.74534284       3.328E-03      0.00    <-- DIS
-       5       9.76063185       9.74121479       1.993E-03      0.00    <-- DIS
+       5       9.76063185       9.74121479       1.993E-03      0.01    <-- DIS
        6       9.75036197       9.73893775       1.173E-03      0.01    <-- DIS
        7       9.74431527       9.73767474       6.819E-04      0.01    <-- DIS
        8       9.74079682       9.73697194       3.928E-04      0.01    <-- DIS
@@ -382,7 +382,7 @@ Note: all k-points handled by MPI rank 0
   WF centre and spread    8  ( -1.597139,  1.118383,  1.597151 )     1.83786369
   Sum of centres and spreads ( -5.431014,  5.431092,  5.431020 )    13.47659012
 
-      1    -0.383E+00     0.5469795516       13.4765906271       0.01  <-- CONV
+      1    -0.383E+00     0.5469795516       13.4765906271       0.02  <-- CONV
         O_D=      0.1392335 O_OD=      3.6009957 O_TOT=     13.4765906 <-- SPRD
  Delta: O_D=  0.1586164E-01 O_OD= -0.3988594E+00 O_TOT= -0.3829977E+00 <-- DLTA
  ------------------------------------------------------------------------------
@@ -397,7 +397,7 @@ Note: all k-points handled by MPI rank 0
   WF centre and spread    8  ( -1.600608,  1.114972,  1.600619 )     1.83100266
   Sum of centres and spreads ( -5.431022,  5.431106,  5.431023 )    13.41910377
 
-     10    -0.885E-06     0.0010344067       13.4191042776       0.03  <-- CONV
+     10    -0.885E-06     0.0010344067       13.4191042776       0.05  <-- CONV
         O_D=      0.1100449 O_OD=      3.5726979 O_TOT=     13.4191043 <-- SPRD
  Delta: O_D=  0.1163990E-05 O_OD= -0.2048690E-05 O_TOT= -0.8846991E-06 <-- DLTA
  ------------------------------------------------------------------------------
@@ -417,3 +417,14 @@ Note: all k-points handled by MPI rank 0
                                Omega OD     =     3.572697949
     Final Spread (Ang^2)       Omega Total  =    13.419104278
  ------------------------------------------------------------------------------
+
+ *===========================================================================*
+ |                             TIMING INFORMATION                            |
+ *===========================================================================*
+ |    Tag                                                Ncalls      Time (s)|
+ |---------------------------------------------------------------------------|
+ |kmesh: get                                        :         1         0.015|
+ |dis: main                                         :         1         0.016|
+ |wann: main                                        :         1         0.037|
+ |plot: main                                        :         1         0.000|
+ *---------------------------------------------------------------------------*
