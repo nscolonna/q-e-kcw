@@ -269,7 +269,7 @@ SUBROUTINE dH_ki_quadratic (dH_wann, dH_wann_proj)
     ! The weight of each q point
     REAL(DP) :: weight(nqstot)
     !
-    COMPLEX(DP) :: zpom
+    COMPLEX(DP) :: auxsum
     INTEGER :: ii
     !
     WRITE( stdout, '(/,5X, "INFO: KC SCALAR TERM CALCULATION ... START")')
@@ -301,53 +301,53 @@ SUBROUTINE dH_ki_quadratic (dH_wann, dH_wann_proj)
          CALL bare_pot ( rhor, rhog, vh_rhog, delta_vr, delta_vg, iq, delta_vr_, delta_vg_ )
          !! The periodic part of the perturbation DeltaV_q(G)
          !
-         zpom  = (0.0_dp, 0.0_dp)
+         auxsum  = (0.0_dp, 0.0_dp)
          IF (gamma_only) THEN
-            !$acc parallel loop reduction(+:zpom) present(rhog, vh_rhog)
+            !$acc parallel loop reduction(+:auxsum) present(rhog, vh_rhog)
             DO ii =1, ngms
-               zpom  = zpom  + DBLE( CONJG(rhog (ii,1)) * vh_rhog(ii) )
+               auxsum  = auxsum  + DBLE( CONJG(rhog (ii,1)) * vh_rhog(ii) )
             END DO
-            sh(iwann) = sh(iwann) + DBLE(zpom) *weight(iq)*omega
+            sh(iwann) = sh(iwann) + DBLE(auxsum) *weight(iq)*omega
             IF (gstart == 2) sh(iwann) = sh(iwann) - 0.5D0*DBLE(CONJG(rhog (1,1)) * vh_rhog(1)) *weight(iq)*omega
          ELSE
-            !$acc parallel loop reduction(+:zpom) present(rhog, vh_rhog)
+            !$acc parallel loop reduction(+:auxsum) present(rhog, vh_rhog)
             DO ii =1, ngms
-               zpom  = zpom  + CONJG(rhog (ii,1)) * vh_rhog(ii)
+               auxsum  = auxsum  + CONJG(rhog (ii,1)) * vh_rhog(ii)
             END DO
-            sh(iwann)  = sh(iwann)  + 0.5D0 * zpom  * weight(iq)*omega
+            sh(iwann)  = sh(iwann)  + 0.5D0 * auxsum  * weight(iq)*omega
          ENDIF
          !
          IF (nspin_mag ==2 ) THEN
            !
            IF (gamma_only) THEN
-              zpom = (0.0_dp, 0.0_dp)
-             !$acc parallel loop reduction(+:zpom) present(rhog, delta_vg)
+              auxsum = (0.0_dp, 0.0_dp)
+             !$acc parallel loop reduction(+:auxsum) present(rhog, delta_vg)
              DO ii = 1, ngms
-                zpom = zpom + DBLE(CONJG(rhog (ii,1)) * delta_vg(ii,spin_component))
+                auxsum = auxsum + DBLE(CONJG(rhog (ii,1)) * delta_vg(ii,spin_component))
              END DO
-             deltah_scal(iwann, iwann) = deltah_scal(iwann,iwann) - DBLE( zpom) &
+             deltah_scal(iwann, iwann) = deltah_scal(iwann,iwann) - DBLE( auxsum) &
                                          * weight(iq) * omega
              IF (gstart == 2) deltah_scal(iwann, iwann) = deltah_scal(iwann,iwann) &
                       + 0.5D0*DBLE(CONJG(rhog (1,1)) * delta_vg(1,spin_component)) * weight(iq) * omega
            ELSE
-             zpom = (0.0_dp, 0.0_dp)
-             !$acc parallel loop reduction(+:zpom) present(rhog, delta_vg)
+             auxsum = (0.0_dp, 0.0_dp)
+             !$acc parallel loop reduction(+:auxsum) present(rhog, delta_vg)
              DO ii = 1, ngms
-                zpom = zpom + CONJG(rhog (ii,1)) * delta_vg(ii,spin_component)
+                auxsum = auxsum + CONJG(rhog (ii,1)) * delta_vg(ii,spin_component)
              END DO
-             deltah_scal(iwann, iwann) = deltah_scal(iwann,iwann) - 0.5D0 * zpom &
+             deltah_scal(iwann, iwann) = deltah_scal(iwann,iwann) - 0.5D0 * auxsum &
                                          * weight(iq) * omega
            ENDIF
            !
          ELSE 
-           zpom = (0.0_dp, 0.0_dp)
-           !$acc parallel loop collapse(2) reduction(+:zpom) present(rhog, delta_vg)
+           auxsum = (0.0_dp, 0.0_dp)
+           !$acc parallel loop collapse(2) reduction(+:auxsum) present(rhog, delta_vg)
            DO ip =1,nspin_mag
               DO ii = 1, ngms
-                 zpom = zpom + CONJG(rhog (ii,ip)) * delta_vg(ii,ip)
+                 auxsum = auxsum + CONJG(rhog (ii,ip)) * delta_vg(ii,ip)
               END DO
            END DO
-           deltah_scal(iwann, iwann) = deltah_scal(iwann,iwann) - 0.5D0 * zpom &
+           deltah_scal(iwann, iwann) = deltah_scal(iwann,iwann) - 0.5D0 * auxsum &
                                           * weight(iq) * omega
          ENDIF
          !
@@ -456,7 +456,7 @@ SUBROUTINE dH_ki_quadratic (dH_wann, dH_wann_proj)
     ! compute Off-diagonal elements. NsC: not sure off_diag=.false. here makes sense: DO NOT CHANGE!!!!
     !
     INTEGER :: ip, is, iss, ii
-    COMPLEX(dp) :: zpom
+    COMPLEX(dp) :: auxsum
     !
     ! If there are no empty wannier functions, RETURN 
     IF (num_wann == num_wann_occ) RETURN 
@@ -676,12 +676,12 @@ SUBROUTINE dH_ki_quadratic (dH_wann, dH_wann_proj)
               ELSE
                 !
               !!deltaH(iwann, jwann) = deltaH(iwann,jwann) + SUM((rho_g_nm(:,1))*CONJG(delta_vg(:,spin_component)))*weight(iq)*omega
-              zpom = (0.0_dp, 0.0_dp)
-              !$acc parallel loop reduction(+:zpom) present(delta_vg, rho_g_nm)
+              auxsum = (0.0_dp, 0.0_dp)
+              !$acc parallel loop reduction(+:auxsum) present(delta_vg, rho_g_nm)
               DO ii =1, ngms
-                 zpom = zpom + rho_g_nm(ii,1)*CONJG(delta_vg(ii,spin_component))
+                 auxsum = auxsum + rho_g_nm(ii,1)*CONJG(delta_vg(ii,spin_component))
               END DO   
-              dH_wann(iwann, jwann) = dH_wann(iwann,jwann) + zpom*weight(iq)*omega
+              dH_wann(iwann, jwann) = dH_wann(iwann,jwann) + auxsum*weight(iq)*omega
 
                 !
               ENDIF
@@ -697,26 +697,26 @@ SUBROUTINE dH_ki_quadratic (dH_wann, dH_wann_proj)
                  !
               ELSE
                  !
-             zpom = (0.0_dp, 0.0_dp)
-              !$acc parallel loop reduction(+:zpom) present(delta_vg, rho_g_nm)
+             auxsum = (0.0_dp, 0.0_dp)
+              !$acc parallel loop reduction(+:auxsum) present(delta_vg, rho_g_nm)
               DO ii =1, ngms
-                 zpom = zpom+ delta_vg(ii,spin_component)*conjg(rho_g_nm(ii,1))
+                 auxsum = auxsum+ delta_vg(ii,spin_component)*conjg(rho_g_nm(ii,1))
               END DO   
-              dH_wann(iwann, jwann) = dH_wann(iwann,jwann) + zpom*weight(iq)*omega
+              dH_wann(iwann, jwann) = dH_wann(iwann,jwann) + auxsum*weight(iq)*omega
 
                  !
               ENDIF
               !
             ELSE
-              zpom = (0.0_dp, 0.0_dp)
-              !$acc parallel loop collapse(2) reduction(+:zpom) present(delta_vg, rho_g_nm)
+              auxsum = (0.0_dp, 0.0_dp)
+              !$acc parallel loop collapse(2) reduction(+:auxsum) present(delta_vg, rho_g_nm)
               DO is=1,nspin_mag
               DO ii = 1, ngms
-                  zpom = zpom+ CONJG(rho_g_nm(ii,is))*(delta_vg(ii,is))
+                  auxsum = auxsum+ CONJG(rho_g_nm(ii,is))*(delta_vg(ii,is))
               END DO    
               END DO
               !!deltaH(iwann, jwann) = deltaH(iwann,jwann) + SUM(CONJG(rho_g_nm(:,is))*(delta_vg(:,is)))*weight(iq)*omega
-              dH_wann(iwann, jwann) = dH_wann(iwann,jwann) + zpom*weight(iq)*omega
+              dH_wann(iwann, jwann) = dH_wann(iwann,jwann) + auxsum*weight(iq)*omega
             ENDIF 
             !dH_wann(jwann, iwann) = dH_wann(jwann,iwann) + SUM(rho_g_nm(:)*CONJG(delta_vg(:,spin_component)))*weight(iq)*omega
             !WRITE(*,'("NICOLA G", 2i5, 2F20.15)') iwann, jwann, SUM (CONJG(rho_g_nm (:)) * delta_vg(:,spin_component))*weight(iq)*omega

@@ -61,7 +61,7 @@ SUBROUTINE ham_R0_2nd ()
   COMPLEX(DP), ALLOCATABLE :: deltaHR(:,:,:)
   !
   !
-  COMPLEX(DP) :: drho_zero, zpom
+  COMPLEX(DP) :: drho_zero, auxsum
   !
   REAL(DP) :: weight(nkstot)
   !
@@ -139,12 +139,12 @@ SUBROUTINE ham_R0_2nd ()
        !! The periodic part of the perturbation DeltaV_q(G)
        ! 
        !!deltaHq(iwann, iwann, iq) = sum (CONJG(rhog (:)) * delta_vg(:,spin_component))*weight(iq)*omega
-       zpom = (0.0_dp, 0.0_dp)
-       !$acc parallel loop reduction(+:zpom) present(rhog, delta_vg)
+       auxsum = (0.0_dp, 0.0_dp)
+       !$acc parallel loop reduction(+:auxsum) present(rhog, delta_vg)
        DO ii =1, ngms
-         zpom  = zpom + CONJG(rhog (ii)) * delta_vg(ii,spin_component)
+         auxsum  = auxsum + CONJG(rhog (ii)) * delta_vg(ii,spin_component)
        END DO
-       deltaHq(iwann, iwann, iq) = zpom*weight(iq)*omega
+       deltaHq(iwann, iwann, iq) = auxsum*weight(iq)*omega
        !
        !
     ENDDO

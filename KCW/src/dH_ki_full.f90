@@ -121,7 +121,7 @@ SUBROUTINE dH_ki_full (ik, dH_wann)
   INTEGER :: segno
   INTEGER :: lrrho
   !
-  COMPLEX(DP) :: zpom
+  COMPLEX(DP) :: auxsum
   INTEGER :: ii
   !
   !
@@ -196,20 +196,20 @@ SUBROUTINE dH_ki_full (ik, dH_wann)
      !! The periodic part of the perturbation DeltaV_q(G)
      !
      deltah_scal = - 0.5D0 * SUM (CONJG(rhog (:)) * delta_vg(:,spin_component) ) * omega
-     zpom  = (0.0_dp, 0.0_dp)
+     auxsum  = (0.0_dp, 0.0_dp)
      IF (gamma_only) THEN
-        !$acc parallel loop reduction(+:zpom) present(rhog, vh_rhog)
+        !$acc parallel loop reduction(+:auxsum) present(rhog, vh_rhog)
         DO ii =1, ngms
-           zpom  = zpom  + DBLE( CONJG(rhog (ii)) * vh_rhog(ii) )
+           auxsum  = auxsum  + DBLE( CONJG(rhog (ii)) * vh_rhog(ii) )
         END DO
-        sh = sh + DBLE(zpom) * omega
+        sh = sh + DBLE(auxsum) * omega
         IF (gstart == 2) sh = sh - 0.5D0*DBLE(CONJG(rhog (1)) * vh_rhog(1)) * omega
      ELSE
-        !$acc parallel loop reduction(+:zpom) present(rhog, vh_rhog)
+        !$acc parallel loop reduction(+:auxsum) present(rhog, vh_rhog)
         DO ii =1, ngms
-           zpom  = zpom  + CONJG(rhog (ii)) * vh_rhog(ii)
+           auxsum  = auxsum  + CONJG(rhog (ii)) * vh_rhog(ii)
         END DO
-        sh  = sh  + 0.5D0 * zpom * omega
+        sh  = sh  + 0.5D0 * auxsum * omega
      ENDIF
      CALL mp_sum (sh, intra_bgrp_comm)
      !WRITE(stdout,'(8x, "self_hatree", 2i5, 1F15.8)') ibnd, current_spin, sh
