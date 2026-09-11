@@ -14,23 +14,32 @@ SUBROUTINE dH_ki_quadratic (dH_wann, dH_wann_proj)
   !
   USE io_global,             ONLY : stdout
   USE kinds,                 ONLY : DP
-  USE lsda_mod,              ONLY : nspin
+  USE lsda_mod,              ONLY : nspin, lsda, isk
+  USE klist,                 ONLY : nkstot, nks
   USE control_kcw,           ONLY : num_wann, nqstot, l_alpha_corr, qp_symm, &
-                                    alpha_final, num_wann_occ, on_site_only, h_proj, nkstot_eff
+                                    alpha_final, num_wann_occ, on_site_only, h_proj, nkstot_eff, &
+                                    spin_component
   USE constants,             ONLY : rytoev
   USE buffers,               ONLY : get_buffer, save_buffer
+  USE mp,                    ONLY : mp_sum
+  USE mp_pools,              ONLY : inter_pool_comm
   !
   IMPLICIT NONE
   !
-  ! The k point index 
-  INTEGER :: ik
+  INTEGER, EXTERNAL :: global_kpoint_index
+  !! The global index of a local (pool) k-point
+  !
+  ! ik is the LOCAL (pool) k-point index; ik_eff is the "effective" index
+  ! (1:nkstot_eff) used throughout KCW for the current spin channel to label
+  ! dH_wann, Hamlt, the k+q/k-q map and the ALL-k buffers.
+  INTEGER :: ik, ik_eff
   !
   ! The scalar part (independent on k) <rho_0i|v_0i|rho_0i>delta_ij
   COMPLEX(DP) :: deltah_scal (num_wann, num_wann)
   !
   ! The Hamiltonian due to the real contribution to the potential \int f_Hxc(r,r') rho_0i(r')
   COMPLEX(DP) deltah_real (num_wann, num_wann)
-  COMPLEX, ALLOCATABLE :: ham_right(:,:)
+  COMPLEX(DP), ALLOCATABLE :: ham_right(:,:)
 #ifdef DEBUG
   COMPLEX(DP) ham (num_wann, num_wann)
 #endif
@@ -87,13 +96,18 @@ SUBROUTINE dH_ki_quadratic (dH_wann, dH_wann_proj)
   ! If formulation a-la DFT+U nothing else to do (only on-site term for now)
   IF (h_proj) GOTO 999
   !
-  DO ik = 1, nkstot_eff
+  !
+  DO ik = 1, nks
+    !
+    IF ( lsda .AND. isk(ik) /= spin_component ) CYCLE
+    !
+    ik_eff = global_kpoint_index (nkstot, ik) - (spin_component-1)*nkstot_eff
     !
     deltah_real = CMPLX(0.D0, 0.D0, kind = DP)
     !
-    IF (.NOT. on_site_only) THEN 
+    IF (.NOT. on_site_only) THEN
        ! General routine for empty state hamiltonian at k
-       CALL koopmans_ham_real_k ( ik, deltah_real )
+       CALL koopmans_ham_real_k ( ik_eff, deltah_real )
        WRITE(stdout, 900) get_clock('KCW')
     ELSE
       ! SKIP off-diagonal elements in REAL SPACE (i.e. R/=0 i/=j) 
@@ -107,7 +121,7 @@ SUBROUTINE dH_ki_quadratic (dH_wann, dH_wann_proj)
     !
     !
 #ifdef DEBUG
-    WRITE( stdout,'(/,5X," Real term Hamiltonian ik =:", i5)') ik
+    WRITE( stdout,'(/,5X," Real term Hamiltonian ik =:", i5)') ik_eff
     DO iwann=1, num_wann
       WRITE(stdout,'(5X,10(2F10.6, 2x))') (deltah_real(iwann,jwann), jwann=1,num_wann)
     ENDDO
@@ -129,20 +143,28 @@ SUBROUTINE dH_ki_quadratic (dH_wann, dH_wann_proj)
     IF (qp_symm) ham_right = 0.5D0*(ham_right + CONJG(TRANSPOSE(ham_right)))
     !
     ! Store the res in the global variable
-    dH_wann(ik,:,:) = ham_right(:,:)
+    dH_wann(ik_eff,:,:) = ham_right(:,:)
     !
 #ifdef DEBUG
-    WRITE(stdout, '("qKI Contribution to the Hamiltonian at k = ", i4)') ik
+    WRITE(stdout, '("qKI Contribution to the Hamiltonian at k = ", i4)') ik_eff
     DO iwann = 1, num_wann
-      WRITE(stdout, '(200(2f8.4,2x))') (REAL(dH_wann(ik, iwann,jwann)),AIMAG(dH_wann(ik, iwann,jwann)), jwann=1,num_wann)
+      WRITE(stdout, '(200(2f8.4,2x))') (REAL(dH_wann(ik_eff, iwann,jwann)),AIMAG(dH_wann(ik_eff, iwann,jwann)), jwann=1,num_wann)
     ENDDO
 #endif
     !
   ENDDO
   !
+  ! ... Gather dH_wann across pools: each pool has filled only the rows of the
+  ! k-points it owns (dH_wann was zeroed above and each effective k index is owned
+  ! by exactly one pool), so a sum reconstructs the full array on every process.
+  ! Every scheme downstream (koopmans_ham, koopmans_ham_uniq, the H(R) interpolation)
+  ! needs the complete array.
+  !
+  CALL mp_sum ( dH_wann, inter_pool_comm )
+  !
 900 FORMAT(/'     total cpu time spent up to now is ',F10.1,' secs' )
   !
-  DEALLOCATE ( ham_right ) 
+  DEALLOCATE ( ham_right )
 999 CONTINUE
   RETURN
   !
@@ -375,10 +397,10 @@ SUBROUTINE dH_ki_quadratic (dH_wann, dH_wann_proj)
     USE fft_base,             ONLY : dffts
     USE fft_interfaces,       ONLY : fwfft, invfft
     USE fft_wave,             ONLY : invfft_wave
-    USE klist,                ONLY : igk_k, ngk
     USE mp,                   ONLY : mp_sum
     USE control_kcw,          ONLY : spin_component, num_wann, x_q, &
-                                     num_wann_occ, evc0, iuwfc_wann, &
+                                     num_wann_occ, evc0, iuwfc_wann_allk, &
+                                     igk_k_all, ngk_all, &
                                      map_ikq, shift_1bz, nrho, &
                                      map_ikq_minus, shift_1bz_minus
     USE buffers,              ONLY : get_buffer, save_buffer
@@ -475,9 +497,9 @@ SUBROUTINE dH_ki_quadratic (dH_wann, dH_wann_proj)
     !
     !
     lrwfc = num_wann*npwx*npol
-    CALL get_buffer ( evc0, lrwfc, iuwfc_wann, ik )
+    CALL get_buffer ( evc0, lrwfc, iuwfc_wann_allk, ik )
     ! Retrive the ks function at k (in the Wannier Gauge)
-    ! IF (kcw_iverbosity .gt. 0 ) WRITE(stdout,'(8X, "INFO: u_k(g) RETRIEVED"/)') 
+    ! IF (kcw_iverbosity .gt. 0 ) WRITE(stdout,'(8X, "INFO: u_k(g) RETRIEVED"/)')
     !
     CALL compute_map_ikq_single (ik,.true.)
     ! find the map k+q --> k'+G and store the res 
@@ -488,6 +510,7 @@ SUBROUTINE dH_ki_quadratic (dH_wann, dH_wann_proj)
     !
     ALLOCATE ( rhog (ngms,nrho) , delta_vg(ngms,nspin_mag), vh_rhog(ngms), delta_vg_(ngms,nspin_mag) )
     !$acc enter data create(rhor, rhog, vh_rhog, delta_vr, delta_vr_, delta_vg, delta_vg_)
+    !$acc enter data copyin(igk_k_all)
     !
     dH_wann = CMPLX(0.D0,0.D0,kind=DP)
     rho_r_nm = CMPLX(0.D0,0.D0,kind=DP)
@@ -529,29 +552,31 @@ SUBROUTINE dH_ki_quadratic (dH_wann, dH_wann_proj)
       evc0_kq = CMPLX(0.D0,0.D0,kind=DP)
       lrwfc = num_wann * npwx * npol
       IF (nspin==4 .or. debug_nc ) THEN
-        CALL get_buffer ( evc0_kq, lrwfc, iuwfc_wann, ikq_m )
-        !Retrive the ks function at k-q (in the Wannier Gauge):
+        CALL get_buffer ( evc0_kq, lrwfc, iuwfc_wann_allk, ikq_m )
+        !Retrive the ks function at k-q (in the Wannier Gauge): ikq_m may belong to
+        ! a different pool, hence the ALL-k buffer (see bcast_wfc.f90)
       ELSE
-        CALL get_buffer ( evc0_kq, lrwfc, iuwfc_wann, ikq )
-        ! Retrive the ks function at k+q (in the Wannier Gauge): 
-      ENDIF 
+        CALL get_buffer ( evc0_kq, lrwfc, iuwfc_wann_allk, ikq )
+        ! Retrive the ks function at k+q (in the Wannier Gauge): ikq may belong to
+        ! a different pool, hence the ALL-k buffer (see bcast_wfc.f90)
+      ENDIF
       !
       !IF (kcw_iverbosity .gt. 0 ) WRITE(stdout,'(8X, "INFO: u_kq(g) RETRIEVED")') 
       !
       DO iwann = num_wann_occ+1, num_wann
 !      DO iwann = 1, num_wann
          !
-         npw_k = ngk(ik)
+         npw_k = ngk_all(ik)
          evc_k_g(:) =  evc0(:,iwann)
          !$acc enter data copyin(evc_k_g) create(evc_k_r)
          !
          IF (gamma_only) THEN
            ! NOTA: non collinear and Gamma_trick not compatible --> npol will always be 1 here
-           evc_k_r(dffts%nl(igk_k(1:npw_k,ik)),1)  = evc_k_g(1:npw_k)
-           evc_k_r(dffts%nlm(igk_k(1:npw_k,ik)),1)  = CONJG(evc_k_g(1:npw_k))
+           evc_k_r(dffts%nl(igk_k_all(1:npw_k,ik)),1)  = evc_k_g(1:npw_k)
+           evc_k_r(dffts%nlm(igk_k_all(1:npw_k,ik)),1)  = CONJG(evc_k_g(1:npw_k))
            CALL invfft ('Wave', evc_k_r(:,1), dffts)
          ELSE
-           CALL invfft_wave (npwx, npw_k, igk_k (1,ik), evc_k_g , evc_k_r )
+           CALL invfft_wave (npwx, npw_k, igk_k_all (1,ik), evc_k_g , evc_k_r )
          ENDIF
          !$acc exit data delete(evc_k_g)
          !! The wfc R=0 n=iwann in R-space at k
@@ -579,22 +604,22 @@ SUBROUTINE dH_ki_quadratic (dH_wann, dH_wann_proj)
             evc_kq_g = evc0_kq(:,jwann)
             !$acc enter data copyin(evc_kq_g) 
             IF(nspin==4 .or. debug_nc ) THEN
-              npw_kq_m = ngk(ikq_m)
+              npw_kq_m = ngk_all(ikq_m)
               IF (gamma_only) THEN
-                evc_kq_r(dffts%nl(igk_k(1:npw_kq_m,ik)),1)  = evc_kq_g(1:npw_kq_m)
-                evc_kq_r(dffts%nlm(igk_k(1:npw_kq_m,ik)),1)  = CONJG(evc_kq_g(1:npw_kq_m))
+                evc_kq_r(dffts%nl(igk_k_all(1:npw_kq_m,ikq_m)),1)  = evc_kq_g(1:npw_kq_m)
+                evc_kq_r(dffts%nlm(igk_k_all(1:npw_kq_m,ikq_m)),1)  = CONJG(evc_kq_g(1:npw_kq_m))
                 CALL invfft ('Wave', evc_kq_r(:,1), dffts)
               ELSE
-                CALL invfft_wave (npwx, npw_kq_m, igk_k (1,ikq_m), evc_kq_g , evc_kq_r )
+                CALL invfft_wave (npwx, npw_kq_m, igk_k_all (1,ikq_m), evc_kq_g , evc_kq_r )
               ENDIF
             ELSE
-              npw_kq = ngk(ikq)
+              npw_kq = ngk_all(ikq)
               IF (gamma_only) THEN
-                evc_kq_r(dffts%nl(igk_k(1:npw_kq,ik)),1)  = evc_kq_g(1:npw_kq)
-                evc_kq_r(dffts%nlm(igk_k(1:npw_kq,ik)),1)  = CONJG(evc_kq_g(1:npw_kq))
+                evc_kq_r(dffts%nl(igk_k_all(1:npw_kq,ikq)),1)  = evc_kq_g(1:npw_kq)
+                evc_kq_r(dffts%nlm(igk_k_all(1:npw_kq,ikq)),1)  = CONJG(evc_kq_g(1:npw_kq))
                 CALL invfft ('Wave', evc_kq_r(:,1), dffts)
               ELSE
-                CALL invfft_wave (npwx, npw_kq, igk_k (1,ikq), evc_kq_g , evc_kq_r )
+                CALL invfft_wave (npwx, npw_kq, igk_k_all (1,ikq), evc_kq_g , evc_kq_r )
               ENDIF
             END IF
             !$acc exit data delete(evc_kq_g)
@@ -729,11 +754,11 @@ SUBROUTINE dH_ki_quadratic (dH_wann, dH_wann_proj)
          !
       ENDDO ! iwann
       !
-      DEALLOCATE ( rhog , delta_vg, vh_rhog, delta_vg_ )
       !
-      !    
     ENDDO ! qpoints
     !$acc exit data delete(rhor, rhog, delta_vg, vh_rhog, delta_vg_, delta_vr, delta_vr_)
+    !$acc exit data delete(igk_k_all)
+    DEALLOCATE ( rhog , delta_vg, vh_rhog, delta_vg_ )
 
     !WRITE( stdout, '(5X,"INFO: KC HAMILTONIAN CALCULATION ik= ", i4, " ... DONE")') ik
     !

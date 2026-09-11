@@ -30,18 +30,29 @@ SUBROUTINE rotate_ks ()
   USE buffers,               ONLY : get_buffer, save_buffer
   USE control_kcw,           ONLY : kcw_at_ks, evc0, read_unitary_matrix, iuwfc_wann, &
                                     check_ks, spin_component, num_wann, occ_mat
-  USE wvfct,                 ONLY : wg
+  USE wvfct,                 ONLY : wg, et
   USE klist,                 ONLY : wk
+  USE constants,             ONLY : rytoev
+  USE mp,                    ONLY : mp_sum
+  USE mp_pools,              ONLY : inter_pool_comm
   !
   IMPLICIT NONE
   !
   INTEGER :: ik, n_orb, ik_eff,nkstot_eff
-  INTEGER :: lrwfc 
+  INTEGER :: lrwfc
   !
   INTEGER, EXTERNAL :: global_kpoint_index
   INTEGER :: global_ik
   INTEGER :: i
   COMPLEX(DP) :: occ_mat_aux(num_wann,num_wann)
+  !
+  INTEGER :: h_dim
+  ! Dimension of the Hamiltonian diagonalized in ks_hamiltonian: fixed for the whole
+  ! loop (kcw_at_ks does not vary with ik), nbnd if kcw_at_ks else num_wann
+  REAL(DP), ALLOCATABLE :: eigvl_wann_chk(:)
+  ! The "WANN" eigenvalues from ks_hamiltonian for the current (local) k-point
+  !
+  REAL(DP), ALLOCATABLE :: et_wann_chk(:,:), et_pwscf_chk(:,:), xk_chk(:,:)
   !
   IF ( ionode )  THEN 
     IF (read_unitary_matrix) WRITE( stdout, '(/,5x,A)') &
@@ -53,9 +64,6 @@ SUBROUTINE rotate_ks ()
   ENDIF
   !
   !
-  IF (check_KS .AND. .NOT. kcw_at_ks ) & 
-      WRITE( stdout, '(/,8x,A)') &
-               'INFO: Performing a check on the eigenvalues of the rotated KS Hamilotnian ... '
   !
   ! ... Loop over k_point
   !
@@ -63,8 +71,21 @@ SUBROUTINE rotate_ks ()
       nkstot_eff = nkstot
    ELSE
       nkstot_eff = nkstot/nspin
-   ENDIF 
-   
+   ENDIF
+
+  h_dim = nbnd
+  IF (.NOT. kcw_at_ks) h_dim = num_wann
+  !
+  ! ... eigvl_wann_chk is always allocated: ks_hamiltonian takes it as a mandatory
+  ! argument (see the note there) even when check_ks is off.
+  ALLOCATE ( eigvl_wann_chk(h_dim) )
+  IF (check_ks) THEN
+    ALLOCATE ( et_wann_chk(h_dim, nkstot_eff), et_pwscf_chk(h_dim, nkstot_eff) )
+    ALLOCATE ( xk_chk(3, nkstot_eff) )
+    et_wann_chk = 0.D0
+    et_pwscf_chk = 0.D0
+    xk_chk = 0.D0
+  ENDIF
 
   k_loop: DO ik = 1, nks
      !
@@ -120,12 +141,41 @@ SUBROUTINE rotate_ks ()
      ! ... Check that the rotation did not spoil the KS eigenvalues
      ! ... and store it for later Hamiltonian diagonalization
      !
-     CALL ks_hamiltonian(evc0, ik, n_orb) 
+     CALL ks_hamiltonian(evc0, ik, n_orb, eigvl_wann_chk)
+     IF (check_ks) THEN
+       ! Stash this pool's contribution at its GLOBAL (effective) k-index; gathered
+       ! and printed after the loop - printing here would only ever reach the log
+       ! for the k-points owned by ionode's own pool.
+       et_wann_chk(:,ik_eff)  = eigvl_wann_chk(1:h_dim)
+       et_pwscf_chk(:,ik_eff) = et(1:h_dim,ik)
+       xk_chk(:,ik_eff)       = xk(:,ik)
+     ENDIF
      !
   ENDDO k_loop
+  !
+  IF (check_ks) THEN
+    CALL mp_sum ( et_wann_chk, inter_pool_comm )
+    CALL mp_sum ( et_pwscf_chk, inter_pool_comm )
+    CALL mp_sum ( xk_chk, inter_pool_comm )
+    IF (ionode) THEN
+      IF ( .NOT. kcw_at_ks ) WRITE( stdout, '(/,8x,A)') &
+                 'INFO: Performing a check on the eigenvalues of the rotated KS Hamilotnian ... '
+      DO ik = 1, nkstot_eff
+        WRITE( stdout, 9020 ) ( xk_chk(i,ik), i = 1, 3 )
+        WRITE( stdout, '(8X, "WANN  ",8F11.4)' ) (et_wann_chk(i,ik)*rytoev, i=1,h_dim)
+        WRITE( stdout, '(8X, "PWSCF ",8F11.4)' ) (et_pwscf_chk(i,ik)*rytoev, i=1,h_dim)
+      ENDDO
+    ENDIF
+    DEALLOCATE ( et_wann_chk, et_pwscf_chk, xk_chk )
+  ENDIF
+  DEALLOCATE ( eigvl_wann_chk )
   !
   IF (check_ks .AND. .NOT. kcw_at_ks )  WRITE( stdout, '(/,8x,A)') &
                'INFO: Performing a check on the eigenvalues of the rotated KS Hamiltonian ... DONE'
   WRITE(stdout, '(/,5X,"INFO: Minimizing orbitals DEFINED")')
+  !
+9020 FORMAT(/'          k =',3F7.4,'     band energies (ev):'/ )
+  !
+  RETURN
   !
 END subroutine rotate_ks

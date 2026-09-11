@@ -18,11 +18,11 @@ SUBROUTINE koopmans_ham_proj (delta)
   ! This correction can be applied perturbatively or not (default) on all the KS states
   ! available from the preceeding nscf calculation
   !
-  USE io_global,             ONLY : stdout
+  USE io_global,             ONLY : stdout, ionode
   USE kinds,                 ONLY : DP
-  USE klist,                 ONLY : xk, ngk, igk_k
+  USE klist,                 ONLY : xk, ngk, igk_k, nkstot, nks
   USE control_kcw,           ONLY : num_wann, evc0, Hamlt, kcw_iverbosity, &
-                                    num_wann_occ, iuwfc_wann, spin_component, nkstot_eff
+                                    num_wann_occ, iuwfc_wann_allk, spin_component, nkstot_eff
   USE constants,             ONLY : rytoev
   USE wvfct,                 ONLY : npwx, npw, et, nbnd, current_k
   USE units_lr,              ONLY : iuwfc
@@ -30,7 +30,8 @@ SUBROUTINE koopmans_ham_proj (delta)
   USE buffers,               ONLY : get_buffer, save_buffer
   USE io_files,              ONLY : nwordwfc
   USE mp_bands,              ONLY : intra_bgrp_comm
-  USE mp,                    ONLY : mp_sum
+  USE mp,                    ONLY : mp_sum, mp_max, mp_min
+  USE mp_pools,              ONLY : inter_pool_comm
   USE lsda_mod,              ONLY : lsda, isk, current_spin
   USE uspp,                  ONLY : nkb, vkb
   USE uspp_init,             ONLY : init_us_2
@@ -38,8 +39,23 @@ SUBROUTINE koopmans_ham_proj (delta)
   !
   IMPLICIT NONE
   !
-  ! The k point index 
-  INTEGER :: ik, ibnd, ik_pw, k, eig_start, eig_win
+  INTEGER, EXTERNAL :: global_kpoint_index
+  !! The global index of a local (pool) k-point
+  !
+  ! ik_loc is the LOCAL (pool) k-point index: the KS orbitals (iuwfc), the number of
+  ! PWs (ngk), the eigenvalues (et), igk_k and xk are all pool-local arrays, so they
+  ! must be addressed with it. ik is the "effective" (1:nkstot_eff) index of the
+  ! current spin channel, used for the pool-replicated quantities: Hamlt and the
+  ! ALL-k Wannier-gauge buffer iuwfc_wann_allk.
+  INTEGER :: ik, ibnd, ik_loc, k, eig_start, eig_win, eig_top, nvals
+  !
+  ! Per-k results, stashed at the effective k index and gathered across pools after
+  ! the loop so that the full, correctly ordered table is printed once from ionode.
+  REAL(DP), ALLOCATABLE :: eigvl_ks_all(:,:), eigvl_ki_all(:,:), eigvl_pert_all(:,:)
+  REAL(DP), ALLOCATABLE :: xk_all(:,:)
+  REAL(DP), ALLOCATABLE :: proj_spec(:,:,:)
+  ! kcw_iverbosity>1 only: KI eigenvalues around the Fermi level as a function of the
+  ! size of the diagonalized Hilbert space
   !
   ! The on-site KI correction \alpha_n*<W_0n^2|f_Hxc|W_0n^2> (computed in dH_ki_wann.f90)
   COMPLEX(DP), INTENT(IN) :: delta (num_wann)
@@ -48,6 +64,9 @@ SUBROUTINE koopmans_ham_proj (delta)
   !
   COMPLEX(DP) :: overlap
   COMPLEX(DP) :: ham(nbnd,nbnd), eigvc(nbnd,nbnd), deltah(nbnd,nbnd)
+  !
+  REAL(DP) :: eigvl_wann_chk(nbnd)
+  ! Throwaway receiver for the (mandatory) eigvl_out argument of ks_hamiltonian
   !
   ! The new eigenalues 
   REAL(DP), ALLOCATABLE :: eigvl_aux(:)
@@ -88,15 +107,35 @@ SUBROUTINE koopmans_ham_proj (delta)
   ehomo_pert=-1D+6
   elumo_pert=+1D+6
   !
-  DO ik = 1, nkstot_eff
+  ALLOCATE ( eigvl_ks_all(nbnd, nkstot_eff), eigvl_ki_all(nbnd, nkstot_eff), &
+             eigvl_pert_all(nbnd, nkstot_eff), xk_all(3, nkstot_eff) )
+  eigvl_ks_all = 0.D0; eigvl_ki_all = 0.D0; eigvl_pert_all = 0.D0; xk_all = 0.D0
+  !
+  ! ... Size of the kcw_iverbosity>1 report (see the print block after the loop)
+  eig_win   = 5
+  eig_start = MAX(num_wann_occ-eig_win+1, 1)
+  eig_top   = num_wann_occ + eig_win
+  nvals     = MIN(nbnd, eig_top) - eig_start + 1
+  IF (kcw_iverbosity .gt. 1 .AND. nvals .gt. 0) THEN
+    ALLOCATE ( proj_spec(nvals, nbnd, nkstot_eff) )
+    proj_spec = 0.D0
+  ENDIF
+  !
+  ! ... Loop over the LOCAL (this pool's) k-points only: each pool can only read the
+  ! KS orbitals of the k-points it owns from its own iuwfc buffer.
+  !
+  DO ik_loc = 1, nks
     !
-    ik_pw = ik + (spin_component-1)*(nkstot_eff)
-    WRITE( stdout, 9020 ) ( xk(i,ik_pw), i = 1, 3 )
-    CALL get_buffer ( evc, nwordwfc, iuwfc, ik_pw )
-    npw = ngk(ik_pw)
+    IF ( lsda .AND. isk(ik_loc) /= spin_component ) CYCLE
     !
-    ehomo_ks = MAX ( ehomo_ks, et(num_wann_occ  , ik_pw) )
-    IF (nbnd > num_wann_occ) elumo_ks = MIN ( elumo_ks, et(num_wann_occ+1, ik_pw) )
+    ik = global_kpoint_index (nkstot, ik_loc) - (spin_component-1)*nkstot_eff
+    !
+    CALL get_buffer ( evc, nwordwfc, iuwfc, ik_loc )
+    npw = ngk(ik_loc)
+    xk_all(:,ik) = xk(:,ik_loc)
+    !
+    ehomo_ks = MAX ( ehomo_ks, et(num_wann_occ  , ik_loc) )
+    IF (nbnd > num_wann_occ) elumo_ks = MIN ( elumo_ks, et(num_wann_occ+1, ik_loc) )
     !
     !
     ! Build and diagonalize the projector-based KI Hamiltonian on the Hilbert space spanned
@@ -107,17 +146,21 @@ SUBROUTINE koopmans_ham_proj (delta)
       ! In the canonicla KS basis the KS hamiltonian is already diagonal
       ! maening there is no need to re-build it. I keep this as is in case
       ! we want to use a diffferent basis
-      current_k = ik_pw
-      IF ( lsda ) current_spin = isk(ik_pw)
-      IF ( nkb > 0 ) CALL init_us_2( npw, igk_k(1,ik_pw), xk(1,ik_pw), vkb )
+      current_k = ik_loc
+      IF ( lsda ) current_spin = isk(ik_loc)
+      IF ( nkb > 0 ) CALL init_us_2( npw, igk_k(1,ik_loc), xk(1,ik_loc), vkb )
       ! FIXME: ned o modify ks_hamiltonian to pass the hammiltonian (and not use Hamlt of kcw_comm)
-      CALL ks_hamiltonian (evc, ik_pw, nbnd, .false.)
+      ! NB: the 4th argument is the (mandatory) eigvl_out of ks_hamiltonian; it used to
+      ! be called here with a LOGICAL .false. in that slot, which silently mismatched the
+      ! dummy argument list (no explicit interface catches it). Unused here: check_ks
+      ! is not active on this path, so ks_hamiltonian leaves it untouched.
+      CALL ks_hamiltonian (evc, ik_loc, nbnd, eigvl_wann_chk)
       !
       ! The KS hamiltonian in the Wannier Gauge (just to check)
       ham(:,:) = Hamlt(ik,:,:) 
       CALL cdiagh( nbnd, ham, nbnd, eigvl, eigvc )
       !
-      !WRITE( stdout, 9020 ) ( xk(i,ik_pw), i = 1, 3 )
+      !WRITE( stdout, 9020 ) ( xk(i,ik_loc), i = 1, 3 )
       ! this shoud perfetcly matchs with the KS eigenvalues. If not, there is a problem
       WRITE( stdout, '(10x, "KS* ",8F11.4)' ) (eigvl(ibnd)*rytoev, ibnd=1,nbnd)
       !
@@ -126,8 +169,8 @@ SUBROUTINE koopmans_ham_proj (delta)
       ! The KS Hamiltonian in the KS basis
       ham(:,:)=CMPLX(0.D0, 0.D0, kind=DP)
       DO i = 1, nbnd 
-        ham(i,i)    = et(i,ik_pw)
-        eigvl_ks(i) = et(i,ik_pw)
+        ham(i,i)    = et(i,ik_loc)
+        eigvl_ks(i) = et(i,ik_loc)
       ENDDO
       !
     ENDIF
@@ -140,7 +183,7 @@ SUBROUTINE koopmans_ham_proj (delta)
     ! Because we have defined a uniq KI Hamiltonian, we can do a perturbative approach
     ! i.e. we keep only the diagonal part of the KI Hamiltoniana
     DO i = 1, nbnd
-      eigvl_pert(i) = et(i,ik_pw) + DBLE(deltah(i,i))
+      eigvl_pert(i) = et(i,ik_loc) + DBLE(deltah(i,i))
     ENDDO
     ehomo_pert = MAX ( ehomo_pert, eigvl_pert(num_wann_occ ) )
     IF (nbnd > num_wann_occ) elumo_pert = MIN ( elumo_pert, eigvl_pert(num_wann_occ+1 ) )
@@ -150,13 +193,9 @@ SUBROUTINE koopmans_ham_proj (delta)
     ! And Diagonalize it 
     CALL cdiagh( nbnd, ham, nbnd, eigvl, eigvc )
     !
-    IF (kcw_iverbosity .gt. 1) THEN
-      eig_win=5
-      eig_start = MAX(num_wann_occ-eig_win+1, 1) 
-      WRITE(stdout,'( 12x, "KI Eigenvalues around Fermi as a function of the Hilbert space")')
-      WRITE(stdout,'( 12x, "KI Eigenvaluse from", I5, " to", I5, " (i.e. +/-", I3, " around VBM),/")') &
-              eig_start, num_wann_occ+eig_win, eig_win
-      WRITE(stdout,'( 12x, " dim   eig1      eig2      ...")')
+    IF ( ALLOCATED(proj_spec) ) THEN
+      !
+      ! Stash the spectrum; printed after the loop (see below)
       DO k = eig_start, nbnd
          !
          ALLOCATE (ham_aux(k,k), eigvl_aux(k), eigvc_aux(k,k))
@@ -166,21 +205,16 @@ SUBROUTINE koopmans_ham_proj (delta)
          CALL cdiagh( k, ham_aux, k, eigvl_aux, eigvc_aux )
          !
          !neig_max = MIN (20, nbnd)
-         IF (k.le.num_wann_occ+eig_win) THEN 
-            WRITE(stdout,'(12x, I3, 10F10.4)') k, eigvl_aux(eig_start:k)*rytoev   
-         ELSE 
-            WRITE(stdout,'(12x, I3, 10F10.4)') k, eigvl_aux(eig_start:num_wann_occ+eig_win)*rytoev 
-         ENDIF
+         proj_spec(1:MIN(k,eig_top)-eig_start+1, k, ik) = eigvl_aux(eig_start:MIN(k,eig_top))
          !
          DEALLOCATE (ham_aux)
          DEALLOCATE (eigvl_aux, eigvc_aux)
          !
       ENDDO
-      WRITE(stdout,*)
     ENDIF
     !
     !Overwrite et and evc
-    et(1:nbnd, ik_pw) = eigvl(1:nbnd)
+    et(1:nbnd, ik_loc) = eigvl(1:nbnd)
     ! MB
     ! This is different wrt koopmans_ham.f90:
     ! (1) the first dimension (row of A/evc) = npwx, not npw;
@@ -188,17 +222,58 @@ SUBROUTINE koopmans_ham_proj (delta)
     CALL ZGEMM( 'N','N', npwx*npol, nbnd, nbnd, ONE, evc, npwx*npol, eigvc, nbnd, &
     ZERO, evc_aux, npwx*npol )
     evc(:,:) = evc_aux(:,:)
-    CALL save_buffer ( evc, nwordwfc, iuwfc, ik_pw )
+    CALL save_buffer ( evc, nwordwfc, iuwfc, ik_loc )
     !
     ehomo = MAX ( ehomo, eigvl(num_wann_occ ) )
     IF (nbnd > num_wann_occ) elumo = MIN ( elumo, eigvl(num_wann_occ+1 ) )
     !
-    WRITE( stdout, '(10x, "KS  ",8F11.4)' ) (eigvl_ks(ibnd)*rytoev, ibnd=1,nbnd)
-    WRITE( stdout, '(10x, "KI  ",8F11.4)' ) (eigvl   (ibnd)*rytoev, ibnd=1,nbnd)
-    WRITE( stdout, '(10x, "pKI ",8F11.4)' ) (eigvl_pert(ibnd)*rytoev, ibnd=1,nbnd)
+    ! Stash the eigenvalues; the per-k report is printed after the loop (see below)
+    eigvl_ks_all(:,ik)   = eigvl_ks(:)
+    eigvl_ki_all(:,ik)   = eigvl(:)
+    eigvl_pert_all(:,ik) = eigvl_pert(:)
+    !
     WRITE(stdout, 901) get_clock('KCW')
     !
   ENDDO
+  !
+  ! ... Gather across pools: each pool has filled only the columns of the k-points it
+  ! owns (the arrays were zeroed above and each effective k index is owned by exactly
+  ! one pool), so a sum reconstructs the full table on every process.
+  !
+  CALL mp_sum ( eigvl_ks_all,   inter_pool_comm )
+  CALL mp_sum ( eigvl_ki_all,   inter_pool_comm )
+  CALL mp_sum ( eigvl_pert_all, inter_pool_comm )
+  CALL mp_sum ( xk_all,         inter_pool_comm )
+  IF ( ALLOCATED(proj_spec) ) CALL mp_sum ( proj_spec, inter_pool_comm )
+  CALL mp_max ( ehomo_ks,   inter_pool_comm )
+  CALL mp_max ( ehomo,      inter_pool_comm )
+  CALL mp_max ( ehomo_pert, inter_pool_comm )
+  CALL mp_min ( elumo_ks,   inter_pool_comm )
+  CALL mp_min ( elumo,      inter_pool_comm )
+  CALL mp_min ( elumo_pert, inter_pool_comm )
+  !
+  ! ... The per-k report, now that every process holds the full gathered table:
+  ! print once, in k-point order, from ionode only.
+  !
+  IF ( ionode ) THEN
+    DO ik = 1, nkstot_eff
+      WRITE( stdout, 9020 ) ( xk_all(i,ik), i = 1, 3 )
+      IF ( ALLOCATED(proj_spec) ) THEN
+        WRITE(stdout,'( 12x, "KI Eigenvalues around Fermi as a function of the Hilbert space")')
+        WRITE(stdout,'( 12x, "KI Eigenvaluse from", I5, " to", I5, " (i.e. +/-", I3, " around VBM),/")') &
+                eig_start, num_wann_occ+eig_win, eig_win
+        WRITE(stdout,'( 12x, " dim   eig1      eig2      ...")')
+        DO k = eig_start, nbnd
+          WRITE(stdout,'(12x, I3, 10F10.4)') k, &
+                proj_spec(1:MIN(k,eig_top)-eig_start+1, k, ik)*rytoev
+        ENDDO
+        WRITE(stdout,*)
+      ENDIF
+      WRITE( stdout, '(10x, "KS  ",8F11.4)' ) (eigvl_ks_all(ibnd,ik)*rytoev, ibnd=1,nbnd)
+      WRITE( stdout, '(10x, "KI  ",8F11.4)' ) (eigvl_ki_all(ibnd,ik)*rytoev, ibnd=1,nbnd)
+      WRITE( stdout, '(10x, "pKI ",8F11.4)' ) (eigvl_pert_all(ibnd,ik)*rytoev, ibnd=1,nbnd)
+    ENDDO
+  ENDIF
   !
   IF ( elumo < 1d+6) THEN
     WRITE( stdout, 9042 ) ehomo_ks*rytoev, elumo_ks*rytoev
@@ -221,10 +296,12 @@ SUBROUTINE koopmans_ham_proj (delta)
 901 FORMAT('          total cpu time spent up to now is ',F10.1,' secs' )
   !
   DEALLOCATE (evc_aux)
+  DEALLOCATE (eigvl_ks_all, eigvl_ki_all, eigvl_pert_all, xk_all)
+  IF ( ALLOCATED(proj_spec) ) DEALLOCATE (proj_spec)
   !
   RETURN
   !
-  CONTAINS 
+  CONTAINS
   !
   ! !----------------------------------------------------------------
   SUBROUTINE dki_hamiltonian (evc, ik, h_dim, occ_mat, delta, deltah)
@@ -249,7 +326,7 @@ SUBROUTINE koopmans_ham_proj (delta)
     COMPLEX(DP) :: overlap_in, overlap_nj, overlap
     !
     lrwannfc = num_wann*npwx*npol
-    CALL get_buffer ( evc0, lrwannfc, iuwfc_wann, ik )
+    CALL get_buffer ( evc0, lrwannfc, iuwfc_wann_allk, ik )
     !
     deltah = CMPLX(0.D0, 0.D0, kind=DP)
     DO ib = 1, nbnd
@@ -288,34 +365,46 @@ SUBROUTINE koopmans_ham_proj (delta)
     USE kinds,                 ONLY : DP
     USE control_kcw,           ONLY : num_wann, spin_component
     USE wvfct,                 ONLY : nbnd
-    USE lsda_mod,              ONLY : nspin
-    USE klist,                 ONLY : ngk
+    USE lsda_mod,              ONLY : nspin, lsda, isk
+    USE klist,                 ONLY : ngk, nkstot, nks
     USE wvfct,                 ONLY : wg
     USE mp_bands,              ONLY : intra_bgrp_comm
     USE mp,                    ONLY : mp_sum
+    USE mp_pools,              ONLY : inter_pool_comm
     USE control_flags,         ONLY : gamma_only
     USE gvect,                 ONLY : gstart
     !
     REAL(DP), INTENT(INOUT) :: occ_mat(num_wann)
-    INTEGER :: iwann, ik, ibnd, ik_pw, spin_deg
+    INTEGER :: iwann, ik, ibnd, ik_loc, spin_deg
+    !
+    INTEGER, EXTERNAL :: global_kpoint_index
     !
     ! The canonical occupation matrix (fermi dirac or alike)
     occ_mat = REAL(0.D0, kind=DP)
     !
+    ! ... P_n = \sum_kv f_kv <u_kv|w_kn><w_kn|u_kn> is a sum over ALL k: each pool
+    ! accumulates the contribution of the k-points it owns (it can only read their
+    ! KS orbitals from its own iuwfc buffer) and the partial sums are reduced over
+    ! inter_pool_comm at the end.
+    !
     DO iwann= 1, num_wann
       !
-      DO ik= 1, nkstot_eff
-        ik_pw = ik + (spin_component-1)*(nkstot_eff)
-        npw = ngk(ik_pw)
+      DO ik_loc = 1, nks
+        !
+        IF ( lsda .AND. isk(ik_loc) /= spin_component ) CYCLE
+        !
+        ik = global_kpoint_index (nkstot, ik_loc) - (spin_component-1)*nkstot_eff
+        !
+        npw = ngk(ik_loc)
         lrwannfc = num_wann*npwx*npol
-        CALL get_buffer ( evc0, lrwannfc, iuwfc_wann, ik )
-        CALL get_buffer ( evc, nwordwfc, iuwfc, ik_pw )
+        CALL get_buffer ( evc0, lrwannfc, iuwfc_wann_allk, ik )
+        CALL get_buffer ( evc, nwordwfc, iuwfc, ik_loc )
         !
         spin_deg=1
         IF(nspin == 1) spin_deg = 2
         overlap = CMPLX(0.D0, 0.D0, kind=DP)
         DO ibnd = 1, nbnd
-          IF (gamma_only) THEN 
+          IF (gamma_only) THEN
              overlap = 2.D0*SUM(DBLE(CONJG(evc(1:npw*npol,ibnd))*(evc0(1:npw*npol,iwann))))
              IF (gstart ==2 ) overlap = overlap-1.D0*(DBLE(CONJG(evc(1,ibnd))*(evc0(1,iwann))))
           ELSE
@@ -323,10 +412,16 @@ SUBROUTINE koopmans_ham_proj (delta)
           ENDIF
           CALL mp_sum (overlap, intra_bgrp_comm)
           overlap = CONJG(overlap)*overlap
-          occ_mat(iwann) = occ_mat(iwann) + wg(ibnd,ik)/spin_deg * REAL(overlap)
+          ! NB: wg is pool-local, so it takes the LOCAL index. It used to be indexed
+          ! with the effective one, which also picked the wrong spin channel's weights
+          ! for spin_component=2 (and coincided with the local index only for
+          ! spin_component=1 without pools).
+          occ_mat(iwann) = occ_mat(iwann) + wg(ibnd,ik_loc)/spin_deg * REAL(overlap)
         ENDDO
       ENDDO
     ENDDO
+    !
+    CALL mp_sum ( occ_mat, inter_pool_comm )
     !
   END SUBROUTINE occupations
 

@@ -36,13 +36,17 @@ subroutine kcw_setup_ham
                                 read_unitary_matrix, Hamlt, alpha_corr_done, group_alpha, l_do_alpha, &
                                 num_wann, num_wann_occ, num_wann_emp, i_orb, iorb_start, iorb_end, &
                                 calculation, nqstot, occ_mat, spin_component, &
-                                tmp_dir_kcw, tmp_dir_kcwq, x_q, lgamma_iq, io_real_space, nrho, nkstot_eff !, wq
-  USE io_global,         ONLY : stdout
+                                tmp_dir_kcw, tmp_dir_kcwq, x_q, lgamma_iq, io_real_space, nrho, nkstot_eff, &
+                                iuwfc_wann_allk, igk_k_all, ngk_all, check_ks !, wq
+  USE io_global,         ONLY : stdout, ionode
   USE klist,             ONLY : nkstot, xk, nks, ngk, igk_k, nelec, nelup, neldw
+  USE wvfct,             ONLY : et
+  USE constants,         ONLY : rytoev
+  USE mp_pools,          ONLY : inter_pool_comm
   USE cell_base,         ONLY : at, omega !, bg
   USE fft_base,          ONLY : dffts
   !
-  USE mp,                ONLY : mp_bcast
+  USE mp,                ONLY : mp_bcast, mp_sum
   USE eqv,               ONLY : dmuxc
   !
   USE io_kcw,            ONLY : read_rhowann, read_rhowann_g
@@ -73,10 +77,15 @@ subroutine kcw_setup_ham
   CHARACTER (LEN=256) :: file_base
   CHARACTER (LEN=6), EXTERNAL :: int_to_char
   !
-  INTEGER :: ik, ik_eff
+  INTEGER :: ik, ik_eff, iwann
   CHARACTER(LEN=256)  :: dirname
   INTEGER, EXTERNAL :: global_kpoint_index
   LOGICAL :: mlwf_from_u = .FALSE.
+  !
+  REAL(DP), ALLOCATABLE :: eigvl_wann_chk(:)
+  ! The "WANN" eigenvalues from ks_hamiltonian for the current (local) k-point
+  !
+  REAL(DP), ALLOCATABLE :: et_wann_chk(:,:), et_pwscf_chk(:,:), xk_chk(:,:)
   !
   !LOGICAL :: skip_equivalence
   !INTEGER :: nk1, nk2, nk3, k1, k2, k3
@@ -165,6 +174,19 @@ subroutine kcw_setup_ham
   CALL open_buffer ( iuwfc_wann, 'wfc_wann', lrwfc, io_level, exst )
   if (kcw_iverbosity .gt. 1) WRITE(stdout,'(/,5X, "INFO: Buffer for WFs, OPENED")')
   !
+  ! ... Open an other buffer for the KS states in the WANNIER gauge which contains
+  !     all the k points (not just the ones in this pool). This is needed for each
+  !     k-point to have access to all the other k-points (pool parallelization):
+  !     building H(k) needs the wfc at k+q/k-q for every q, which in general belong
+  !     to a different pool. MEMORY INTENSE. Same mechanism as the wann2kcw path,
+  !     see kcw_setup.f90/bcast_wfc.f90/rho_of_q.f90
+  !
+  iuwfc_wann_allk = 210
+  io_level = 1
+  lrwfc = num_wann * npwx * npol
+  CALL open_buffer ( iuwfc_wann_allk, 'wfc_wann_allk', lrwfc, io_level, exst )
+  if (kcw_iverbosity .gt. 1) WRITE(stdout,'(/,5X, "INFO: Buffer for WFs ALL-k, OPENED")')
+  !
   ! Open a buffer for the wannier orbital densities. Those have been written by wann2kcw
   ! and must be in the outdir. If not STOP
   !
@@ -178,8 +200,9 @@ subroutine kcw_setup_ham
   ALLOCATE ( evc0(npwx*npol, num_wann) )
   ALLOCATE ( rhog (ngms) )
   ALLOCATE ( hamlt(nkstot, num_wann, num_wann) )
-  ALLOCATE ( alpha_corr_done (num_wann) ) 
+  ALLOCATE ( alpha_corr_done (num_wann) )
   ALLOCATE ( occ_mat (num_wann, num_wann, nkstot) )
+  ALLOCATE ( igk_k_all(npwx,nkstot), ngk_all(nkstot) )
   occ_mat = 0.D0
   alpha_corr_done = .FALSE.
   hamlt(:,:,:) = ZERO
@@ -191,10 +214,22 @@ subroutine kcw_setup_ham
                   & Reading collected, re-writing distributed wavefunctions")')
     CALL rotate_ks () 
     !
-  ELSE 
+  ELSE
     dirname = restart_dir ()
     WRITE(stdout,'(/,5X, "INFO: MLWF read from file: &
                   & Reading collected, re-writing distributed wavefunctions")')
+    ! ... eigvl_wann_chk is always allocated: ks_hamiltonian takes it as a mandatory
+    ! argument (see the note there) even when check_ks is off, in which case it is
+    ! left untouched and never read.
+    ALLOCATE ( eigvl_wann_chk(num_wann) )
+    IF (check_ks) THEN
+      WRITE(stdout,'(5X, "INFO: Going to check KS eigenvalues: Diag H(k)")')
+      ALLOCATE ( et_wann_chk(num_wann, nkstot_eff), et_pwscf_chk(num_wann, nkstot_eff) )
+      ALLOCATE ( xk_chk(3, nkstot_eff) )
+      et_wann_chk = 0.D0
+      et_pwscf_chk = 0.D0
+      xk_chk = 0.D0
+    ENDIF
     DO ik = 1, nks
         !
         current_k = ik
@@ -203,11 +238,49 @@ subroutine kcw_setup_ham
         npw = ngk(ik)
         IF ( nkb > 0 ) CALL init_us_2( npw, igk_k(1,ik), xk(1,ik), vkb )
         CALL read_collected_wfc ( dirname, ik, evc0, "wan")
-        ik_eff = ik-(spin_component-1)*nkstot_eff
-        CALL save_buffer ( evc0, lrwfc, iuwfc_wann, ik_eff )
-        CALL ks_hamiltonian(evc0, ik, num_wann) 
+        CALL save_buffer ( evc0, lrwfc, iuwfc_wann, ik )
+        ! LOCAL ik: iuwfc_wann follows the per-pool buffer convention (see rotate_ks.f90).
+        ! bcast_wfc below replicates it into iuwfc_wann_allk, indexed by the GLOBAL
+        ! (effective) k index, which is what all the ham-path readers use.
+        CALL ks_hamiltonian(evc0, ik, num_wann, eigvl_wann_chk)
+        IF (check_ks) THEN
+          ! Stash this pool's contribution at its GLOBAL (effective) k-index; gathered
+          ! and printed after the loop - printing here would only ever reach the log
+          ! for the k-points owned by ionode's own pool.
+          ik_eff = global_kpoint_index (nkstot, ik) - (spin_component-1)*nkstot_eff
+          et_wann_chk(:,ik_eff)  = eigvl_wann_chk(:)
+          et_pwscf_chk(:,ik_eff) = et(1:num_wann,ik)
+          xk_chk(:,ik_eff)       = xk(:,ik)
+        ENDIF
     END DO
+    !
+    IF (check_ks) THEN
+      WRITE(stdout,'(/,8x, "KS Hamiltonian eigenvalues CHECK")')
+      CALL mp_sum ( et_wann_chk, inter_pool_comm )
+      CALL mp_sum ( et_pwscf_chk, inter_pool_comm )
+      CALL mp_sum ( xk_chk, inter_pool_comm )
+      IF (ionode) THEN
+        DO ik = 1, nkstot_eff
+          WRITE( stdout, 9020 ) ( xk_chk(i,ik), i = 1, 3 )
+          WRITE( stdout, '(8X, "WANN  ",8F11.4)' ) (et_wann_chk(iwann,ik)*rytoev, iwann=1,num_wann)
+          WRITE( stdout, '(8X, "PWSCF ",8F11.4)' ) (et_pwscf_chk(iwann,ik)*rytoev, iwann=1,num_wann)
+        ENDDO
+      ENDIF
+      DEALLOCATE ( et_wann_chk, et_pwscf_chk, xk_chk )
+    ENDIF
+    DEALLOCATE ( eigvl_wann_chk )
   ENDIF
+  !
+  ! ... Gather the KS hamiltonian in the Wannier gauge across pools: each pool has
+  ! filled only the rows of the k-points it owns (Hamlt starts at ZERO and each
+  ! effective k index is owned by exactly one pool), so a sum reconstructs the
+  ! full array on every process.
+  !
+  CALL mp_sum ( Hamlt(1:nkstot_eff,:,:), inter_pool_comm )
+  !
+  ! ... pass all the WFs to all the pools (needed to have pool parallelization)
+  !
+  CALL bcast_wfc ( igk_k_all, ngk_all )
   !
   !DEALLOCATE ( nbnd_occ )  ! otherwise allocate_ph complains: FIXME
   !
@@ -333,6 +406,8 @@ subroutine kcw_setup_ham
   !
   DEALLOCATE (rhowann, rhowann_aux)
   DEALLOCATE (rhog)
+  !
+9020 FORMAT(/'          k =',3F7.4,'     band energies (ev):'/ )
   !
   RETURN
   !

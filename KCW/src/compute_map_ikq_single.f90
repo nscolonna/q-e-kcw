@@ -17,11 +17,14 @@ SUBROUTINE compute_map_ikq_single (iq,also_minus)
   !! there exist a G vector such that k + q = k'+ G with k' in the 1BZ
   !
   USE kinds,                ONLY : DP
-  USE klist,                ONLY : xk, nkstot
-  USE io_global,            ONLY : ionode, ionode_id
-  USE control_kcw,          ONLY : map_ikq, shift_1bz, kcw_iverbosity, nkstot_eff, map_ikq_minus, shift_1bz_minus
-  USE mp,                   ONLY : mp_bcast
-  USE mp_global,            ONLY : intra_image_comm 
+  USE klist,                ONLY : nkstot
+  USE io_global,            ONLY : ionode
+  USE control_kcw,          ONLY : map_ikq, shift_1bz, kcw_iverbosity, nkstot_eff, &
+                                   map_ikq_minus, shift_1bz_minus, x_q
+  !! NOTE: x_q (not klist's xk) is used here because it holds the FULL k/q mesh on every
+  !! process/pool, whereas xk is truncated to the local-pool subset once pools are active
+  !! (see divide_et_impera). Every process computes its own copy of the map directly
+  !! from x_q below (no communication needed - see note further down).
   USE io_global,            ONLY : stdout
   USE cell_base,            ONLY : at
   !
@@ -77,20 +80,19 @@ SUBROUTINE compute_map_ikq_single (iq,also_minus)
 !  ENDIF
   
   !
-  IF (ionode) THEN 
-    !
+  !
     DO ik = 1, nkstot_eff
       !
-      xkq(:) = xk(:,ik)+xk(:,iq)
+      xkq(:) = x_q(:,ik)+x_q(:,iq)
       IF (do_minus) THEN
-      xkq_m(:) = -xk(:,ik)+xk(:,iq)
+      xkq_m(:) = -x_q(:,ik)+x_q(:,iq)
       END IF
       ! the k+q coordinate (cart)
       !
 #ifdef DEBUG
-      xq_(:) = xk(:,iq)
+      xq_(:) = x_q(:,iq)
       CALL cryst_to_cart(1, xq_, at, -1)
-      xk_(:) = xk(:,ik)
+      xk_(:) = x_q(:,ik)
       CALL cryst_to_cart(1, xk_, at, -1)
       WRITE(mpime+100,,'("iq, xq", i5, 3f8.4)') iq, xq_(:)
       WRITE(mpime+100,,'("ik, xk", i5, 3f8.4)') ik, xk_(:)
@@ -127,22 +129,15 @@ SUBROUTINE compute_map_ikq_single (iq,also_minus)
       WRITE(mpime+100,,'("ikq, xkq_1BZ", i5, 3f8.4,/)') ikq, xq_(:) + xk_(:) -gvect_(:)
 #endif
       !
-      IF (kcw_iverbosity .gt. 1) THEN
-        WRITE(stdout,'(8X, "The map (iq,ik) --> ip + G", 5x, & 
+      IF (kcw_iverbosity .gt. 1 .AND. ionode) THEN
+        WRITE(stdout,'(8X, "The map (iq,ik) --> ip + G", 5x, &
                             &  " ( ", 2(i4,1x), " ) " , 5x, i4 , 7x, "+", 3f8.4, " [Cryst]" )') iq, ik, ikq, gvect_
         IF (do_minus) THEN
-          WRITE(stdout,'(8X, "The map [-q] (iq,ik) --> ip + G", 5x, & 
+          WRITE(stdout,'(8X, "The map [-q] (iq,ik) --> ip + G", 5x, &
           &  " ( ", 2(i4,1x), " ) " , 5x, i4 , 7x, "+", 3f8.4, " [Cryst]" )') iq, ik, ikq_m, gvect_m_
         END IF
       END IF
     ENDDO
-    !
-  ENDIF 
-  !
-  CALL mp_bcast ( map_ikq, ionode_id, intra_image_comm )
-  CALL mp_bcast ( shift_1bz, ionode_id, intra_image_comm )
-  CALL mp_bcast ( map_ikq_minus, ionode_id, intra_image_comm )
-  CALL mp_bcast ( shift_1bz_minus, ionode_id, intra_image_comm )
   !
   IF (kcw_iverbosity .gt. 1) WRITE(stdout, *) ""
   WRITE( stdout, '(8X,"INFO: Map k+q -> p in 1BZ DONE  ",/)') 
@@ -230,7 +225,11 @@ SUBROUTINE find_index_1bz_iterate(xkq, gvect, ikq)
   ! 
   USE kinds,                ONLY : DP
   USE cell_base,            ONLY : at, bg
-  USE klist,                ONLY : xk, nkstot
+  USE klist,                ONLY : nkstot
+  USE control_kcw,          ONLY : x_q
+  !! NOTE: x_q (not klist's xk) is used here: xk is truncated to the local-pool subset
+  !! once pools are active, while x_q holds the full k/q mesh on every process
+  !! (see compute_map_ikq_single above).
   USE noncollin_module,     ONLY : nspin_mag
   !
   IMPLICIT NONE
@@ -266,9 +265,9 @@ SUBROUTINE find_index_1bz_iterate(xkq, gvect, ikq)
          !
          cntr = 0
          DO ik = 1, nkstot_eff
-           ! 
+           !
            ! The k point in crystal coordinates
-           xk_(:)  = xk(:,ik)
+           xk_(:)  = x_q(:,ik)
            CALL cryst_to_cart(1, xk_, at, -1)
            !
            dist = sum( (xk_(:)-xkq_(:))**2 )

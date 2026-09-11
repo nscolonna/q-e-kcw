@@ -72,7 +72,7 @@ SUBROUTINE dH_ki_full (ik, dH_wann)
   USE buffers,               ONLY : get_buffer
   USE fft_interfaces,        ONLY : fwfft, invfft
   USE control_kcw,           ONLY : kcw_at_ks, homo_only, alpha_final, iurho_wann, &
-                                    num_wann_occ, iuwfc_wann, kcw_iverbosity, &
+                                    num_wann_occ, iuwfc_wann_allk, kcw_iverbosity, &
                                     qp_symm, evc0, kipz_corr, num_wann, &
                                     spin_component, l_alpha_corr, on_site_only, nrho
   USE control_lr,            ONLY : lrpa
@@ -145,7 +145,7 @@ SUBROUTINE dH_ki_full (ik, dH_wann)
   nspin=nspin_aux
   !
   lrwfc = num_wann*npwx
-  CALL get_buffer ( evc0, lrwfc, iuwfc_wann, ik )
+  CALL get_buffer ( evc0, lrwfc, iuwfc_wann_allk, ik )
   ! Retrive the variational orbital at kpoint k (includes spin)  
   IF (kcw_iverbosity .gt. 1 ) WRITE(stdout,'(8X, "INFO: u_k(g) RETRIEVED"/)')
   !

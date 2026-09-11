@@ -315,10 +315,7 @@ SUBROUTINE kcw_readin()
   IF ( (mp1 .lt. 1 .OR. mp2 .lt. 1 .OR. mp3 .lt. 1) )&
      CALL errore('kcw_readin', ' WRONG k/q grid: check input for mp1, mp2, mp3', 1)
   !
-  IF (calculation == 'ham' .AND. npool .gt. 1) &
-     CALL errore('kcw_readin', 'pools not implemented for "ham" calculation', npool)
-  !
-  IF (trim( assume_isolated ) == 'mt' .OR. trim( assume_isolated ) == 'm-t' .OR. trim(assume_isolated) == 'martyna-tuckerman' ) THEN 
+  IF (trim( assume_isolated ) == 'mt' .OR. trim( assume_isolated ) == 'm-t' .OR. trim(assume_isolated) == 'martyna-tuckerman' ) THEN
     do_comp_mt_kcw =.true. 
   ELSE IF ( trim(assume_isolated) == 'none' ) THEN
     do_comp_mt_kcw = .false.
@@ -362,6 +359,17 @@ SUBROUTINE kcw_readin()
      h_proj = .FALSE.
      h_uniq = .FALSE.
   ENDIF
+  !
+  ! ... k-point (pool) parallelization of the "ham" calculation is implemented for
+  ! ... which_odd="qki" (corr_pc) with any h_diag_scheme ("wann", "uniq", "proj").
+  ! ... which_odd="ki"/"pkipz" (corr_sc) still accesses pool-local PW quantities with
+  ! ... global k indices, so it would silently give wrong results with more than one
+  ! ... pool; it is restricted to nkstot_eff==1 anyway (see the check below), where
+  ! ... there is nothing to distribute across pools.
+  ! ... NB: checked here, i.e. AFTER the mutual-exclusivity fixups above have settled
+  ! ... the final value of these flags.
+  IF (calculation == 'ham' .AND. npool .gt. 1 .AND. corr_sc ) &
+     CALL errore('kcw_readin', 'pools not implemented for which_odd="ki"/"pkipz"', npool)
   !
   ! read data produced by pwscf
   !

@@ -6,12 +6,27 @@
 ! or http://www.gnu.org/copyleft/gpl.txt .
 !
 !-----------------------------------------------------------------------
-SUBROUTINE ks_hamiltonian (evc, ik, h_dim)
+SUBROUTINE ks_hamiltonian (evc, ik, h_dim, eigvl_out)
   !---------------------------------------------------------------------
   !
-  !! This routine compute and diagonalize the KS Hamiltonian 
+  !! This routine compute and diagonalize the KS Hamiltonian
   !! Non-collinear case is NOT implemented!
   !! OBSOLETE?
+  !
+  !! ik is the LOCAL (pool) k-point index. The caller always passes eigvl_out
+  !! to retrieve the "WANN" (KS-in-Wannier-gauge) eigenvalues computed here
+  !! (only meaningful when check_ks is on) instead of having this routine print
+  !! them directly: with pools active this is called once per LOCAL k-point, so
+  !! a WRITE here would only ever reach the log for the k-points owned by
+  !! ionode's own pool. The caller gathers eigvl_out (and the corresponding
+  !! et(:,ik)) across pools and prints the full, ordered table once - see
+  !! kcw_setup_ham.f90 and rotate_ks.f90.
+  !! NOTE: eigvl_out is a mandatory (not OPTIONAL) argument on purpose: this is
+  !! an external subroutine with no explicit interface at any call site, and per
+  !! the Fortran standard OPTIONAL dummy arguments require the caller to see an
+  !! explicit interface - otherwise whether an actual argument was omitted
+  !! cannot be determined reliably. Callers that do not need it (check_ks off)
+  !! still pass a throwaway array.
   !
   USE kinds,                ONLY : DP
   USE io_global,            ONLY : stdout
@@ -33,20 +48,23 @@ SUBROUTINE ks_hamiltonian (evc, ik, h_dim)
   IMPLICIT NONE
   !
   INTEGER, INTENT(IN)    :: ik, h_dim
-  ! 
+  !
   COMPLEX(DP), INTENT(IN) :: evc(npwx*npol,h_dim)
+  !
+  REAL(DP), INTENT(OUT) :: eigvl_out(h_dim)
+  ! The "WANN" (KS-in-Wannier-gauge) eigenvalues, filled only when check_ks is on
+  ! (untouched, i.e. undefined, otherwise - the caller must not rely on it in that case)
   !
   !! COMPLEX(DP) :: hpsi(npwx*npol,h_dim), ham(h_dim,h_dim), hij, eigvc(npwx*npol,h_dim)
   COMPLEX(DP), ALLOCATABLE :: hpsi(:,:), ham(:,:), eigvc(:,:)
   COMPLEX(DP) :: hij
   !
-  !! REAL(DP) :: eigvl(h_dim), check
-  REAL(DP) :: check
+  !! REAL(DP) :: eigvl(h_dim)
   REAL(DP), ALLOCATABLE :: eigvl(:)
   !
   INTEGER :: iband, jband, ig, ik_eff
   !
-  IF (check_ks ) WRITE(stdout,'(/,8x, "KS Hamiltonian calculation at k=", 3f12.4, 2x, " ... ")', advance="no" )  xk(:,ik)
+  INTEGER, EXTERNAL :: global_kpoint_index
   !
   CALL allocate_bec_type_acc ( nkb, h_dim, becp, intra_bgrp_comm )
   !
@@ -104,8 +122,10 @@ SUBROUTINE ks_hamiltonian (evc, ik, h_dim)
   !
   ! Store the hamiltonian in the Wannier Gauge
   !
-  IF (calculation == 'ham') then 
-    ik_eff = ik - (spin_component -1)*nkstot/nspin
+  IF (calculation == 'ham') then
+    ! ik is the LOCAL (pool) index: convert to the global one before folding the
+    ! spin channel away, otherwise the wrong row of Hamlt is filled when npool>1
+    ik_eff = global_kpoint_index (nkstot, ik) - (spin_component -1)*nkstot/nspin
     !WRITE(*,*) ik, ik_eff
     Hamlt(ik_eff,1:h_dim,1:h_dim) = ham(1:h_dim,1:h_dim)
   ENDIF
@@ -113,19 +133,10 @@ SUBROUTINE ks_hamiltonian (evc, ik, h_dim)
   ! Check the eigenvalue are consistent with the PWSCF calculation
   IF (check_ks) THEN
     CALL cdiagh( h_dim, ham, h_dim, eigvl, eigvc )
-    WRITE(stdout,'(2x, " DONE " ,/)')
   ENDIF
   !
-  check = 0.D0
-  DO iband = 1, h_dim
-    check = check + (eigvl(iband)-et(iband,ik))/h_dim
-  ENDDO 
-  !
-  IF ( check_ks ) THEN 
-     !WRITE(stdout,'(/,8x, "WARNING: Eig DIFFERS! k=", 3f12.4, 3x)' )  xk(:,ik)
-     WRITE( stdout, '(8X, "WANN  ",8F11.4)' ) (eigvl(iband)*rytoev, iband=1,h_dim)
-     WRITE( stdout, '(8X, "PWSCF ",8F11.4)' ) (et(iband,ik)*rytoev, iband=1,h_dim)
-  ENDIF
+  IF ( check_ks ) eigvl_out(1:h_dim) = eigvl(1:h_dim)
+  ! The caller prints the WANN/PWSCF report (see note above)
   !
   CALL deallocate_bec_type_acc (becp)
 

@@ -14,11 +14,11 @@ SUBROUTINE koopmans_ham (dH_wann)
   !
   USE io_global,             ONLY : stdout
   USE kinds,                 ONLY : DP
-  USE klist,                 ONLY : nkstot, xk
+  USE klist,                 ONLY : nkstot, nks
   USE lsda_mod,              ONLY : nspin
-  USE control_kcw,           ONLY : num_wann, Hamlt, evc0, num_wann_occ, & 
-                                    iuwfc_wann, nkstot_eff, spin_component,&
-                                    kcw_at_ks, kcw_iverbosity
+  USE control_kcw,           ONLY : num_wann, Hamlt, evc0, num_wann_occ, &
+                                    iuwfc_wann_allk, nkstot_eff, spin_component,&
+                                    kcw_at_ks, kcw_iverbosity, x_q, ngk_all
   USE constants,             ONLY : rytoev
   USE wvfct,                 ONLY : npwx, npw, et, nbnd
   USE units_lr,              ONLY : lrwfc, iuwfc
@@ -28,8 +28,18 @@ SUBROUTINE koopmans_ham (dH_wann)
   !
   IMPLICIT NONE
   !
-  ! The k point index 
-  INTEGER :: ik, ik_pw
+  INTEGER, EXTERNAL :: global_kpoint_index
+  !! The global index of a local (pool) k-point
+  !
+  ! ik is the "effective" (1:nkstot_eff) k-point index of the current spin channel:
+  ! this loop is NOT split across pools, because Hamlt and dH_wann are replicated on
+  ! every process by then (see the gathers in kcw_setup_ham.f90/dH_ki_quadratic.f90)
+  ! and the diagonalization is cheap. Keeping it replicated means every process prints
+  ! the same, complete table and no further communication is needed here.
+  ! ik_pw is the corresponding GLOBAL PW k-point index, ik_loc the LOCAL (pool) one:
+  ! the canonical wfc / eigenvalues are written back into the per-pool iuwfc buffer
+  ! and into et, which are indexed locally, so only the owning pool writes them.
+  INTEGER :: ik, ik_pw, ik_loc, iks
   !
   ! the KI hamiltonian, the KI contribution, and the new eigenvectors at a given k-point
   COMPLEX(DP) :: ham(num_wann,num_wann), eigvc(num_wann,num_wann)
@@ -64,9 +74,15 @@ SUBROUTINE koopmans_ham (dH_wann)
   WRITE( stdout, '(/,5X, "INFO: BUILD and DIAGONALIZE the KI HAMILTONIAN")')
   WRITE( stdout, '(  5X, "INFO: Standard scheme: diagonalize in the basis of the variational orbitals basis")')
   !
+  ! ... global index of this pool's first k-point, used below to map a global
+  ! k index onto the local one (the standard QE idiom, see read_collected_wfc)
+  iks = global_kpoint_index (nkstot, 1)
+  !
   DO ik = 1, nkstot_eff
     !
-    WRITE( stdout, 9020 ) ( xk(i,ik), i = 1, 3 )
+    ! x_q (not klist's xk) holds the full k mesh on every process: xk is truncated
+    ! to this pool's own k-points once pools are active
+    WRITE( stdout, 9020 ) ( x_q(i,ik), i = 1, 3 )
     !
     ! Diagonalize the KS hamiltonian in the Wannier Gauge (just to check)
     ham(:,:) = Hamlt(ik,:,:) 
@@ -134,20 +150,32 @@ SUBROUTINE koopmans_ham (dH_wann)
     !
     ! Canonical wfc at each k point (overwrite the evc from DFT)
     lrwannfc = num_wann*npwx*npol
-    !write (*,'("NICOLA lrwannfc", i20)') lrwannfc, iuwfc_wann
-    CALL get_buffer ( evc0, lrwannfc, iuwfc_wann, ik )
-    ! Retrive the ks function at k (in the Wannier Gauge)
+    !write (*,'("NICOLA lrwannfc", i20)') lrwannfc, iuwfc_wann_allk
+    CALL get_buffer ( evc0, lrwannfc, iuwfc_wann_allk, ik )
+    ! Retrive the ks function at k (in the Wannier Gauge). The ALL-k buffer is used
+    ! because this loop runs over every k-point on every pool, not just the owned ones
+    !
+    ! ... number of PWs at THIS k-point. npw used to be whatever was left over from
+    ! the last k-point of some earlier loop, which is wrong in general (and arbitrary
+    ! with pools, where the leftover may come from a different k-point altogether)
+    npw = ngk_all(ik)
     CALL ZGEMM( 'N','N', npw*npol, num_wann, num_wann, ONE, evc0, npwx*npol, eigvc, num_wann, &
                  ZERO, evc, npwx*npol )
     lrwfc = nbnd * npwx*npol
     ik_pw = ik + (spin_component-1)*(nkstot/nspin)
     !write (*,'("NICOLA lrwfc", i20)') lrwfc, iuwfc, nbnd, SIZE(evc)
-    CALL save_buffer ( evc, lrwfc, iuwfc, ik_pw )
     !
     nbnd = num_wann
-    DO iwann = 1, nbnd
-      et(iwann,ik_pw) = eigvl(iwann)
-    ENDDO
+    !
+    ! ... iuwfc and et are pool-LOCAL (nks records): only the pool that owns this
+    ! k-point writes them, at its own local index.
+    ik_loc = ik_pw - iks + 1
+    IF ( ik_loc >= 1 .AND. ik_loc <= nks ) THEN
+      CALL save_buffer ( evc, lrwfc, iuwfc, ik_loc )
+      DO iwann = 1, nbnd
+        et(iwann,ik_loc) = eigvl(iwann)
+      ENDDO
+    ENDIF
     !
     ehomo = MAX ( ehomo, eigvl(num_wann_occ ) )
     IF (num_wann > num_wann_occ) elumo = MIN ( elumo, eigvl(num_wann_occ+1 ) )
