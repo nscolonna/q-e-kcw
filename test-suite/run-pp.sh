@@ -32,5 +32,16 @@ then
   then
     cat $3
   fi
+elif [[ "$1" == "3" ]]
+then
+  # echo "Running pw2wannier90 ..."
+  ${PARA_PREFIX} ${ESPRESSO_BUILD}/bin/pw2wannier90.x ${PARA_SUFFIX} < $2 > $3 2> $4
+  if [[ -e CRASH ]]
+  then
+    cat $3
+  fi
+  # In library mode Wannier90 runs inside pw2wannier90.x and reports to .wout,
+  # so append it to the output that gets compared.
+  cat *.wout >> $3 2> /dev/null
 fi
 
