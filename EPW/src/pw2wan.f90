@@ -38,9 +38,10 @@
     !! 03/2026  Update/align wannier90 v4.0 (SP, AACA, Jerome Jackson)
     !!
     !------------------------------------------------------------------------
-    USE io_global,        ONLY : stdout, ionode, meta_ionode_id
+    USE io_global,        ONLY : stdout, ionode, ionode_id
     USE mp_global,        ONLY : intra_pool_comm, inter_pool_comm, nproc_pool
-    USE mp,               ONLY : mp_bcast, mp_sum
+    USE mp,               ONLY : mp_sum, mp_bcast
+    USE mp_images,        ONLY : intra_image_comm
     USE klist,            ONLY : nkstot
     USE io_files,         ONLY : prefix
     USE input,            ONLY : scdm_proj, scdm_entanglement, bands_skipped, scdm_sigma,  &
@@ -177,8 +178,7 @@
     WRITE(stdout, *) '    Initializing Wannier90'
     WRITE(stdout, *)
     !
-    ! The W90 output units are opened on ionode and the input options are broadcast from
-    ! meta_ionode_id over inter_pool_comm, both of which only identify W90's root when
+    ! inter_pool_comm, handed to the library below, identifies W90's root only when
     ! each pool holds a single process
     IF (nproc_pool > 1) CALL errore('pw2wan90epw', 'only one proc per pool', 1)
     !
@@ -219,11 +219,6 @@
     IF (ionode) OPEN(NEWUNIT = w90out, FILE = TRIM(seedname2)//'.wout', STATUS = 'replace')
     IF (ionode) OPEN(NEWUNIT = w90err, FILE = TRIM(seedname2)//'.werr', STATUS = 'replace')
     !
-    ! Finish distributing some parameters
-    CALL mp_bcast(num_iter, meta_ionode_id, inter_pool_comm)
-    CALL mp_bcast(bands_skipped, meta_ionode_id, inter_pool_comm)
-    CALL mp_bcast(proj, meta_ionode_id, inter_pool_comm)    
-    ! 
     ! Required settings for library
     CALL w90_set_comm(w90main, inter_pool_comm) ! Setup/copy communicator in W90 library
     !
@@ -506,6 +501,11 @@
       lwindow = .TRUE.
     ENDIF
     CALL write_filukk
+    !
+    ! write_filukk applies the LSDA correction to nbndskip on ionode only, so pick up
+    ! the value it wrote to the .ukk file. Callers broadcast this on to the other images
+    !
+    CALL mp_bcast(nbndskip, ionode_id, intra_image_comm)
     !
     IF (wannier_plot) CALL write_plot() ! this writer only produces .cube, not the xcrysden format Wannier90 also supports
     !
@@ -877,7 +877,7 @@
     !
     USE kinds,           ONLY : DP
     USE ep_constants,    ONLY : rytoev
-    USE io_global,       ONLY : stdout, meta_ionode, meta_ionode_id
+    USE io_global,       ONLY : stdout, meta_ionode, ionode_id
     USE wvfct,           ONLY : nbnd, npw, npwx, et, g2kin
     USE gvecw,           ONLY : gcutw
     USE wavefunctions,   ONLY : evc, psic, psic_nc
@@ -890,7 +890,7 @@
     USE scatter_mod,     ONLY : gather_grid
     USE fft_interfaces,  ONLY : invfft
     USE mp,              ONLY : mp_bcast, mp_sum
-    USE mp_world,        ONLY : world_comm
+    USE mp_images,       ONLY : intra_image_comm
     USE mp_global,       ONLY : my_pool_id, npool, intra_pool_comm, inter_pool_comm
     USE ep_constants,    ONLY : zero, czero, one, twopi
     USE kfold,           ONLY : ktokpmq
@@ -1224,7 +1224,7 @@
       IF (ierr /= 0) CALL errore('compute_amn_with_scdm', 'Error deallocating cwork', 1)
     ENDIF ! meta_ionode
     !
-    CALL mp_bcast(piv, meta_ionode_id, world_comm)
+    CALL mp_bcast(piv, ionode_id, intra_image_comm)
     !
     ! jml: calculate position and spin part of piv
     IF (noncolin) THEN
@@ -2604,10 +2604,10 @@
     USE input,         ONLY : et_all, eig_read
     USE io_files,      ONLY : prefix
     USE io_var,        ONLY : iuqpeig
-    USE io_global,     ONLY : stdout, meta_ionode, meta_ionode_id
+    USE io_global,     ONLY : stdout, meta_ionode, ionode_id
     USE global_var,    ONLY : nkpts
     USE mp,            ONLY : mp_bcast
-    USE mp_world,      ONLY : world_comm
+    USE mp_images,     ONLY : intra_image_comm
     !
     IMPLICIT NONE
     !
@@ -2665,7 +2665,7 @@
         IF (ierr /= 0) CALL errore('write_band', 'Error deallocating eigvaltmp', 1)
       ENDIF
       ! The file is read on one rank only, but library mode needs eigval on every rank
-      CALL mp_bcast(eigval, meta_ionode_id, world_comm)
+      CALL mp_bcast(eigval, ionode_id, intra_image_comm)
     ELSE
       DO ik = 1, iknum
         ibnd1 = 0
@@ -2699,7 +2699,7 @@
     !! and Wannier90 (subroutine of plot_wannier in /src/plot.F90)
     !!
     USE kinds,           ONLY : DP
-    USE io_global,       ONLY : stdout, meta_ionode, meta_ionode_id
+    USE io_global,       ONLY : stdout, meta_ionode, ionode_id
     USE wvfct,           ONLY : nbnd, npw, npwx
     USE wavefunctions,   ONLY : evc, psic, psic_nc
     USE wann_common,     ONLY : excluded_band, u_mat, u_mat_opt, iknum, &
@@ -2713,7 +2713,7 @@
     USE mp_pools,        ONLY : my_pool_id
     USE kfold,           ONLY : ktokpmq
     USE io,              ONLY : readwfc
-    USE mp_world,        ONLY : world_comm
+    USE mp_images,       ONLY : intra_image_comm
     USE global_var,      ONLY : nbndep, wanplotlist, num_wannier_plot, &
                                 nk_loc, nkpts
     USE cell_base,       ONLY : at, bg, alat, tpiba
@@ -2928,7 +2928,7 @@
       !
     ENDDO
     !
-    CALL mp_barrier(world_comm)
+    CALL mp_barrier(intra_image_comm)
     !
     ! Lengths of real and reciprocal lattice vectors
     !
@@ -3111,10 +3111,10 @@
 #if defined(__MPI)
       IF (meta_ionode) THEN
         CALL MPI_REDUCE( MPI_IN_PLACE, wann_func, 2 * npol * ngridwf_max, MPI_DOUBLE_PRECISION, &
-                         MPI_SUM, meta_ionode_id, world_comm, ierr )
+                         MPI_SUM, ionode_id, intra_image_comm, ierr )
       ELSE
         CALL MPI_REDUCE( wann_func, wann_func, 2 * npol * ngridwf_max, MPI_DOUBLE_PRECISION, &
-                         MPI_SUM, meta_ionode_id, world_comm, ierr )
+                         MPI_SUM, ionode_id, intra_image_comm, ierr )
       ENDIF
       IF (ierr /= 0) CALL errore('write_plot', 'mpi_reduce', ierr)
 #endif
@@ -3174,7 +3174,7 @@
         ENDIF
         CALL internal_cube_format(loop_w)
       ENDIF
-      CALL mp_barrier(world_comm)
+      CALL mp_barrier(intra_image_comm)
     ENDDO ! loop_w
     !
     DEALLOCATE(wann_func, STAT = ierr)

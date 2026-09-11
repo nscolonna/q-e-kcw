@@ -34,7 +34,7 @@
     USE input,          ONLY : xk_cryst
     USE wann_common,    ONLY : mp_grid, n_wannier, kpt_latt
     USE mp,             ONLY : mp_bcast
-    USE mp_world,       ONLY : world_comm
+    USE mp_images,      ONLY : intra_image_comm, my_image_id, root_image
     USE pw2wan,         ONLY : pw2wan90epw
     USE global_var,     ONLY : nkpts
     !
@@ -47,6 +47,12 @@
     !! Error status
     !
     CALL start_clock('WANNIER')
+    !
+    ! This subtree gates file writes on meta_ionode but synchronises over
+    ! intra_image_comm, which only agree on the root image
+    !
+    IF (my_image_id /= root_image) &
+      CALL errore('wann_run', 'must run on the root image only', 1)
     !
     mp_grid(1) = nkc1
     mp_grid(2) = nkc2
@@ -64,7 +70,7 @@
     WRITE(stdout, '(5x, a)') REPEAT("-",67)
     !
     kpt_latt = xk_cryst(:, 1:num_kpts)
-    CALL mp_bcast(kpt_latt, ionode_id, world_comm)
+    CALL mp_bcast(kpt_latt, ionode_id, intra_image_comm)
     !
     ! write the short input file for the wannier90 code
     !
@@ -104,6 +110,8 @@
                               dis_win_max, dis_froz_min, dis_froz_max, num_iter, &
                               bands_skipped, wdata, auto_projections, lsda
     USE global_var,    ONLY : nkpts, nk_loc
+    USE mp,            ONLY : mp_barrier
+    USE mp_images,     ONLY : intra_image_comm
     !
     IMPLICIT NONE
     !
@@ -207,6 +215,11 @@
       CLOSE(iuwinfil)
       !
     ENDIF ! meta_ionode
+    !
+    ! Only meta_ionode writes the file, so the other ranks must wait for it here:
+    ! they read it back through w90_input_reader
+    !
+    CALL mp_barrier(intra_image_comm)
     !
     !------------------------------------------------------------
     END SUBROUTINE write_winfil
