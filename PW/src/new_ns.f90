@@ -20,6 +20,8 @@ SUBROUTINE new_ns_hubbard ( noncolin, rho )
   LOGICAL, INTENT(in) :: noncolin
   INTEGER :: nt
   !
+  CALL start_clock( 'new_ns' )
+  !
   IF (lda_plus_u_kind==0) THEN
      !
      IF (noncolin) THEN
@@ -50,6 +52,8 @@ SUBROUTINE new_ns_hubbard ( noncolin, rho )
      !
   ENDIF
   !
+  CALL stop_clock( 'new_ns' )
+  !
 END SUBROUTINE new_ns_hubbard
 
 !-----------------------------------------------------------------------
@@ -75,14 +79,14 @@ SUBROUTINE new_ns( ns )
   USE lsda_mod,             ONLY : lsda, current_spin, nspin, isk
   USE symm_base,            ONLY : nsym, irt, t_rev
   USE wvfct,                ONLY : nbnd, npwx, wg
-  USE control_flags,        ONLY : gamma_only
+  USE control_flags,        ONLY : gamma_only, offload_type
   USE wavefunctions,        ONLY : evc
   USE io_files,             ONLY : nwordwfc, iunwfc, nwordwfcU, iunhub
   USE buffers,              ONLY : get_buffer
   USE mp_pools,             ONLY : inter_pool_comm
   USE mp,                   ONLY : mp_sum
-  USE becmod,               ONLY : bec_type, calbec, &
-                                   allocate_bec_type, deallocate_bec_type
+  USE becmod,               ONLY : bec_type, calbec, allocate_bec_type_acc, &
+                                   deallocate_bec_type_acc
   USE noncollin_module,     ONLY : colin_mag
 #if defined (__OSCDFT)
   USE plugin_flags,         ONLY : use_oscdft
@@ -99,74 +103,103 @@ SUBROUTINE new_ns( ns )
   TYPE(bec_type) :: proj
   ! proj(nwfcU,nbnd)
   INTEGER :: ik, ibnd, is, i, na, nb, nt, isym, m1, m2, m0, m00, npw, is2
-  ! counter on k points
-  !    "    "  bands
-  !    "    "  spins
-  REAL(DP), ALLOCATABLE :: nr(:,:,:,:)
+  ! counters
+  INTEGER :: off, ldim
+  REAL(DP), ALLOCATABLE :: nr(:,:,:,:), r1(:,:), r2(:,:)
+  COMPLEX(DP), ALLOCATABLE :: c1(:,:), c2(:,:)
+  !$acc declare device_resident(r1,r2,c1,c2)
   REAL(DP) :: psum
   !
-  CALL start_clock( 'new_ns' )
-  !
-  ALLOCATE( nr(ldmx, ldmx, nspin, nat) )
-  !
-  CALL allocate_bec_type( nwfcU, nbnd, proj ) 
+  CALL allocate_bec_type_acc( nwfcU, nbnd, proj ) 
   !
   ! D_Sl for l=1, l=2 and l=3 are already initialized, for l=0 D_S0 is 1
   !
   ! Offset of atomic wavefunctions initialized in setup and stored in offsetU
   !
-  nr(:,:,:,:) = 0.d0
+  ALLOCATE( nr(ldmx, ldmx, nspin, nat) )
+  IF ( gamma_only ) THEN
+     ALLOCATE ( r1(nbnd,ldmx), r2(nbnd,ldmx) )
+  ELSE
+     ALLOCATE ( c1(nbnd,ldmx), c2(nbnd,ldmx) )
+  ENDIF
   !
   ! we start a loop on k points
-  !
+  !$acc data create(nr) present(evc, wfcU, proj) copyin(wg)
+  !$acc kernels
+  nr(:,:,:,:) = 0.0_dp
+  !$acc end kernels
   DO ik = 1, nks
      !
      IF (lsda) current_spin = isk(ik)
      !
      npw = ngk(ik)
      !
-     IF (nks > 1) CALL get_buffer (evc, nwordwfc, iunwfc, ik)
+     IF (nks > 1) THEN
+        CALL get_buffer (evc, nwordwfc, iunwfc, ik)
+        !$acc update device(evc)
+     END IF
      !
      ! make the projection
      !
      IF ( Hubbard_projectors == 'pseudo' ) THEN
         CALL compute_pproj( ik, q_ae, proj )
      ELSE
-        IF (nks > 1) CALL get_buffer( wfcU, nwordwfcU, iunhub, ik )
-        CALL calbec( npw, wfcU, evc, proj )
+        IF (nks > 1)  THEN
+           CALL get_buffer( wfcU, nwordwfcU, iunhub, ik )
+           !$acc update device(wfcU)
+        END IF
+        CALL calbec( offload_type, npw, wfcU, evc, proj )
      ENDIF
      !
      ! compute the occupation matrix (ns_{I,s,m1,m2}) of the
      ! atomic orbitals
      !
-     DO na = 1, nat  
+     DO na = 1, nat 
         nt = ityp(na)  
         IF ( is_hubbard(nt) ) THEN 
-           DO m1 = 1, 2 * Hubbard_l(nt) + 1  
-              DO m2 = m1, 2 * Hubbard_l(nt) + 1
-                 IF ( gamma_only ) THEN
-                    DO ibnd = 1, nbnd  
-                       nr(m1,m2,current_spin,na) = nr(m1,m2,current_spin,na) +   &
-                                                   proj%r(offsetU(na)+m2,ibnd) * &
-                                                   proj%r(offsetU(na)+m1,ibnd) * &
-                                                   wg(ibnd,ik) 
-                    ENDDO
-                 ELSE
-                    DO ibnd = 1, nbnd  
-                       nr(m1,m2,current_spin,na) = nr(m1,m2,current_spin,na) +            &
-                                                   DBLE( proj%k(offsetU(na)+m2,ibnd) *    &
-                                                   CONJG(proj%k(offsetU(na)+m1,ibnd)) ) * & 
-                                                   wg(ibnd,ik)
-                    ENDDO
-                 ENDIF
+           off = offsetU(na)
+           ldim = 2*Hubbard_l(nt) + 1
+           ! Next lines compute nr using matrix-matrix multiplication
+           ! summing over the band index. For complex proj%k, only the
+           ! real part of the result is computed, using real algebra
+           IF ( gamma_only ) THEN
+              !$acc parallel loop collapse(2) present(proj%r,wg)
+              DO m1 = 1, ldim
+                 DO ibnd = 1, nbnd  
+                    r1(ibnd,m1) = proj%r(off+m1,ibnd)
+                    r2(ibnd,m1) = proj%r(off+m1,ibnd) * wg(ibnd,ik) 
+                 ENDDO
               ENDDO
-           ENDDO
+              !$acc host_data use_device(r1,r2,nr)
+              CALL MYDGEMM( 'T','N', ldim, ldim, nbnd, 1.0_dp, r1, nbnd, &
+                            r2, nbnd, 1.0_dp, nr(1,1,current_spin,na), ldmx )
+              !$acc end host_data 
+           ELSE
+              !$acc parallel loop collapse(2) present(proj%k,wg)
+              DO m1 = 1, ldim
+                 DO ibnd = 1, nbnd
+                    c1(ibnd,m1) = proj%k(off+m1,ibnd)
+                    c2(ibnd,m1) = proj%k(off+m1,ibnd) * wg(ibnd,ik)
+                 ENDDO
+              ENDDO
+              !$acc host_data use_device(c1,c2,nr)
+              CALL MYDGEMM( 'C','N', ldim, ldim, 2*nbnd, 1.0_dp, &
+                c1, 2*nbnd, c2, 2*nbnd, 1.0_dp, nr(1,1,current_spin,na), ldmx )
+              !$acc end host_data 
+           ENDIF
         ENDIF
-    ENDDO
-    !
+     ENDDO
+     !
   ENDDO
+  !$acc update host(nr)
+  IF ( gamma_only ) THEN
+     DEALLOCATE ( r1, r2 )
+  ELSE
+     DEALLOCATE ( c1, c2 )
+  ENDIF
   !
-  CALL deallocate_bec_type( proj ) 
+  CALL deallocate_bec_type_acc( proj ) 
+  !$acc end data 
   !
   CALL mp_sum( nr, inter_pool_comm )
   !
@@ -280,8 +313,6 @@ SUBROUTINE new_ns( ns )
      ENDIF 
   ENDDO
   !
-  CALL stop_clock( 'new_ns' )
-  !
   RETURN
   !
 END SUBROUTINE new_ns
@@ -299,10 +330,10 @@ SUBROUTINE compute_pproj( ik, q, p )
     USE uspp_param,           ONLY : nhm, nh
     USE wvfct,                ONLY : nbnd
     USE wavefunctions,        ONLY : evc
-    USE control_flags,        ONLY : gamma_only
+    USE control_flags,        ONLY : gamma_only, offload_type
     USE ldaU,                 ONLY : is_hubbard, nwfcU
-    USE becmod,               ONLY : bec_type, calbec, &
-                                     allocate_bec_type, deallocate_bec_type
+    USE becmod,               ONLY : bec_type, calbec, allocate_bec_type_acc, & 
+                                     deallocate_bec_type_acc
     USE uspp_init,            ONLY : init_us_2
     !
     IMPLICIT NONE
@@ -316,7 +347,7 @@ SUBROUTINE compute_pproj( ik, q, p )
     !
     ! ... local variables
     !
-    INTEGER :: ib, iw, nt, na, ikb, ih, npw
+    INTEGER :: ib, iw, nt, na, ih, npw, off
     !
     IF ( nkb == 0 ) RETURN
     !
@@ -326,29 +357,35 @@ SUBROUTINE compute_pproj( ik, q, p )
     !
     ! Compute <beta|psi>
     !
-    CALL allocate_bec_type( nkb, nbnd, becp )
-    CALL init_us_2( npw, igk_k(1,ik), xk(1,ik), vkb )
-    CALL calbec( npw, vkb, evc, becp )
+    CALL allocate_bec_type_acc( nkb, nbnd, becp )
+    CALL init_us_2( npw, igk_k(1,ik), xk(1,ik), vkb, .true. )
+    CALL calbec( offload_type, npw, vkb, evc, becp )
     ! does not need mp_sum intra-pool, since it is already done in calbec 
-    !
+    !$acc data present (p,becp) copyin(q)
     IF ( gamma_only ) THEN 
+       !$acc kernels present(p%r)
        p%r(:,:) = 0.0_DP
+       !$acc end kernels
     ELSE
+       !$acc kernels present(p%k)
        p%k(:,:) = (0.0_DP,0.0_DP)
+       !$acc end kernels 
     ENDIF
     !
     DO nt = 1, ntyp
        DO na = 1, nat
           IF ( ityp(na) == nt ) THEN
              IF ( is_hubbard(nt) ) THEN
+                off = ofsbeta(na)
+                !$acc parallel loop collapse(2)
                 DO ib = 1, nbnd
-                   DO ih = 1, nh(nt)
-                      ikb = ofsbeta(na) + ih
-                      DO iw = 1, nwfcU
+                   DO iw = 1, nwfcU
+                      !$acc loop seq
+                      DO ih = 1, nh(nt)
                          IF ( gamma_only ) THEN
-                            p%r(iw,ib) = p%r(iw,ib) + q(iw,ih,na)*becp%r(ikb,ib)
+                            p%r(iw,ib) = p%r(iw,ib) + q(iw,ih,na)*becp%r(off+ih,ib)
                          ELSE
-                            p%k(iw,ib) = p%k(iw,ib) + q(iw,ih,na)*becp%k(ikb,ib)
+                            p%k(iw,ib) = p%k(iw,ib) + q(iw,ih,na)*becp%k(off+ih,ib)
                          ENDIF
                       ENDDO
                    ENDDO
@@ -357,8 +394,8 @@ SUBROUTINE compute_pproj( ik, q, p )
           ENDIF
        ENDDO
     ENDDO
-    !
-    CALL deallocate_bec_type( becp )
+    !$acc end data
+    CALL deallocate_bec_type_acc( becp )
     !
     RETURN
     !
@@ -400,8 +437,6 @@ SUBROUTINE new_ns_nc( ns )
   COMPLEX(DP) , ALLOCATABLE :: nr(:,:,:,:,:), nr1(:,:,:,:,:), proj(:,:)
   COMPLEX(DP) :: z  
   REAL(DP) :: psum
-  !
-  CALL start_clock( 'new_ns_nc' )
   !
   ldim = 2 * Hubbard_lmax + 1
   !
@@ -604,8 +639,6 @@ loopisym:     DO isym = 1, nsym
   ENDDO
   !--
   DEALLOCATE( nr, nr1 )
-  !
-  CALL stop_clock( 'new_ns_nc' )
   !
   RETURN
   !
