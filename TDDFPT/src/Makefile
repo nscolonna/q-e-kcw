@@ -116,4 +116,11 @@ clean :
 	- /bin/rm -f ../bin/turbo_lanczos.x ../bin/turbo_davidson.x ../bin/turbo_eels.x \
 		../bin/turbo_magnons.x ../bin/turbo_spectrum.x *.x *.o *~ *.d *.mod *.i work.pc *.a *_tmp.f90
 
+ifneq ($(TOLERATE_MISSING_DEPEND),)
+-include make.depend
+else
+ifeq ($(wildcard make.depend),)
+$(error make.depend not found in $(CURDIR) -- run "make depend" first, or "make veryclean"/"make distclean" to clean without it)
+endif
 include make.depend
+endif

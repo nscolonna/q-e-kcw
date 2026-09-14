@@ -303,8 +303,8 @@ install :
 #########################################################
 
 # remove object files and executables
-clean : 
-	touch make.inc 
+clean :
+	touch make.inc
 	for dir in \
 		LAXlib FFTXlib XClib UtilXlib upflib Modules KS_Solvers \
 		dft-d3 LR_Modules PW CPV PP PHonon HP EPW NEB TDDFPT GWW \
@@ -313,7 +313,7 @@ clean :
 	; do \
 	    if test -d $$dir ; then \
 		( cd $$dir ; \
-		$(MAKE) clean ) \
+		$(MAKE) clean TOLERATE_MISSING_DEPEND=$(TOLERATE_MISSING_DEPEND) ) \
 	    fi \
 	done
 	- @(cd install ; $(MAKE) -f plugins_makefile clean)
@@ -325,6 +325,11 @@ clean :
 # unconditionally: they live under install/ in whichever tree make was run
 # from (TOPDIR for in-source, BUILDDIR for out-of-source), so this is safe
 # and meaningful in both cases, unlike the rest of this target.
+# TOLERATE_MISSING_DEPEND is a target-specific variable: it is in effect for
+# this recipe AND for the recipes of its prerequisites (clean, and anything
+# clean depends on), which is how it reaches the per-subdirectory "make
+# clean" calls above without weakening a plain "make clean".
+veryclean : TOLERATE_MISSING_DEPEND := 1
 veryclean : clean
 	- @(cd install ; $(MAKE) -f extlibs_makefile distclean_devx distclean_mbd distclean_w90)
 	-@if test ! $(TOPDIR) -ef $(BUILDDIR) ; then \

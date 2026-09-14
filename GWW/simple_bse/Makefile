@@ -42,4 +42,11 @@ libsimple_exc.a : $(EXCOBJS)
 clean :
 	- /bin/rm -f -v simple_bse.x  *.o *~ *.F90 *.d *.mod *.i work.pc
 
+ifneq ($(TOLERATE_MISSING_DEPEND),)
+-include make.depend
+else
+ifeq ($(wildcard make.depend),)
+$(error make.depend not found in $(CURDIR) -- run "make depend" first, or "make veryclean"/"make distclean" to clean without it)
+endif
 include make.depend
+endif
