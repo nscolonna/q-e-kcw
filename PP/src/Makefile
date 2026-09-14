@@ -10,6 +10,11 @@ MODFLAGS= $(BASEMOD_FLAGS) \
           $(MOD_FLAG)../../Modules/ \
           $(MOD_FLAG)../../dft-d3/
 
+# wan_mode='library' drives Wannier90 through w90_library instead of writing
+# .nnkp/.amn/.mmn files, so PP needs the library and its module files.
+MODFLAGS += $(MOD_FLAG)../../wannier90/obj
+W90LIB = ../../wannier90/lib/libwannier90.a
+
 PPOBJS = \
 adduscore.o \
 addusdens1d.o \
@@ -73,7 +78,7 @@ MODULES = $(PWOBJS) $(QEMODS)
 
 # see comments in file tldeps for explanations
 include ../../install/tldeps
-TLDEPS=pwlibs
+TLDEPS=pwlibs libw90
 
 all : open_grid.x average.x bands.x band_interpolation.x dos.x epsilon.x initial_state.x fs.x \
       plan_avg.x plotband.x plotproj.x plotrho.x pmw.x pp.x projwfc.x \
@@ -162,9 +167,9 @@ projwfc.x : projwfc.o libpp.a $(MODULES)
 		projwfc.o libpp.a $(MODULES) $(QELIBS)
 	- ( cd ../../bin ; ln -fs ../PP/src/$@ . )
 
-pw2wannier90.x : pw2wannier90.o libpp.a $(MODULES) 
+pw2wannier90.x : pw2wannier90.o libpp.a $(MODULES) $(W90LIB)
 	$(LD) $(LDFLAGS) -o $@ \
-		pw2wannier90.o libpp.a $(MODULES) $(QELIBS)
+		pw2wannier90.o libpp.a $(MODULES) $(W90LIB) $(QELIBS)
 	- ( cd ../../bin ; ln -fs ../PP/src/$@ . )
 
 wannier2pw.x : wannier2pw.o libpp.a $(MODULES)
@@ -272,6 +277,13 @@ clean :
 	- /bin/rm -f *.x *.o *~ *_tmp.f90 *.d *.mod *.i *.L libpp.a
 
 
+ifneq ($(TOLERATE_MISSING_DEPEND),)
+-include make.depend
+else
+ifeq ($(wildcard make.depend),)
+$(error make.depend not found in $(CURDIR) -- run "make depend" first, or "make veryclean"/"make distclean" to clean without it)
+endif
 include make.depend
+endif
 
 

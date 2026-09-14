@@ -218,7 +218,16 @@ tolerance = ( (1.0e-5, 1.0e-4, 'e1') ,
               (1.0e-5, 1.0e-4, 'etcl') ,
               (1.0e-5, 1.0e-4, 'etnl') ,
               (1.0e-5, 1.0e-4, 'ekc') ,
-              (1.0e-5, 1.0e-4, 'enl') )
+              (1.0e-5, 1.0e-4, 'enl') ,
+              (1.0e-3, None,   'wfcx') ,
+              (1.0e-3, None,   'wfcy') ,
+              (1.0e-3, None,   'wfcz') ,
+              (1.0e-3, None,   'wfspread') ,
+              (1.0e-3, None,   'omegai') ,
+              (1.0e-3, None,   'omegad') ,
+              (1.0e-3, None,   'omegaod') ,
+              (1.0e-3, None,   'omegatot') ,
+              (1.0e-3, None,   'disomegai') )
 skip_program = grep
 skip_args = 'not present in this version'
 

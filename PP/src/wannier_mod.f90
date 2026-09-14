@@ -11,6 +11,7 @@ module wannier
    !
    USE kinds,      ONLY : DP
    USE fft_types,  ONLY : fft_type_descriptor
+   USE w90_library, ONLY : lib_common_type
    !
    !integer, allocatable :: nnb(:)       ! #b  (ik)
    integer              :: nnb          ! #b
@@ -65,16 +66,21 @@ module wannier
    integer               :: mp_grid(3)            ! dimensions of MP k-point grid
    real(DP)              :: rlatt(3,3),glatt(3,3) ! real and recip lattices (Cartesian co-ords, units of Angstrom)
    real(DP), allocatable :: kpt_latt(:,:)  ! k-points in crystal co-ords. kpt_latt(3,iknum)
-   real(DP), allocatable :: atcart(:,:)    ! atom centres in Cartesian co-ords and Angstrom units. atcart(3,nat)
    integer               :: num_bands      ! number of bands left after exclusions
-   character(len=3), allocatable :: atsym(:) ! atomic symbols. atsym(nat)
    integer               :: num_nnmax=12
-   complex(DP), allocatable :: m_mat(:,:,:,:), a_mat(:,:,:)
-   complex(DP), allocatable :: u_mat(:,:,:), u_mat_opt(:,:,:)
+   ! target: the Wannier90 v4 setters keep pointers to these for the duration of
+   ! the minimisation, so the association has to outlive the setter call
+   complex(DP), allocatable, target :: m_mat(:,:,:,:)
+   complex(DP), allocatable :: a_mat(:,:,:)
+   complex(DP), allocatable, target :: u_mat(:,:,:), u_mat_opt(:,:,:)
    logical, allocatable     :: lwindow(:,:)
    real(DP), allocatable    :: wann_centers(:,:),wann_spreads(:)
-   real(DP)                 :: spreads(3)
-   real(DP), allocatable    :: eigval(:,:)
+   ! Wannier90 v4 replaces the stateless wannier_setup()/wannier_run() entry
+   ! points with a data object, which therefore has to survive from
+   ! setup_nnkp() until run_wannier() has finished with it.
+   TYPE(lib_common_type), TARGET :: w90main
+   integer                  :: w90out, w90err  ! library output and error streams
+   real(DP), allocatable, target :: eigval(:,:)
    logical                  :: old_spinor_proj  ! for compatability for nnkp files prior to W90v2.0
    integer,allocatable :: rir(:,:)
    logical,allocatable :: zerophase(:,:)

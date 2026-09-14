@@ -5,8 +5,29 @@
 TOPDIR = @topdir@
 BUILDDIR = @topbuilddir@
 
+# Build Wannier90 in the same parallelisation mode as QE. COMMS must stay unset
+# for a serial build: Wannier90 tests it with ifdef to select the MPI defines.
+# Follow QE's choice of Fortran binding too: __MPI_MODULE means the "use mpi" module
+# (Wannier90 mpi90), otherwise mpif.h (Wannier90 mpih).
+QE_DFLAGS = @dflags@
+ifneq (,$(findstring -D__MPI,$(QE_DFLAGS)))
+ifneq (,$(findstring -D__MPI_MODULE,$(QE_DFLAGS)))
+COMMS=mpi90
+else
+COMMS=mpih
+endif
+endif
+
 F90=@mpif90@
-FCOPTS=@f90flags@ 
+MPIF90=@mpif90@
+# f90flags is "$(FFLAGS) -cpp" and, on ARM with ArmPL, ldflags ends in
+# "$(FFLAGS)" as well; both only resolve where FFLAGS is defined, and this
+# make.inc is Wannier90's own, so it has to be set here too. Without it FCOPTS
+# collapses to just -cpp and the library is built with no optimisation at all.
+FFLAGS=@fflags@
+FCOPTS=@f90flags@
 LDOPTS=@ldflags@
+AR=@ar@
+ARFLAGS=@arflags@
 
 LIBS = @lapack_libs@ @blas_libs@ @mass_libs@

@@ -33,27 +33,101 @@
     !! 12/2014  RM: Imported the noncolinear case implemented by xlzhang
     !! 06/2016  SP: Debug of SOC + print/reading of nnkp file
     !! 11/2019  RM: Imported and adapted the SCDM method from pw2wannier
+    !! 02/2024  Use parallel wannier90 version 4.0 library interface (Jerome Jackson and SP)
     !! 04/2024  VAH: Extended skipped bands for any band composites
+    !! 03/2026  Update/align wannier90 v4.0 (SP, AACA, Jerome Jackson)
     !!
     !------------------------------------------------------------------------
-    USE io_global,        ONLY : stdout
+    USE io_global,        ONLY : stdout, ionode, ionode_id
+    USE mp_global,        ONLY : intra_pool_comm, inter_pool_comm, nproc_pool
+    USE mp,               ONLY : mp_sum, mp_bcast
+    USE mp_images,        ONLY : intra_image_comm
     USE klist,            ONLY : nkstot
     USE io_files,         ONLY : prefix
-    USE input,            ONLY : scdm_proj, scdm_entanglement, &
-                                 scdm_sigma, wannier_plot, lsda, lwfpt
+    USE input,            ONLY : scdm_proj, scdm_entanglement, bands_skipped, scdm_sigma,  &
+                                 wannier_plot, lsda, lwfpt, dis_froz_max, dis_froz_min,    &
+                                 dis_win_max, dis_win_min, iprint, nbndsub, num_iter, vme, &
+                                 proj, xk_all
     USE io_ahc,           ONLY : check_ahc_bands
-    USE wann_common,      ONLY : seedname2, ispinw, ikstart, ikstop, iknum, &
-                                 excluded_band
-    USE ep_constants,     ONLY : zero, one
+    USE wann_common,      ONLY : seedname2, ispinw, ikstart, ikstop, iknum, excluded_band, &
+                                 g_kpb, kpb, ig_, zaxis, xaxis, zerophase, alpha_w,        &
+                                 center_w, csph, l_w, mr_w, r_w, spin_eig, spin_qaxis,     &
+                                 gf, u_mat, u_mat_opt, wann_centers, wann_spreads,         &
+                                 lwindow, a_mat, eigval, kpt_latt, m_mat, mp_grid, n_proj, &
+                                 n_wannier, nexband, nnb, num_bands
+    USE ep_constants,     ONLY : zero, one, bohr, eps6, twopi
     USE noncollin_module, ONLY : noncolin
     USE lsda_mod,         ONLY : current_spin
+    USE w90_library,      ONLY : lib_common_type, w90_set_comm, w90_disentangle,           &
+                                 w90_project_overlap, w90_wannierise, w90_set_option,      &
+                                 w90_input_setopt, w90_get_nn, w90_get_nnkp, w90_get_gkpb, &
+                                 w90_get_proj, w90_get_centres, w90_get_spreads, w90_plot, &
+                                 w90_set_eigval, w90_set_u_opt, w90_set_m_local,           &
+                                 w90_set_u_matrix, w90_input_reader, w90_print_info,       &
+                                 w90_print_timings
+    USE kinds,            ONLY : DP
+    USE cell_base,        ONLY : at, alat, bg 
+    USE ions_base,        ONLY : nat, tau, ityp, atm
+    USE wvfct,            ONLY : nbnd, npwx
+    USE gvect,            ONLY : g, gg
+    USE global_var,       ONLY : nbndep, nbndskip, ibndkept
+    USE pwcom,            ONLY : nelec
+    USE kfold,            ONLY : ktokpmq
     !
     IMPLICIT NONE
     !
+    TYPE(lib_common_type), TARGET :: w90main
+    !! Instance of w90 library datatype
     CHARACTER(LEN = 4) :: spin_component
     !! Determine the spin case
     CHARACTER(LEN = 256) :: outdir
     !! Name of the output directory
+    CHARACTER(LEN = 6), allocatable :: symbol_all_atoms(:)
+    !! Temporary listing of element symbols
+    INTEGER :: ib
+    !! Counter on b-vectors
+    INTEGER :: ig
+    !! Index on G_k+b vectors
+    INTEGER :: indexb
+    !! Index of exclude_bands
+    INTEGER :: w90out
+    !! Fortran unit numbers for w90 library output stream
+    INTEGER :: w90err
+    !! Fortran unit numbers for w90 library error stream
+    INTEGER :: ierr
+    !! integer error
+    INTEGER :: ipool
+    !! Cpu number
+    INTEGER :: ik
+    !! k-point index
+    INTEGER :: spin_save
+    !! buffer spin channel
+    INTEGER :: iat
+    !! Atom counter
+    INTEGER :: ibnd
+    !! Counter on band index
+    INTEGER :: jbnd
+    !! Counter on band index
+    INTEGER :: nkq
+    !! Number of k-point per pool
+    INTEGER :: nkq_abs
+    !! Total number of k-point
+    INTEGER :: iw, ip
+    !! Counters for wannier functions, projectors
+    INTEGER :: n_proj_found
+    !! Check on number of projectors identified by the wannier library
+    INTEGER, ALLOCATABLE :: ig_check(:, :)
+    !! Pool-reduced copy of ig_, used to detect G_k+b vectors missing from the G list
+    INTEGER, ALLOCATABLE :: kindex(:)
+    !! Mapping of k-point to rank of cpu
+    REAL(KIND = DP) :: gg_
+    !! Square of g_(3)
+    REAL(KIND = DP) :: g_(3)
+    !! Temporary vector G_k+b, g_(:) = g_kpb(:,ik,ib)
+    REAL(KIND = DP) :: zero_vect(3)
+    !
+    ierr = 0
+    zero_vect(:) = zero
     !
     outdir = './'
     seedname2 = prefix
@@ -105,402 +179,115 @@
     WRITE(stdout, *) '    Initializing Wannier90'
     WRITE(stdout, *)
     !
-    CALL setup_nnkp()
+    ! inter_pool_comm, handed to the library below, identifies W90's root only when
+    ! each pool holds a single process
+    IF (nproc_pool > 1) CALL errore('pw2wan90epw', 'only one proc per pool', 1)
     !
-    ! WFPT: Read AHC parameters from ahc_info.dat and check band consistency
+    n_wannier = nbndsub
+    num_bands = nbnd
+    n_proj = n_wannier    
+    ! 
+    ! setup k distribution
+    ALLOCATE(kindex(iknum), STAT = ierr)
+    IF (ierr /= 0) CALL errore('pw2wan90epw', 'Error allocating kindex', ierr)
     !
-    IF (lwfpt) THEN
-      CALL check_ahc_bands(excluded_band)
+    kindex(:) = 0
+    ! In LSDA the global k list holds both spins, but the Wannierisation runs on one spin at a
+    ! time, so ktokpmq is temporarily shown the single-spin count to return the right pool index
+    IF (TRIM(lsda) /= 'none') THEN
+      nkstot = iknum
+      spin_save = current_spin
+      current_spin = 1
+    ENDIF
+    DO ik = 1, iknum
+      CALL ktokpmq(xk_all(:, ik), zero_vect, +1, ipool, nkq, nkq_abs)
+      !ktokpmq returns rank index (ipool), locak k index (nkq) and absolute index (nkq_abs) of k-point xk
+      kindex(nkq_abs) = ipool - 1 ! wannier90 counts mpi ranks from zero
+    ENDDO
+    IF (TRIM(lsda) /= 'none') THEN
+      current_spin = spin_save
+      nkstot = 2 * iknum
     ENDIF
     !
-    CALL ylm_expansion()
-    IF (scdm_proj) THEN
-      CALL compute_amn_with_scdm()
-    ELSE
-      CALL compute_amn_para()
-    ENDIF
-    CALL compute_mmn_para()
-    ! calling of phases_a_m removed because now we don't call setphases_wrap.
-!    CALL phases_a_m()
-    CALL write_band()
+    ALLOCATE(symbol_all_atoms(nat), STAT = ierr)
+    IF (ierr /= 0) CALL errore('pw2wan90epw', 'Error allocating symbol_all_atoms', ierr)
+    ! 
+    DO iat = 1, nat
+      symbol_all_atoms(iat) = atm(ityp(iat))
+    ENDDO
+    ! 
+    ! Setup library output streams
+    IF (ionode) OPEN(NEWUNIT = w90out, FILE = TRIM(seedname2)//'.wout', STATUS = 'replace')
+    IF (ionode) OPEN(NEWUNIT = w90err, FILE = TRIM(seedname2)//'.werr', STATUS = 'replace')
     !
-    WRITE(stdout, *)
-    WRITE(stdout, *) '    Running Wannier90'
+    ! Required settings for library
+    CALL w90_set_comm(w90main, inter_pool_comm) ! Setup/copy communicator in W90 library
     !
-    CALL run_wannier()
+    CALL w90_set_option(w90main, 'distk', kindex) ! MPI k-point distribution
+    IF ( INDEX(bands_skipped,'=') > 0 ) CALL w90_set_option(w90main, 'exclude_bands', bands_skipped(INDEX(bands_skipped,'=') + 1:))
+    CALL w90_set_option(w90main, 'kpoints', kpt_latt)
+    CALL w90_set_option(w90main, 'mp_grid', mp_grid)
+    CALL w90_set_option(w90main, 'total_bands', nbnd)
+    CALL w90_set_option(w90main, 'num_iter', num_iter)
+    CALL w90_set_option(w90main, 'num_wann', n_wannier)
+    CALL w90_set_option(w90main, 'spinors', noncolin)
+    ! Lattice vectors in Angstrom, one per column as the W90 input block expects (W90 transposes it internally)
+    CALL w90_set_option(w90main, 'unit_cell_cart', at(:, :) * alat * bohr)
+    CALL w90_set_option(w90main, 'iprint', iprint)
+    ! write_bvec is not set here: write_winfil puts it in the .win unconditionally, and
+    ! w90_input_reader runs after w90_input_setopt, so the file value wins regardless
+    ! 
+    IF (dis_win_min  > -9000) CALL w90_set_option(w90main, 'dis_win_min', dis_win_min)  ! logic from wannierization.f90
+    IF (dis_win_max  <  9000) CALL w90_set_option(w90main, 'dis_win_max', dis_win_max)
+    IF (dis_froz_min > -9000) CALL w90_set_option(w90main, 'dis_froz_min', dis_froz_min)
+    IF (dis_froz_max <  9000) CALL w90_set_option(w90main, 'dis_froz_max', dis_froz_max)
     !
-    IF (wannier_plot) CALL write_plot()
-    !
-    CALL lib_dealloc()
-    !
-    !-------------------------------------------------------------------------
-    END SUBROUTINE pw2wan90epw
-    !-------------------------------------------------------------------------
-    !
-    !-------------------------------------------------------------------------
-    SUBROUTINE lib_dealloc()
-    !-----------------------------------------------------------------------
-    !!
-    !! Routine to de-allocate Wannier related matrices.
-    !!
-    USE wann_common,  ONLY : atcart, atsym, kpb, g_kpb, center_w, alpha_w, &
-                           l_w, mr_w, r_w, zaxis, xaxis, excluded_band,  &
-                           m_mat, u_mat, u_mat_opt, a_mat, eigval,       &
-                           lwindow, gf, ig_, zerophase, wann_centers,    &
-                           wann_spreads
-    !
-    IMPLICIT NONE
-    !
-    ! Local variables
-    INTEGER :: ierr
-    !! Error status
-    !
-    DEALLOCATE(atcart, STAT = ierr)
-    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating atcart', 1)
-    DEALLOCATE(atsym, STAT = ierr)
-    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating atsym', 1)
-    DEALLOCATE(kpb, STAT = ierr)
-    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating kpb', 1)
-    DEALLOCATE(g_kpb, STAT = ierr)
-    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating g_kpb', 1)
-    DEALLOCATE(center_w, STAT = ierr)
-    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating center_w', 1)
-    DEALLOCATE(alpha_w, STAT = ierr)
-    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating alpha_w', 1)
-    DEALLOCATE(l_w, STAT = ierr)
-    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating l_w', 1)
-    DEALLOCATE(mr_w, STAT = ierr)
-    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating mr_w', 1)
-    DEALLOCATE(r_w, STAT = ierr)
-    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating r_w', 1)
-    DEALLOCATE(zaxis, STAT = ierr)
-    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating zaxis', 1)
-    DEALLOCATE(xaxis, STAT = ierr)
-    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating xaxis', 1)
-    DEALLOCATE(excluded_band, STAT = ierr)
-    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating excluded_band', 1)
-    DEALLOCATE(m_mat, STAT = ierr)
-    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating m_mat', 1)
-    DEALLOCATE(u_mat, STAT = ierr)
-    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating u_mat', 1)
-    DEALLOCATE(u_mat_opt, STAT = ierr)
-    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating u_mat_opt', 1)
-    DEALLOCATE(a_mat, STAT = ierr)
-    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating a_mat', 1)
-    DEALLOCATE(eigval, STAT = ierr)
-    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating eigval', 1)
-    DEALLOCATE(lwindow, STAT = ierr)
-    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating lwindow', 1)
-    DEALLOCATE(gf, STAT = ierr)
-    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating gf', 1)
-    DEALLOCATE(ig_, STAT = ierr)
-    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating ig_', 1)
-    DEALLOCATE(zerophase, STAT = ierr)
-    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating zerophase', 1)
-    DEALLOCATE(wann_centers, STAT = ierr)
-    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating wann_centers', 1)
-    DEALLOCATE(wann_spreads, STAT = ierr)
-    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating wann_spreads', 1)
-    !
-    !-----------------------------------------------------------------------
-    END SUBROUTINE lib_dealloc
-    !-----------------------------------------------------------------------
-    !
-    !-------------------------------------------------------------------------
-    SUBROUTINE setup_nnkp()
-    !-----------------------------------------------------------------------
-    !!
-    !! This routine writes and reads the .nnkp file.
-    !! The file specifies
-    !! 1) The initial projections functions in the format
-    !! num_proj
-    !! proj_site(1,i), proj_site(2,i), proj_site(3,i), proj_l(i), proj_m(i), proj_radial(i)
-    !! proj_z(1,i), proj_z(2,i), proj_z(3,i),proj_x(1,i), proj_x(2,i), proj_x(3,i), proj_zona(i)
-    !! proj_s(i), proj_s_qaxis(1,i), proj_s_qaxis(2,i), proj_s_qaxis(3,i)
-    !!
-    !! 2) begin nnkpts: the nearest neighbours of each k-point,
-    !! and therefore provides the information required to
-    !! calculate the M_mn(k,b) matrix elements
-    !!
-    ! ----------------------------------------------------------------------
-    USE kinds,     ONLY : DP
-    USE io_global, ONLY : meta_ionode, stdout, meta_ionode_id
-    USE mp_world,  ONLY : world_comm
-    USE cell_base, ONLY : at, bg, alat
-    USE gvect,     ONLY : g, gg
-    USE ions_base, ONLY : nat, tau, ityp, atm
-    USE mp,        ONLY : mp_bcast, mp_sum
-    USE wvfct,     ONLY : nbnd, npwx
-    USE wann_common,  ONLY : num_nnmax, mp_grid, atcart, atsym, kpb, g_kpb, &
-                           center_w, alpha_w, l_w, mr_w, r_w, zaxis,      &
-                           xaxis, excluded_band, rlatt, glatt, gf,        &
-                           csph, ig_, iknum, seedname2, kpt_latt, nnb,    &
-                           num_bands, n_wannier, nexband, nnbx, n_proj,   &
-                           spin_eig, spin_qaxis, zerophase
-    USE noncollin_module, ONLY : noncolin
-    USE pwcom,            ONLY : nelec
-    USE ep_constants,     ONLY : bohr, eps6, twopi
-    USE mp_pools,         ONLY : intra_pool_comm
-    USE input,            ONLY : scdm_proj, lsda
-    USE w90_io,           ONLY : post_proc_flag
-    USE io_var,           ONLY : iunnkp
-    USE global_var,       ONLY : nbndep, nbndskip, ibndkept
-    !
-    IMPLICIT NONE
-    !
-    LOGICAL  :: have_nnkp
-    !! Check if the .nnkp file exists.
-    LOGICAL  :: found
-    !! Check if the section in the .nnkp file is found.
-    !
-    INTEGER :: ik
-    !! Counter on k-points
-    INTEGER :: ib
-    !! Counter on b-vectors
-    INTEGER :: ig
-    !! Index on G_k+b vectors
-    INTEGER :: iw
-    !! Counter on number of projections
-    INTEGER :: ia
-    !! Counter on number of atoms
-    INTEGER  :: type
-    !! Type of atom
-    INTEGER :: ibnd
-    !! Counter on band index
-    INTEGER :: jbnd
-    !! Counter on band index
-    INTEGER  :: indexb
-    !! Index of exclude_bands
-    INTEGER  :: ipol
-    !! Counter on polarizations
-    INTEGER  :: idum
-    !! Dummy index for reading nnkp file
-    INTEGER :: tmp_auto
-    !! Needed for the selection of projections with SCDM
-    INTEGER :: ierr
-    !! Error status
-    INTEGER, ALLOCATABLE :: ig_check(:, :)
-    !! Temporary index on G_k+b vectors
-    INTEGER  :: exclude_bands(nbnd)
-    !! Bands excluded from the calcultion of WFs
-    REAL(KIND = DP) :: xnorm
-    !! Norm of xaxis
-    REAL(KIND = DP) :: znorm
-    !! Norm of zaxis
-    REAL(KIND = DP) :: coseno
-    !! Cosine between xaxis and zaxis
-    REAL(KIND = DP) :: gg_
-    !! Square of g_(3)
-    REAL(KIND = DP) :: g_(3)
-    !! Temporary vector G_k+b, g_(:) = g_kpb(:,ik,ib)
-    !
-    INTERFACE
-      !!
-      !! SP: An interface is required because the Wannier routine has optional arguments
-      !!
-      !-----------------------------------------------------------------------
-      SUBROUTINE wannier_setup(seed__name, mp_grid_loc, num_kpts_loc, &
-        real_lattice_loc, recip_lattice_loc, kpt_latt_loc, num_bands_tot, &
-        num_atoms_loc, atom_symbols_loc, atoms_cart_loc, gamma_only_loc, spinors_loc, &
-        nntot_loc, nnlist_loc, nncell_loc, num_bands_loc, num_wann_loc, &
-        proj_site_loc, proj_l_loc, proj_m_loc, proj_radial_loc, proj_z_loc, &
-        proj_x_loc, proj_zona_loc, exclude_bands_loc, proj_s_loc, proj_s_qaxis_loc)
-      !-----------------------------------------------------------------------
-      !
-      USE kinds,       ONLY : DP
-      USE wann_common, ONLY : num_nnmax
-      !
-      IMPLICIT NONE
-      !
-      CHARACTER(LEN = *), INTENT(in) :: seed__name
-      !! Name
-      CHARACTER(LEN = *), INTENT(in) :: atom_symbols_loc(num_atoms_loc)
-      !! Symbol for atoms
-      LOGICAL, INTENT(in) :: gamma_only_loc
-      !! Gamma point only
-      LOGICAL, INTENT(in) :: spinors_loc
-      !! Local spinor
-      INTEGER, INTENT(in) :: mp_grid_loc(3)
-      !! MP grid
-      INTEGER, INTENT(in) :: num_kpts_loc
-      !! Local number of k-points
-      INTEGER, INTENT(in) :: num_bands_tot
-      !! Number of bands
-      INTEGER, INTENT(in) :: num_atoms_loc
-      !! Number of atoms
-      INTEGER, INTENT(out) :: nntot_loc
-      !! Local nntot
-      INTEGER, INTENT(out) :: nnlist_loc(num_kpts_loc, num_nnmax)
-      !! Local nnlist
-      INTEGER, INTENT(out) :: nncell_loc(3, num_kpts_loc, num_nnmax)
-      !! Local ncell
-      INTEGER, INTENT(out) :: num_bands_loc
-      !! Number of bands
-      INTEGER, INTENT(out) :: num_wann_loc
-      !! Number of Wannier functions
-      INTEGER, INTENT(out) :: proj_l_loc(num_bands_tot)
-      !! Projection of l local momentum
-      INTEGER, INTENT(out) :: proj_m_loc(num_bands_tot)
-      !! Local projection
-      INTEGER, INTENT(out) :: proj_radial_loc(num_bands_tot)
-      !! Radial projection
-      INTEGER, INTENT(out) :: exclude_bands_loc(num_bands_tot)
-      !! Exclude bands
-      INTEGER, OPTIONAL, INTENT(out) :: proj_s_loc(num_bands_tot)
-      !! Projection on s
-      REAL(KIND = DP), INTENT(in) :: REAL_lattice_loc(3, 3)
-      !! Lattice
-      REAL(KIND = DP), INTENT(in) :: recip_lattice_loc(3, 3)
-      !! Reciprocal lattice
-      REAL(KIND = DP), INTENT(in) :: kpt_latt_loc(3, num_kpts_loc)
-      !! kpt grid
-      REAL(KIND = DP), INTENT(in) :: atoms_cart_loc(3, num_atoms_loc)
-      !! Cartesian location of atoms
-      REAL(KIND = DP), INTENT(out) :: proj_site_loc(3, num_bands_tot)
-      !! Site projection
-      REAL(KIND = DP), INTENT(out) :: proj_z_loc(3, num_bands_tot)
-      !! Projection on z
-      REAL(KIND = DP), INTENT(out) :: proj_x_loc(3, num_bands_tot)
-      !! Projection on x
-      REAL(KIND = DP), INTENT(out) :: proj_zona_loc(num_bands_tot)
-      !! Projection on z
-      REAL(KIND = DP), OPTIONAL, INTENT(out) :: proj_s_qaxis_loc(3, num_bands_tot)
-      !! Projection s q-axis
-      !
-      !-----------------------------------------------------------------------
-      END SUBROUTINE wannier_setup
-      !-----------------------------------------------------------------------
-    END INTERFACE
-    !
-    num_nnmax = 32
-    !
-    ! aam: translations between PW2Wannier90 and Wannier90
-    ! pw2wannier90   <==>   Wannier90
-    !    nbnd                num_bands_tot
-    !    n_wannier           num_wann
-    !    num_bands           num_bands
-    !    nat                 num_atoms
-    !    iknum               num_kpts
-    !    rlatt               TRANSPOSE(real_lattice)
-    !    glatt               TRANSPOSE(recip_lattice)
-    !    kpt_latt            kpt_latt
-    !    nnb                 nntot
-    !    kpb                 nnlist
-    !    g_kpb               nncell
-    !    mp_grid             mp_grid
-    !    center_w            proj_site
-    !    l_w,mr_w,r_w        proj_l,proj_m,proj_radial
-    !    xaxis,zaxis         proj_x,proj_z
-    !    alpha_w             proj_zona
-    !    exclude_bands       exclude_bands
-    !    atcart              atoms_cart
-    !    atsym               atom_symbols
-    !
-    ALLOCATE(atcart(3, nat), STAT = ierr)
-    IF (ierr /= 0) CALL errore('setup_nnkp', 'Error allocating atcart', 1)
-    ALLOCATE(atsym(nat), STAT = ierr)
-    IF (ierr /= 0) CALL errore('setup_nnkp', 'Error allocating atsym', 1)
-    ALLOCATE(kpb(iknum, num_nnmax), STAT = ierr)
-    IF (ierr /= 0) CALL errore('setup_nnkp', 'Error allocating kpb', 1)
-    ALLOCATE(g_kpb(3, iknum, num_nnmax), STAT = ierr)
-    IF (ierr /= 0) CALL errore('setup_nnkp', 'Error allocating b_kpb', 1)
-    ALLOCATE(center_w(3, nbnd), STAT = ierr)
-    IF (ierr /= 0) CALL errore('setup_nnkp', 'Error allocating center_w', 1)
-    ALLOCATE(alpha_w(nbnd), STAT = ierr)
-    IF (ierr /= 0) CALL errore('setup_nnkp', 'Error allocating alpha_w', 1)
-    ALLOCATE(l_w(nbnd), STAT = ierr)
-    IF (ierr /= 0) CALL errore('setup_nnkp', 'Error allocating l_w', 1)
-    ALLOCATE(mr_w(nbnd), STAT = ierr)
-    IF (ierr /= 0) CALL errore('setup_nnkp', 'Error allocating mr_w', 1)
-    ALLOCATE(r_w(nbnd), STAT = ierr)
-    IF (ierr /= 0) CALL errore('setup_nnkp', 'Error allocating r_w', 1)
-    ALLOCATE(zaxis(3, nbnd), STAT = ierr)
-    IF (ierr /= 0) CALL errore('setup_nnkp', 'Error allocating zaxis', 1)
-    ALLOCATE(xaxis(3, nbnd), STAT = ierr)
-    IF (ierr /= 0) CALL errore('setup_nnkp', 'Error allocating xaxis', 1)
-    ALLOCATE(excluded_band(nbnd), STAT = ierr)
-    IF (ierr /= 0) CALL errore('setup_nnkp', 'Error allocating excluded_band', 1)
-    !
-    ! real lattice (Cartesians, Angstrom)
-    rlatt(:, :) = TRANSPOSE(at(:, :)) * alat * bohr
-    ! reciprocal lattice (Cartesians, Angstrom)
-    glatt(:, :) = TRANSPOSE(bg(:, :)) * twopi / ( alat * bohr )
-    ! atom coordinates in Cartesian coords and Angstrom units
-    atcart(:, :) = tau(:, :) * bohr * alat
-    ! atom symbols
-    DO ia = 1, nat
-      type = ityp(ia)
-      atsym(ia) = atm(type)
+    ! Setup options required for interpreting projector string
+    ! QE tau is Cartesian in alat units, so convert to Angstrom and pass as atoms_cart, not atoms_frac
+    CALL w90_set_option(w90main, 'atoms_cart', tau(:, :) * alat * bohr)
+    CALL w90_set_option(w90main, 'symbols', symbol_all_atoms)
+    DO ip = 1, SIZE(proj)
+      ! Skip the unused entries of proj: pushing them would declare an empty projections
+      ! block, which W90 rejects as too few projections instead of using auto_projections
+      IF (LEN_TRIM(proj(ip)) > 0) CALL w90_set_option(w90main, 'projections', proj(ip))
     ENDDO
     !
-    IF (meta_ionode) THEN
-      !postproc_setup = .TRUE.
-      post_proc_flag = .TRUE.
-      CALL wannier_setup(seedname2, mp_grid, iknum,        &  ! input
-             rlatt, glatt, kpt_latt, nbnd,                 &  ! input
-             nat, atsym, atcart, .FALSE., noncolin,        &  ! input
-             nnb, kpb, g_kpb, num_bands, n_wannier,        &  ! output
-             center_w, l_w, mr_w, r_w, zaxis,              &  ! output
-             xaxis, alpha_w, exclude_bands)                   ! output
-     ! SP: In wannier_setup, the .nnkp file is produced.
-    ENDIF
+    ! Apply queued input options, setting up w90main object
+    CALL w90_input_setopt(w90main, TRIM(seedname2), w90out, w90err, ierr)
+    IF (ierr /= 0) CALL errore('pw2wan90epw', 'Error setting w90 options (input_setopt)', ierr)
+    ! 
+    ! Additionally read the .win input file for further optional settings
+    CALL w90_input_reader(w90main, w90out, w90err, ierr)
+    IF (ierr /= 0) CALL errore('pw2wan90epw', 'Error reading w90 input file (input_reader)', ierr)
     !
-    CALL mp_bcast(nnb,           meta_ionode_id, world_comm)
-    CALL mp_bcast(kpb,           meta_ionode_id, world_comm)
-    CALL mp_bcast(g_kpb,         meta_ionode_id, world_comm)
-    CALL mp_bcast(num_bands,     meta_ionode_id, world_comm)
-    CALL mp_bcast(n_wannier,     meta_ionode_id, world_comm)
-    CALL mp_bcast(center_w,      meta_ionode_id, world_comm)
-    CALL mp_bcast(l_w,           meta_ionode_id, world_comm)
-    CALL mp_bcast(mr_w,          meta_ionode_id, world_comm)
-    CALL mp_bcast(r_w,           meta_ionode_id, world_comm)
-    CALL mp_bcast(zaxis,         meta_ionode_id, world_comm)
-    CALL mp_bcast(xaxis,         meta_ionode_id, world_comm)
-    CALL mp_bcast(alpha_w,       meta_ionode_id, world_comm)
-    CALL mp_bcast(exclude_bands, meta_ionode_id, world_comm)
-    CALL mp_bcast(noncolin,      meta_ionode_id, world_comm)
+    ! Setup complete, print details
+    CALL w90_print_info(w90main, w90out, w90err, ierr)
+    IF (ierr /= 0) CALL errore('pw2wan90epw', 'Error printing header info', ierr)
     !
-    ! SP: Commented because we now write on file the .nnkp file and read from it.
+    num_bands = w90main%num_bands  ! number of bands in window    
     !
-    ! n_proj = nr. of projections (=#WF unless spinors then =#WF/2)
-    !IF (noncolin) THEN
-    !   n_proj = n_wannier/2
-    !ELSE
-    n_proj = n_wannier
-    !ENDIF
-    !
-    IF (scdm_proj) THEN
-      WRITE(stdout, *)
-      WRITE(stdout, *) '    Initial Wannier auto_projections'
-      WRITE(stdout, *)
-    ELSE
-      WRITE(stdout, *)
-      WRITE(stdout, *) '    Initial Wannier projections'
-      WRITE(stdout, *)
-      !
-      DO iw = 1, n_proj
-        WRITE(stdout, '(5x, "(", 3f10.5, ") :  l = ", i3, " mr = ", i3)') &
-                       center_w(:, iw), l_w(iw), mr_w(iw)
-      ENDDO
-    ENDIF
-    !
-    excluded_band(1:nbnd) = .FALSE.
     nexband = 0
-    band_loop: DO ibnd = 1, nbnd
-      indexb = exclude_bands(ibnd)
-      IF (indexb > nbnd .OR. indexb < 0) THEN
-        CALL errore('setup_nnkp', 'wrong excluded band index ', 1)
-      ELSEIF (indexb == 0) THEN
-        EXIT band_loop
-      ELSE
-        nexband = nexband + 1
-        excluded_band(indexb) = .TRUE.
-      ENDIF
-    ENDDO band_loop
+    ALLOCATE(excluded_band(nbnd), STAT = ierr)
+    IF (ierr /= 0) CALL errore('pw2wan90epw', 'Error allocating excluded_band', ierr)
+    excluded_band(1:nbnd) = .FALSE.
+    !
+    IF (allocated(w90main%exclude_bands)) THEN
+      band_loop: DO ib = 1, size(w90main%exclude_bands)
+        indexb = w90main%exclude_bands(ib)
+        IF (indexb > nbnd .OR. indexb < 0) THEN
+          CALL errore('pw2wan90epw', 'wrong excluded band index ', 1)
+        ELSEIF (indexb == 0) THEN
+          EXIT band_loop
+        ELSE
+          nexband = nexband + 1
+          excluded_band(indexb) = .TRUE.
+        ENDIF
+      ENDDO band_loop
+    ENDIF
     !
     nbndep = nbnd - nexband
     ALLOCATE(ibndkept(nbndep), STAT = ierr)
-    IF (ierr /= 0) CALL errore('setup_nnkp', 'Error allocating ibndkept', 1)
+    IF (ierr /= 0) CALL errore('pw2wan90epw', 'Error allocating ibndkept', 1)
     !
     jbnd = 0
     nbndskip = 0
@@ -520,163 +307,44 @@
     ! In some cases in LSDA one can have and odd numeber of electrons
     IF (TRIM(lsda) /= 'none' .AND. nbndskip + 1 == nexband) nbndskip = nexband 
     !
-    WRITE(stdout, '(/, "      - Number of bands is (", i3, ")")') num_bands
+    ! WFPT: Read AHC parameters from ahc_info.dat and check band consistency
+    IF (lwfpt) THEN
+      CALL check_ahc_bands(excluded_band)
+    ENDIF
+    !
+    ! 
+    WRITE(stdout, '("      - Number of bands is (", i3, ")")') num_bands
     WRITE(stdout, '("      - Number of total bands is (", i3, ")")') nbnd
     WRITE(stdout, '("      - Number of excluded bands is (", i3, ")")') nexband
     WRITE(stdout, '("      - Number of wannier functions is (", i3, ")")') n_wannier
     !
-    IF ((nbnd - nexband) /= num_bands) &
-      CALL errore('setup_nnkp', ' something wrong with num_bands', 1)
+    IF ((nbnd - nexband) /= num_bands ) CALL errore('pw2wan90epw', ' something wrong with num_bands', 1)
     !
-    ! Now we read the .nnkp file
+    ! Setup b-vectors
+    ! This library call returns number of b-vectors (number of k-point neighbours in finite difference scheme)
+    CALL w90_get_nn(w90main, nnb, w90out, w90err, ierr)
+    IF (ierr /= 0) CALL errore('pw2wan90epw', 'Error calling w90_get_nn', ierr)
+    ! 
     !
-    IF (meta_ionode) THEN  ! Read nnkp file on ionode only
-      INQUIRE(FILE = TRIM(seedname2)//".nnkp", EXIST = have_nnkp)
-      IF (.NOT. have_nnkp) THEN
-         CALL errore('setup_nnkp', 'Could not find the file ' &
-                      //TRIM(seedname2)//'.nnkp', 1 )
-      ENDIF
-      OPEN(UNIT = iunnkp, FILE = TRIM(seedname2)//".nnkp", FORM = 'formatted')
-    ENDIF
+    ALLOCATE(kpb(iknum, nnb), STAT = ierr)
+    IF (ierr /= 0) CALL errore('pw2wan90epw', 'Error allocating kpb', ierr)
+    ALLOCATE(g_kpb(3, iknum, nnb), STAT = ierr)
+    IF (ierr /= 0) CALL errore('pw2wan90epw', 'Error allocating g_kpb', ierr)
     !
-    IF (meta_ionode) THEN   ! read from ionode only
-      IF (noncolin) THEN
-        CALL scan_file_to(iunnkp, 'spinor_projections', found)
-        IF (.NOT. found) THEN
-          CALL errore('setup_nnkp', 'Could not find projections block in ' &
-                      //TRIM(seedname2)//'.nnkp', 1)
-        ENDIF
-      ELSE
-        CALL scan_file_to(iunnkp, 'projections', found)
-        IF (.NOT. found) THEN
-          CALL errore('setup_nnkp', 'Could not find projections block in ' &
-                      //TRIM(seedname2)//'.nnkp', 1)
-        ENDIF
-      ENDIF
-      READ(iunnkp, *) n_proj
-    ENDIF
-    CALL mp_bcast(n_proj, meta_ionode_id, world_comm)
+    ! This library call returns b-vectors (k-point neighbours in finite difference scheme)
+    CALL w90_get_nnkp(w90main, kpb, w90out, w90err, ierr)
+    IF (ierr /= 0) CALL errore('pw2wan90epw', 'Error calling w90_get_nnkp', ierr)
     !
-    ALLOCATE(gf(npwx, n_proj), STAT = ierr)
-    IF (ierr /= 0) CALL errore('setup_nnkp', 'Error allocating gf', 1)
-    ALLOCATE(csph(16, n_proj), STAT = ierr)
-    IF (ierr /= 0) CALL errore('setup_nnkp', 'Error allocating csph', 1)
-    IF (noncolin) THEN
-      ALLOCATE(spin_eig(n_proj), STAT = ierr)
-      IF (ierr /= 0) CALL errore('setup_nnkp', 'Error allocating spin_eig', 1)
-      ALLOCATE(spin_qaxis(3, n_proj), STAT = ierr)
-      IF (ierr /= 0) CALL errore('setup_nnkp', 'Error allocating spin_qaxis', 1)
-    ENDIF
+    ! This library call returns neighbour k-point/b-vector g-offsets
+    CALL w90_get_gkpb(w90main, g_kpb, w90out, w90err, ierr)
+    IF (ierr /= 0) CALL errore('pw2wan90epw', 'Error calling w90_get_gkpb', ierr)
     !
-    IF (meta_ionode) THEN   ! read from ionode only
-      DO iw = 1, n_proj
-        READ(iunnkp, *) (center_w(ipol, iw), ipol = 1, 3), l_w(iw), mr_w(iw), r_w(iw)
-        READ(iunnkp, *) (zaxis(ipol, iw), ipol = 1, 3), (xaxis(ipol, iw), ipol = 1, 3), alpha_w(iw)
-        xnorm = DSQRT(SUM(xaxis(:, iw) * xaxis(:, iw)))
-        IF (xnorm < eps6) CALL errore('setup_nnkp', '|xaxis| < eps', 1)
-        znorm = DSQRT(SUM(zaxis(:, iw) * zaxis(:, iw)))
-        IF (znorm < eps6) CALL errore('setup_nnkp', '|zaxis| < eps', 1)
-        coseno = SUM(xaxis(:, iw) * zaxis(:, iw)) / xnorm / znorm
-        IF (ABS(coseno) > eps6) CALL errore('setup_nnkp', 'xaxis and zaxis are not orthogonal!', 1)
-        IF (alpha_w(iw) < eps6) CALL errore('setup_nnkp', 'zona value must be positive', 1)
-        ! convert wannier center in cartesian coordinates (in unit of alat)
-        CALL cryst_to_cart(1, center_w(:, iw), at, 1)
-        IF (noncolin) THEN
-          READ(iunnkp, *) spin_eig(iw), (spin_qaxis(ipol, iw), ipol = 1, 3)
-          xnorm = DSQRT(SUM(spin_qaxis(:, iw) * spin_qaxis(:, iw)))
-          IF (xnorm < eps6) CALL errore('setup_nnkp', '|xaxis| < eps', 1)
-          spin_qaxis(:, iw) = spin_qaxis(:, iw) / xnorm
-        ENDIF
-      ENDDO
-    ENDIF
-    !
-    ! automatic projections
-    IF (meta_ionode) THEN
-      CALL scan_file_to(iunnkp, 'auto_projections', found)
-      IF (found) THEN
-        READ(iunnkp, *) n_wannier
-        READ(iunnkp, *) tmp_auto
-        !
-        IF (scdm_proj) THEN
-          IF (n_proj > 0) THEN
-            WRITE(stdout, '(//, " ****** begin Error message ******",/)')
-            WRITE(stdout, '(/, " Found a projection block, an auto_projections block", /)')
-            WRITE(stdout, '(/, " and scdm_proj = T in the input file. These three options are inconsistent.", /)')
-            WRITE(stdout, '(/, " Please refer to the Wannier90 User guide for correct use of these flags.",/)')
-            WRITE(stdout, '(/, " ****** end Error message ******",//)')
-            CALL errore('setup_nnkp', 'Inconsistent options for projections.', 1)
-          ELSE
-            IF (tmp_auto /= 0) &
-              CALL errore('setup_nnkp', 'Second entry in auto_projections block is not 0. ' // &
-                          'See Wannier90 User Guide in the auto_projections section for clarifications.', 1)
-          ENDIF
-        ELSE
-          ! Fire an error whether or not a projections block is found
-          CALL errore('setup_nnkp', 'scdm_proj = F but found an auto_projections block in ' &
-                      //TRIM(seedname2)//'.nnkp', 1)
-        ENDIF
-      ELSE
-        IF (scdm_proj) THEN
-          ! Fire an error whether or not a projections block is found
-          CALL errore('setup_nnkp', 'scdm_proj = T but cannot find an auto_projections block in ' &
-                      //TRIM(seedname2)//'.nnkp', 1)
-        ENDIF
-      ENDIF
-    ENDIF
-    !
-    IF (.NOT. scdm_proj) WRITE(stdout, *) '     - All guiding functions are given '
-    !
-    ! Broadcast
-    CALL mp_bcast(center_w, meta_ionode_id, world_comm)
-    CALL mp_bcast(l_w,      meta_ionode_id, world_comm)
-    CALL mp_bcast(mr_w,     meta_ionode_id, world_comm)
-    CALL mp_bcast(r_w,      meta_ionode_id, world_comm)
-    CALL mp_bcast(zaxis,    meta_ionode_id, world_comm)
-    CALL mp_bcast(xaxis,    meta_ionode_id, world_comm)
-    CALL mp_bcast(alpha_w,  meta_ionode_id, world_comm)
-    IF (noncolin) THEN
-      CALL mp_bcast(spin_eig,   meta_ionode_id, world_comm)
-      CALL mp_bcast(spin_qaxis, meta_ionode_id, world_comm)
-    ENDIF
-    !
-    IF (meta_ionode) THEN   ! read from ionode only
-      CALL scan_file_to(iunnkp, 'nnkpts', found)
-      IF (.NOT. found) THEN
-         CALL errore('setup_nnkp', 'Could not find nnkpts block in ' &
-                     //TRIM(seedname2)//'.nnkp', 1)
-      ENDIF
-      READ(iunnkp, *) nnb
-    ENDIF
-    !
-    ! Broadcast
-    CALL mp_bcast(nnb, meta_ionode_id, world_comm)
-    !
-    nnbx = 0
-    nnbx = MAX(nnbx, nnb)
-    ALLOCATE(ig_(iknum, nnbx), STAT = ierr)
-    IF (ierr /= 0) CALL errore('setup_nnkp', 'Error allocating ig_', 1)
-    ALLOCATE(ig_check(iknum, nnbx), STAT = ierr)
-    IF (ierr /= 0) CALL errore('setup_nnkp', 'Error allocating ig_check', 1)
     ALLOCATE(zerophase(iknum, nnb), STAT = ierr)
-    IF (ierr /= 0) CALL errore('setup_nnkp', 'Error allocating zerophase', 1)
+    IF (ierr /= 0) CALL errore('pw2wan90epw', 'Error allocating zerophase', ierr)
+    ALLOCATE(ig_(iknum, nnb), STAT = ierr)
+    IF (ierr /= 0) CALL errore('pw2wan90epw', 'Error allocating ig_', ierr)
+    !
     zerophase = .FALSE.
-    !
-    ! Read data about neighbours
-    WRITE(stdout, *)
-    WRITE(stdout, *) ' Reading data about k-point neighbours '
-    WRITE(stdout, *)
-    IF (meta_ionode) THEN
-      DO ik = 1, iknum
-        DO ib = 1, nnb
-          READ(iunnkp, *) idum, kpb(ik, ib), (g_kpb(ipol, ik, ib), ipol = 1, 3)
-        ENDDO
-      ENDDO
-    ENDIF
-    !
-    ! Broadcast
-    CALL mp_bcast(kpb,   meta_ionode_id, world_comm)
-    CALL mp_bcast(g_kpb, meta_ionode_id, world_comm)
-    !
     DO ik  = 1, iknum
       DO ib = 1, nnb
         IF ((g_kpb(1, ik, ib) == 0) .AND.  &
@@ -696,221 +364,235 @@
       ENDDO
     ENDDO
     !
+    ! Each rank holds only part of g, so the match must be reduced over the pool before it can be judged missing
+    ALLOCATE(ig_check(iknum, nnb), STAT = ierr)
+    IF (ierr /= 0) CALL errore('pw2wan90epw', 'Error allocating ig_check', ierr)
     ig_check(:, :) = ig_(:, :)
     CALL mp_sum(ig_check, intra_pool_comm)
     DO ik = 1, iknum
       DO ib = 1, nnb
         IF (ig_check(ik, ib) == 0) &
-          CALL errore('setup_nnkp', 'g_kpb vector is not in the list of Gs', 100 * ik + ib)
+          CALL errore('pw2wan90epw', 'g_kpb vector is not in the list of Gs', 100 * ik + ib)
       ENDDO
     ENDDO
     DEALLOCATE(ig_check, STAT = ierr)
-    IF (ierr /= 0) CALL errore('setup_nnkp', 'Error deallocating ig_check', 1)
+    IF (ierr /= 0) CALL errore('pw2wan90epw', 'Error deallocating ig_check', ierr)
     !
-    WRITE(stdout, *) '     - All neighbours are found '
-    WRITE(stdout, *)
+    ! Setup projections
+    ALLOCATE(zaxis(3, n_proj), STAT = ierr)
+    IF (ierr /= 0) CALL errore('pw2wan90epw', 'Error allocating zaxis', ierr)
+    ALLOCATE(xaxis(3, n_proj), STAT = ierr)
+    IF (ierr /= 0) CALL errore('pw2wan90epw', 'Error allocating xaxis', ierr)
+    ALLOCATE(alpha_w(n_proj), STAT = ierr)
+    IF (ierr /= 0) CALL errore('pw2wan90epw', 'Error allocating alpha_w', ierr)
+    ALLOCATE(center_w(3, n_proj), STAT = ierr)
+    IF (ierr /= 0) CALL errore('pw2wan90epw', 'Error allocating center_w', ierr)
+    ALLOCATE(csph(16, n_proj), STAT = ierr)
+    IF (ierr /= 0) CALL errore('pw2wan90epw', 'Error allocating scph', ierr)
+    ALLOCATE(l_w(n_proj), STAT = ierr)
+    IF (ierr /= 0) CALL errore('pw2wan90epw', 'Error allocating l_w', ierr)
+    ALLOCATE(mr_w(n_proj), STAT = ierr)
+    IF (ierr /= 0) CALL errore('pw2wan90epw', 'Error allocating mr_w', ierr)
+    ALLOCATE(r_w(n_proj), STAT = ierr)
+    IF (ierr /= 0) CALL errore('pw2wan90epw', 'Error allocating r_w', ierr)
+    ALLOCATE(spin_eig(n_proj), STAT = ierr)
+    IF (ierr /= 0) CALL errore('pw2wan90epw', 'Error allocating spin_eig', ierr)
+    ALLOCATE(spin_qaxis(3,n_proj), STAT = ierr)
+    IF (ierr /= 0) CALL errore('pw2wan90epw', 'Error allocating spin_qaxis', ierr)
+    ALLOCATE(gf(npwx, n_proj), STAT = ierr)
+    IF (ierr /= 0) CALL errore('pw2wan90epw', 'Error allocating gf', ierr)
     !
-    IF (meta_ionode) THEN
-      CALL scan_file_to(iunnkp, 'exclude_bands', found)
-      IF (.NOT. found) THEN
-        CALL errore('setup_nnkp', 'Could not find exclude_bands block in ' &
-                    //TRIM(seedname2)//'.nnkp', 1)
-      ENDIF
-      READ(iunnkp, *) nexband
-      excluded_band(1:nbnd) = .FALSE.
-      DO ibnd = 1, nexband
-        READ(iunnkp, *) indexb
-        IF (indexb < 1 .OR. indexb > nbnd) &
-          CALL errore('setup_nnkp', ' wrong excluded band index ', 1)
-        excluded_band(indexb) = .TRUE.
+    ! Initialize
+    csph(:, :) = zero
+    !
+    !
+    IF (scdm_proj) THEN
+      WRITE(stdout, *)
+      WRITE(stdout, *) '    Initial Wannier auto_projections'
+      WRITE(stdout, *)
+    ELSE
+      ! Only valid with explicit projections: with SCDM no projectors are set up in the library
+      CALL w90_get_proj(w90main, n_proj_found, center_w, l_w, mr_w, spin_eig, r_w, xaxis, &
+                        zaxis, spin_qaxis, alpha_w, w90out, w90err, ierr)
+      IF (ierr /= 0) CALL errore('pw2wan90epw', 'Error calling w90_get_proj', ierr)
+      IF (n_proj_found /= n_proj) CALL errore('pw2wan90epw', &
+        'Number of projections returned by w90_get_proj does not match n_proj', 1)
+      !
+      WRITE(stdout, *)
+      WRITE(stdout, *) '    Initial Wannier projections (crystal coordinates)'
+      WRITE(stdout, *)
+      !
+      DO iw = 1, n_proj
+        WRITE(stdout, '(5x, "(", 3f10.5, ") :  l = ", i3, " mr = ", i3)') &
+                       center_w(:, iw) , l_w(iw), mr_w(iw)
       ENDDO
-      num_bands = nbnd - nexband
+      ! w90_get_proj returns sites in crystal coordinates; generate_guiding_functions wants Cartesian in alat units
+      CALL cryst_to_cart(n_proj, center_w, at, 1)
     ENDIF
-    !
-    ! Broadcast
-    CALL mp_bcast(nexband,       meta_ionode_id, world_comm)
-    CALL mp_bcast(excluded_band, meta_ionode_id, world_comm)
-    CALL mp_bcast(num_bands,     meta_ionode_id, world_comm)
-    !
-    IF (meta_ionode) THEN
-      CLOSE(iunnkp)
+    ! 
+    ! Compute overlaps, projections
+    CALL ylm_expansion()
+    IF (scdm_proj) THEN
+      CALL compute_amn_with_scdm()
+    ELSE
+      CALL compute_amn_para()
     ENDIF
-    !
-    RETURN
-    !
-    !--------------------------------------------------------------------------
-    END SUBROUTINE setup_nnkp
-    !--------------------------------------------------------------------------
-    !
-    !--------------------------------------------------------------------------
-    SUBROUTINE scan_file_to(iunr, keyword, found)
-    !-----------------------------------------------------------------------
-    !
-    IMPLICIT NONE
-    !
-    CHARACTER(LEN = *), INTENT(in) :: keyword
-    !! Keyword searched for
-    LOGICAL, INTENT(out)         :: found
-    !! Check if the section in the .nnkp file is found.
-    INTEGER, INTENT(in)          :: iunr
-    !! Unit number for file
-    !
-    ! Local variables
-    CHARACTER(LEN = 80) :: line1, line2
-    !!
-    !
-    ! Uncommenting the following line the file scan restarts every time
-    ! from the beginning thus making the reading independent on the order
-    ! of data-blocks
-    ! REWIND(iunr)
-    !
-    10 CONTINUE
-    READ(iunr, *, END = 20) line1, line2
-    IF (line1 /= 'begin') GOTO 10
-    IF (line2 /= keyword) GOTO 10
-    found = .TRUE.
-    RETURN
-    20 found = .FALSE.
-    REWIND(iunr)
-    !
-    !------------------------------------------------------------------------
-    END SUBROUTINE scan_file_to
-    !------------------------------------------------------------------------
-    !
-    !------------------------------------------------------------------------
-    SUBROUTINE run_wannier()
-    !-----------------------------------------------------------------------
-    !
-    USE kinds,         ONLY : DP
-    USE io_global,     ONLY : stdout, meta_ionode_id, meta_ionode
-    USE ions_base,     ONLY : nat
-    USE mp,            ONLY : mp_bcast
-    USE mp_world,      ONLY : world_comm
-    USE cell_base,     ONLY : alat
-    USE io_files,      ONLY : prefix
-    USE io_var,        ONLY : iuqpeig
-    USE wann_common,   ONLY : u_mat, lwindow, wann_centers, wann_spreads, eigval,  &
-                            n_wannier, spreads, nnb, rlatt, glatt, kpt_latt,     &
-                            iknum, seedname2, num_bands, u_mat_opt, atsym, a_mat,&
-                            atcart, m_mat, mp_grid, excluded_band, ispinw
-    USE input,         ONLY : eig_read
-    USE wvfct,         ONLY : nbnd
-    USE ep_constants,  ONLY : zero, czero, bohr
-    USE global_var,    ONLY : nkpts
-    !
-    IMPLICIT NONE
-    !
-    CHARACTER(LEN = 256) :: tempfile
-    !! Temporary file
-    CHARACTER (LEN = 80) :: line
-    !! Temporary character
-    INTEGER :: iw
-    !! Counter on wannier functions
-    INTEGER :: ik
-    !! Counter of k-point index
-    INTEGER :: ibnd
-    !! Counter on bands
-    INTEGER :: ibnd1
-    !! Band index
-    INTEGER :: ios
-    !! Integer variable for I/O control
-    INTEGER :: ierr
-    !! Error status
-    REAL(KIND = DP), ALLOCATABLE :: eigvaltmp(:, :)
-    !! Temporary array containing the eigenvalues (KS or GW) when read from files
+    CALL compute_mmn_para()
     !
     ALLOCATE(u_mat(n_wannier, n_wannier, iknum), STAT = ierr)
-    IF (ierr /= 0) CALL errore('run_wannier', 'Error allocating u_mat', 1)
+    IF (ierr /= 0) CALL errore('pw2wan90epw', 'Error allocating u_mat', ierr)
     ALLOCATE(u_mat_opt(num_bands, n_wannier, iknum), STAT = ierr)
-    IF (ierr /= 0) CALL errore('run_wannier', 'Error allocating u_mat_opt', 1)
-    ALLOCATE(lwindow(num_bands, iknum), STAT = ierr)
-    IF (ierr /= 0) CALL errore('run_wannier', 'Error allocating lwindow', 1)
+    IF (ierr /= 0) CALL errore('pw2wan90epw', 'Error allocating u_mat_opt', ierr)
+    !
+    ! Take pointers in W90 to main data arrays allocated here
+    CALL w90_set_m_local(w90main, m_mat)
+    CALL w90_set_u_opt(w90main, u_mat_opt)
+    CALL write_band() ! fills eigval with the Kohn-Sham eigenvalues, in eV, of the non-excluded bands
+    CALL w90_set_eigval(w90main, eigval)
+    CALL w90_set_u_matrix(w90main, u_mat)
+    ! 
+    ! Store initial projections in u_matrix_opt
+    u_mat_opt(:, :, :) = a_mat(:, :, :)
+    !
+    ! Run library
+    WRITE(stdout, *)
+    WRITE(stdout, *) '    Running Wannier90'
+    !
+    CALL w90_disentangle(w90main, w90out, w90err, ierr)
+    IF (ierr /= 0) CALL errore('pw2wan90epw', 'Error in w90_disentangle call', ierr)
+    !
+    CALL w90_project_overlap(w90main, w90out, w90err, ierr)
+    IF (ierr /= 0) CALL errore('pw2wan90epw', 'Error in w90_project_overlap call', ierr)
+    !
+    CALL w90_wannierise(w90main, w90out, w90err, ierr)
+    IF (ierr /= 0) CALL errore('pw2wan90epw', 'Error in w90_wannierise call', ierr)
+    !
+    CALL w90_plot(w90main, w90out, w90err, ierr)
+    IF (ierr /= 0) CALL errore('pw2wan90epw', 'Error in w90_plot call', ierr)
+    !
+    CALL w90_print_timings(w90main, w90out)
+    !
+    IF (ionode) CLOSE(w90out) ! library call is finished, close output and error streams
+    IF (ionode) CLOSE(w90err, STATUS='DELETE') ! if we reach here, error log should be empty
+    !
     ALLOCATE(wann_centers(3, n_wannier), STAT = ierr)
-    IF (ierr /= 0) CALL errore('run_wannier', 'Error allocating wann_centers', 1)
+    IF (ierr /= 0) CALL errore('pw2wan90epw', 'Error allocating wann_centers', 1)
     ALLOCATE(wann_spreads(n_wannier), STAT = ierr)
-    IF (ierr /= 0) CALL errore('run_wannier', 'Error allocating wann_spreads', 1)
+    IF (ierr /= 0) CALL errore('pw2wan90epw', 'Error allocating wann_spreads', 1)
     !
-    u_mat(:, :, :) = czero
-    u_mat_opt(:, :, :) = czero
-    wann_centers(:, :) = zero
-    wann_spreads(:) = zero
-    !
-    IF (meta_ionode) THEN
-      ! read in external eigenvalues, e.g.  GW
-      IF (eig_read) THEN
-        ALLOCATE(eigvaltmp(nbnd, iknum), STAT = ierr)
-        IF (ierr /= 0) CALL errore('run_wannier', 'Error allocating eigvaltmp', 1)
-        eigvaltmp(:, :) = zero
-        eigval(:, :) = zero
-        WRITE (stdout, '(5x, a, i5, a, i5, a)') "Reading external electronic eigenvalues (", &
-             nbnd, ",", nkpts,")"
-        tempfile = TRIM(prefix)//'.eig'
-        IF (ispinw == 2) tempfile = TRIM(prefix) // '.down.eig'
-        OPEN(iuqpeig, FILE = tempfile, FORM = 'formatted', ACTION = 'read', IOSTAT = ios)
-        IF (ios /= 0) CALL errore('run_wannier', 'error opening '//tempfile, 1)
-        READ(iuqpeig, '(a)') line
-        DO ik = 1, nkpts
-          ! We do not save the k-point for the moment ==> should be read and
-          ! tested against the current one
-          READ(iuqpeig, '(a)') line
-          READ(iuqpeig, *) eigvaltmp(:, ik)
-        ENDDO
-        DO ik = 1, nkpts
-          ibnd1 = 0
-          DO ibnd = 1, nbnd
-            IF (excluded_band(ibnd)) CYCLE
-            ibnd1 = ibnd1 + 1
-            eigval(ibnd1, ik) = eigvaltmp(ibnd, ik)
-          ENDDO
-        ENDDO
-        CLOSE(iuqpeig)
-        DEALLOCATE(eigvaltmp, STAT = ierr)
-        IF (ierr /= 0) CALL errore('run_wannier', 'Error deallocating eigvaltmp', 1)
-      ENDIF
-
-  ! SP : This file is not used for now. Only required to build the UNK file
-  !      tempfile = TRIM(prefix)//'.mmn'
-  !      OPEN(iummn, FILE = tempfile, IOSTAT = ios, FORM = 'unformatted')
-  !      WRITE(iummn) m_mat
-  !      CLOSE(iummn)
-
-      CALL wannier_run(seedname2, mp_grid, iknum,   &              ! input
-                       rlatt, glatt, kpt_latt, num_bands,       &  ! input
-                       n_wannier, nnb, nat, atsym,              &  ! input
-                       atcart, .FALSE., m_mat, a_mat, eigval,   &  ! input
-                       u_mat, u_mat_opt, lwindow, wann_centers, &  ! output
-                       wann_spreads, spreads)                      ! output
-    ENDIF
-    !
-    CALL mp_bcast(u_mat,        meta_ionode_id, world_comm)
-    CALL mp_bcast(u_mat_opt,    meta_ionode_id, world_comm)
-    CALL mp_bcast(lwindow,      meta_ionode_id, world_comm)
-    CALL mp_bcast(wann_centers, meta_ionode_id, world_comm)
-    CALL mp_bcast(wann_spreads, meta_ionode_id, world_comm)
-    CALL mp_bcast(spreads,      meta_ionode_id, world_comm)
-    !
-    !
-    ! output the results of the wannierization
+    CALL w90_get_centres(w90main, wann_centers)
+    CALL w90_get_spreads(w90main, wann_spreads)
+    ! 
     !
     WRITE(stdout, *)
     WRITE(stdout, *) '    Wannier Function centers (cartesian, alat) and spreads (ang):'
     WRITE(stdout, *)
+    !
     DO iw = 1, n_wannier
-      WRITE(stdout, '(5x, "(", 3f10.5, ") :  ",f8.5)') &
-           wann_centers(:, iw) / alat / bohr, wann_spreads(iw)
+      WRITE(stdout, '(5x, "(", 3f10.5, ") :  ",f8.5)') wann_centers(:, iw) / alat / bohr, wann_spreads(iw)
     ENDDO
     WRITE(stdout, *)
     !
-    ! store the final minimisation matrix on disk for later use
+    ! Store the final minimisation matrix on disk for later use
     !
+    ALLOCATE(lwindow(num_bands,iknum), STAT = ierr) ! Variable required for writing file_ukk
+    IF (ierr /= 0) CALL errore('pw2wan90epw', 'Error allocating lwindow', 1)
+    !
+    IF (num_bands > n_wannier) THEN
+      lwindow = w90main%dis_manifold%lwindow ! lwindow is assigned in disentangle call
+    ELSE
+      lwindow = .TRUE.
+    ENDIF
     CALL write_filukk
     !
-    RETURN
+    ! write_filukk applies the LSDA correction to nbndskip on ionode only, so pick up
+    ! the value it wrote to the .ukk file. Callers broadcast this on to the other images
+    !
+    CALL mp_bcast(nbndskip, ionode_id, intra_image_comm)
+    !
+    IF (wannier_plot) CALL write_plot() ! this writer only produces .cube, not the xcrysden format Wannier90 also supports
+    !
+    DEALLOCATE(kindex, STAT = ierr)
+    IF (ierr /= 0) CALL errore('pw2wan90epw', 'Error deallocating kindex', 1)
+    DEALLOCATE(symbol_all_atoms, STAT = ierr)
+    IF (ierr /= 0) CALL errore('pw2wan90epw', 'Error deallocating symbol_all_atoms', 1)
+    !  
+    CALL lib_dealloc()
+    !
+    !-------------------------------------------------------------------------
+    END SUBROUTINE pw2wan90epw
+    !-------------------------------------------------------------------------
+    !
+    !-------------------------------------------------------------------------
+    SUBROUTINE lib_dealloc()
+    !-----------------------------------------------------------------------
+    !!
+    !! Routine to de-allocate Wannier related matrices.
+    !!
+    USE wann_common,  ONLY : kpb, g_kpb, center_w, alpha_w,                &
+                           l_w, mr_w, r_w, zaxis, xaxis, excluded_band,    &
+                           m_mat, u_mat, u_mat_opt, a_mat, eigval,         &
+                           lwindow, gf, ig_, zerophase, wann_centers,      &
+                           wann_spreads, spin_eig, spin_qaxis, csph       
+    !
+    IMPLICIT NONE
+    !
+    ! Local variables
+    INTEGER :: ierr
+    !! Error status
+    !
+    DEALLOCATE(kpb, STAT = ierr)
+    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating kpb', 1)
+    DEALLOCATE(g_kpb, STAT = ierr)
+    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating g_kpb', 1)
+    DEALLOCATE(zaxis, STAT = ierr)
+    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating zaxis', 1)
+    DEALLOCATE(xaxis, STAT = ierr)
+    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating xaxis', 1)
+    DEALLOCATE(alpha_w, STAT = ierr)
+    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating alpha_w', 1)
+    DEALLOCATE(center_w, STAT = ierr)
+    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating center_w', 1)
+    DEALLOCATE(u_mat, STAT = ierr)
+    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating u_mat', 1)
+    DEALLOCATE(u_mat_opt, STAT = ierr)
+    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating u_mat_opt', 1)
+    DEALLOCATE(excluded_band, STAT = ierr)
+    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating excluded_band', 1)
+    DEALLOCATE(ig_, STAT = ierr)
+    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating ig_', 1)
+    DEALLOCATE(zerophase, STAT = ierr)
+    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating zerophase', 1)
+    DEALLOCATE(gf, STAT = ierr)
+    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating gf', 1)
+    DEALLOCATE(r_w, STAT = ierr)
+    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating r_w', 1)
+    DEALLOCATE(mr_w, STAT = ierr)
+    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating mr_w', 1)
+    DEALLOCATE(l_w, STAT = ierr)
+    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating l_w', 1)
+    DEALLOCATE(wann_centers, STAT = ierr)
+    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating wann_centers', 1)
+    DEALLOCATE(wann_spreads, STAT = ierr)
+    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating wann_spreads', 1)
+    DEALLOCATE(spin_eig, STAT = ierr)
+    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating spin_eig', 1)
+    DEALLOCATE(spin_qaxis, STAT = ierr)
+    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating spin_qaxis', 1)
+    DEALLOCATE(csph, STAT = ierr)
+    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating csph', 1)
+    DEALLOCATE(m_mat, STAT = ierr)
+    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating m_mat', 1)
+    DEALLOCATE(a_mat, STAT = ierr)
+    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating a_mat', 1)
+    DEALLOCATE(eigval, STAT = ierr)
+    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating eigval', 1)
+    DEALLOCATE(lwindow, STAT = ierr)
+    IF (ierr /= 0) CALL errore('lib_dealloc', 'Error deallocating lwindow', 1)
     !
     !-----------------------------------------------------------------------
-    END SUBROUTINE run_wannier
+    END SUBROUTINE lib_dealloc
     !-----------------------------------------------------------------------
-    !
     !-----------------------------------------------------------------------
     SUBROUTINE compute_amn_para()
     !-----------------------------------------------------------------------
@@ -1104,17 +786,21 @@
             ENDDO ! ibnd
           ELSE
             ! general routine for quantisation axis (a,b,c)
-            ! 'up'    eigenvector is 1/DSQRT(1+c) [c+1,a+ib]
-            ! 'down'  eigenvector is 1/DSQRT(1-c) [c-1,a+ib]
+            ! normalised eigenvectors of n.sigma for the axis (a,b,c):
+            !   'up'    1/DSQRT(2*(1+c)) [c+1,a+ib]
+            !   'down'  1/DSQRT(2*(1-c)) [c-1,a+ib]
+            ! the 2 matters: without it these have norm DSQRT(2), while the
+            ! +z/-z branch above uses amplitude 1, so a run mixing on-axis and
+            ! off-axis projections would weight them differently
             IF (spin_eig(iw) == 1) THEN
-              fac(1) = (1.0d0 / DSQRT(1 + spin_qaxis(3, iw))) &
+              fac(1) = (1.0d0 / DSQRT(2 * (1 + spin_qaxis(3, iw)))) &
                      * (spin_qaxis(3, iw) + 1) * cone
-              fac(2) = (1.0d0 / DSQRT(1 + spin_qaxis(3, iw))) &
+              fac(2) = (1.0d0 / DSQRT(2 * (1 + spin_qaxis(3, iw)))) &
                      * CMPLX(spin_qaxis(1, iw), spin_qaxis(2, iw), KIND = DP)
             ELSE
-              fac(1) = (1.0d0 / DSQRT(1 + spin_qaxis(3, iw))) &
-                     * (spin_qaxis(3, iw)) * cone
-              fac(2) = (1.0d0 / DSQRT(1 - spin_qaxis(3, iw))) &
+              fac(1) = (1.0d0 / DSQRT(2 * (1 - spin_qaxis(3, iw)))) &
+                     * (spin_qaxis(3, iw) - 1) * cone
+              fac(2) = (1.0d0 / DSQRT(2 * (1 - spin_qaxis(3, iw)))) &
                      * CMPLX(spin_qaxis(1, iw), spin_qaxis(2, iw), KIND = DP)
             ENDIF
             !
@@ -1161,8 +847,6 @@
       ENDIF ! scalar wavefunction
     ENDDO  ! k-points
     !
-    DEALLOCATE(csph, STAT = ierr)
-    IF (ierr /= 0) CALL errore('compute_amn_para', 'Error deallocating csph', 1)
     DEALLOCATE(sgf, STAT = ierr)
     IF (ierr /= 0) CALL errore('compute_amn_para', 'Error deallocating sgf', 1)
     IF (noncolin) THEN
@@ -1175,32 +859,6 @@
     IF (any_uspp) CALL deallocate_bec_type(becp)
     !
     CALL mp_sum(a_mat, inter_pool_comm)
-    !
-    ! RMDB
-    !IF (meta_ionode) THEN
-    !  ALLOCATE(a_mat_tmp(nbnd, n_wannier, iknum), STAT = ierr)
-    !  IF (ierr /= 0) CALL errore('compute_amn_para', 'Error allocating a_mat_tmp', 1)
-    !  a_mat_tmp(:, :, :) = czero
-    !  !
-    !  DO ik = 1, iknum
-    !    DO iw = 1, n_proj
-    !      !
-    !      ibnd1 = 0
-    !      DO ibnd = 1, nbnd
-    !        IF (excluded_band(ibnd)) CYCLE
-    !        ibnd1 = ibnd1 + 1
-    !        !
-    !        a_mat_tmp(ibnd, iw, ik) =  a_mat(ibnd1, iw, ik)
-    !      ENDDO ! ibnd
-    !      !
-    !      DO ibnd = 1, nbnd
-    !        WRITE(501, '(3i5, 2f18.12)') ibnd, iw, ik, a_mat_tmp(ibnd, iw, ik)
-    !      ENDDO ! ibnd
-    !    ENDDO ! iw
-    !  ENDDO ! ik
-    !  DEALLOCATE(a_mat_tmp, STAT = ierr)
-    !  IF (ierr /= 0) CALL errore('compute_amn_with_scdm', 'Error deallocating a_mat_tmp', 1)
-    !ENDIF
     !
     WRITE(stdout, *)
     WRITE(stdout, '(5x, a)') 'AMN calculated'
@@ -1222,7 +880,7 @@
     !
     USE kinds,           ONLY : DP
     USE ep_constants,    ONLY : rytoev
-    USE io_global,       ONLY : stdout, meta_ionode, meta_ionode_id
+    USE io_global,       ONLY : stdout, meta_ionode, ionode_id
     USE wvfct,           ONLY : nbnd, npw, npwx, et, g2kin
     USE gvecw,           ONLY : gcutw
     USE wavefunctions,   ONLY : evc, psic, psic_nc
@@ -1235,7 +893,7 @@
     USE scatter_mod,     ONLY : gather_grid
     USE fft_interfaces,  ONLY : invfft
     USE mp,              ONLY : mp_bcast, mp_sum
-    USE mp_world,        ONLY : world_comm
+    USE mp_images,       ONLY : intra_image_comm
     USE mp_global,       ONLY : my_pool_id, npool, intra_pool_comm, inter_pool_comm
     USE ep_constants,    ONLY : zero, czero, one, twopi
     USE kfold,           ONLY : ktokpmq
@@ -1569,7 +1227,7 @@
       IF (ierr /= 0) CALL errore('compute_amn_with_scdm', 'Error deallocating cwork', 1)
     ENDIF ! meta_ionode
     !
-    CALL mp_bcast(piv, meta_ionode_id, world_comm)
+    CALL mp_bcast(piv, ionode_id, intra_image_comm)
     !
     ! jml: calculate position and spin part of piv
     IF (noncolin) THEN
@@ -1772,33 +1430,6 @@
     !
     CALL mp_sum(a_mat, inter_pool_comm)
     !
-    ! RMDB
-    !IF (meta_ionode) THEN
-    !  ALLOCATE(a_mat_tmp(nbtot, n_wannier, iknum), STAT = ierr)
-    !  IF (ierr /= 0) CALL errore('compute_amn_with_scdm', 'Error allocating a_mat_tmp', 1)
-    !  a_mat_tmp(:, :, :) = czero
-    !  !
-    !  DO ik = 1, iknum
-    !    DO iw = 1, n_wannier
-    !      !
-    !      ibnd1 = 0
-    !      DO ibnd = 1, nbtot
-    !        IF (excluded_band(ibnd)) CYCLE
-    !        ibnd1 = ibnd1 + 1
-    !        !
-    !        a_mat_tmp(ibnd, iw, ik) =  a_mat(ibnd1, iw, ik)
-    !      ENDDO ! ibnd
-    !      !
-    !      DO ibnd = 1, nbtot
-    !        WRITE(501, '(3i5, 2f18.12)') ibnd, iw, ik, a_mat_tmp(ibnd, iw, ik)
-    !      ENDDO ! ibnd
-    !    ENDDO ! iw
-    !  ENDDO ! ik
-    !  DEALLOCATE(a_mat_tmp, STAT = ierr)
-    !  IF (ierr /= 0) CALL errore('compute_amn_with_scdm', 'Error deallocating a_mat_tmp', 1)
-    !ENDIF
-    ! RMDB
-    !
     DEALLOCATE(piv, STAT = ierr)
     IF (ierr /= 0) CALL errore('compute_amn_with_scdm', 'Error deallocating piv', 1)
     DEALLOCATE(nowfc, STAT = ierr)
@@ -1893,14 +1524,14 @@
         gf_spinor(istart:iend, iw) = gf(1:npw, iw)
       ELSE
         IF (spin_eig(iw) == 1) THEN
-          fac(1) = (1.0d0 / DSQRT(1 + spin_qaxis(3, iw))) &
+          fac(1) = (1.0d0 / DSQRT(2 * (1 + spin_qaxis(3, iw)))) &
                  * (spin_qaxis(3, iw) + 1 ) * cone
-          fac(2) = (1.0d0 / DSQRT(1 + spin_qaxis(3, iw))) &
+          fac(2) = (1.0d0 / DSQRT(2 * (1 + spin_qaxis(3, iw)))) &
                  * CMPLX(spin_qaxis(1, iw), spin_qaxis(2, iw), KIND = DP)
         ELSE
-          fac(1) = (1.0d0 / DSQRT(1 + spin_qaxis(3, iw))) &
-                 * ( spin_qaxis(3, iw) ) * cone
-          fac(2) = (1.0d0 / DSQRT(1 - spin_qaxis(3, iw))) &
+          fac(1) = (1.0d0 / DSQRT(2 * (1 - spin_qaxis(3, iw)))) &
+                 * ( spin_qaxis(3, iw) - 1 ) * cone
+          fac(2) = (1.0d0 / DSQRT(2 * (1 - spin_qaxis(3, iw)))) &
                  * CMPLX(spin_qaxis(1, iw), spin_qaxis(2,iw), KIND = DP)
         ENDIF
         gf_spinor(1:npw, iw) = gf(1:npw, iw) * fac(1)
@@ -1930,7 +1561,7 @@
     USE units_lr,        ONLY : lrwfc, iuwfc
     USE fft_base,        ONLY : dffts
     USE fft_interfaces,  ONLY : fwfft, invfft
-    USE input,           ONLY : xk_all, xk_loc, igk_k_loc
+    USE input,           ONLY : xk_all, xk_loc, igk_k_loc, lsda
     USE gvect,           ONLY : g, ngm
     USE gvecw,           ONLY : gcutw
     USE cell_base,       ONLY : omega, tpiba, bg
@@ -1942,7 +1573,7 @@
                                 deallocate_bec_type
     USE noncollin_module,ONLY : noncolin, npol, lspinorb
     USE wann_common,     ONLY : m_mat, num_bands, nnb, iknum, g_kpb, kpb, ig_, &
-                                excluded_band, write_mmn, zerophase, ispinw
+                                excluded_band, zerophase, ispinw
     USE ep_constants,    ONLY : czero, cone, twopi, zero
     USE io_var,          ONLY : iummn
 #if defined(__NAG)
@@ -1955,6 +1586,7 @@
     USE global_var,      ONLY : nbndep, nk_loc, nkpts
     USE uspp_init,       ONLY : init_us_2
     USE lsda_mod,        ONLY : current_spin
+    USE klist,           ONLY : nkstot
     !
     IMPLICIT NONE
     !
@@ -2009,6 +1641,8 @@
     !! Starting index for k-point nearest neighbours in each pool
     INTEGER :: ierr
     !! Error status
+    INTEGER :: spin_save
+    !! store current spin value
     INTEGER, ALLOCATABLE  :: igkq(:)
     !!
     REAL(KIND = DP) :: arg
@@ -2047,6 +1681,8 @@
     !! Local variables for uspp
     COMPLEX(KIND = DP), ALLOCATABLE :: qq_so(:, :, :, :)
     !! Local variables for uspp
+    COMPLEX(KIND = DP), ALLOCATABLE :: m_mat_global(:, :, :, :)
+    !! Temporary for coallescing distributed m-matrix onto root rank
     !
     any_uspp = ANY(upf(:)%tvanp)
     !
@@ -2065,7 +1701,8 @@
       IF (ierr /= 0) CALL errore('compute_mmn_para', 'Error allocating aux', 1)
     ENDIF
     !
-    ALLOCATE(m_mat(num_bands, num_bands, nnb, iknum), STAT = ierr)
+    ! Only this pool's k-points are stored: the array is indexed locally and handed to W90 as m_local
+    ALLOCATE(m_mat(num_bands, num_bands, nnb, nk_loc), STAT = ierr)
     IF (ierr /= 0) CALL errore('compute_mmn_para', 'Error allocating m_mat', 1)
     !
     ! close all the wfc files to allow access for each pool to all wfs
@@ -2339,38 +1976,61 @@
             IF (excluded_band(m)) CYCLE
             ibnd_m = ibnd_m + 1
             !
-            m_mat(ibnd_m, ibnd_n, ib, ik_g) = Mkb(m, n)
+            !m_mat(ibnd_m, ibnd_n, ib, ik_g) = Mkb(m, n)
+            m_mat(ibnd_m, ibnd_n, ib, ik) = Mkb(m, n) ! Jerome Jackson 19Feb24 only local part now passed to w90 lib
           ENDDO ! m
         ENDDO ! n
         !
       ENDDO ! ib
     ENDDO ! ik
+
+    ALLOCATE(m_mat_global(num_bands, num_bands, nnb, iknum), STAT = ierr)
+    IF (ierr /= 0) CALL errore('compute_mmn_para', 'Error allocating m_mat_global', 1)
+    m_mat_global(:, :, :, :) = czero ! every pool contributes only its own k-points, so the rest must be zero for the mp_sum below
     !
-    CALL mp_sum(m_mat, inter_pool_comm)
+    ! Same single-spin k count as above, so that ktokpmq maps to the right pool
+    IF (TRIM(lsda) /= 'none') THEN
+      nkstot = nkpts
+      spin_save = current_spin
+      current_spin = 1
+    ENDIF
+    !
+    DO ik = 1, nk_loc
+      ! returns in-pool index nkq and absolute index nkq_abs of xk
+      CALL ktokpmq(xk_loc(:, ik), zero_vect, +1, ipool, nkq, nkq_abs)
+      m_mat_global(:, :, :, nkq_abs) = m_mat(:, :, :, ik) ! m_mat is filled by pool-local index, matching the loop above
+    ENDDO
+    !
+    IF (TRIM(lsda) /= 'none') THEN
+      current_spin = spin_save
+      nkstot = 2 * nkpts
+    ENDIF
+    ! need to coallese the full m-matrix for write out to file
+    CALL mp_sum(m_mat_global, inter_pool_comm)
     !
     ! RM - write mmn to file (file needed with vme = true)
     IF (meta_ionode) THEN
-      write_mmn = .TRUE.
-      IF (write_mmn) THEN
-        !
-        filmmn = TRIM(prefix)//'.mmn'
-        IF (ispinw == 2) filmmn = TRIM(prefix)//'.down.mmn'
-        OPEN(UNIT = iummn, FILE = filmmn, FORM = 'formatted')
-        DO ik = 1, iknum
-          DO ib = 1, nnb
-            !
-            DO n = 1, nbndep
-              DO m = 1, nbndep
-                WRITE(iummn,*) m_mat(m, n, ib, ik)
-              ENDDO ! m
-            ENDDO ! n
-            !
-          ENDDO ! ib
-        ENDDO ! ik
-        !
-        CLOSE(iummn)
-      ENDIF !write_mmn
-    ENDIF
+      !
+      filmmn = TRIM(prefix)//'.mmn'
+      IF (ispinw == 2) filmmn = TRIM(prefix)//'.down.mmn'
+      OPEN(UNIT = iummn, FILE = filmmn, FORM = 'formatted')
+      DO ik = 1, iknum
+        DO ib = 1, nnb
+          !
+          DO n = 1, nbndep
+            DO m = 1, nbndep
+              ! m_mat holds only this pool's k-points, the gathered array holds all of them
+              WRITE(iummn,*) m_mat_global(m, n, ib, ik)
+            ENDDO ! m
+          ENDDO ! n
+          !
+        ENDDO ! ib
+      ENDDO ! ik
+      !
+      CLOSE(iummn)
+    ENDIF ! meta_ionode
+    DEALLOCATE(m_mat_global, STAT = ierr)
+    IF (ierr /= 0) CALL errore('compute_mmn_para', 'Error deallocating Mmn_global', 1)
     !
     DEALLOCATE(Mkb, STAT = ierr)
     IF (ierr /= 0) CALL errore('compute_mmn_para', 'Error deallocating Mkb', 1)
@@ -2555,10 +2215,13 @@
       !
       ! Compute the dipole of the augmentation charge.
       !
-      ALLOCATE(dpqq(nhm, nhm, 3, ntyp))
+      ALLOCATE(dpqq(nhm, nhm, 3, ntyp), STAT = ierr)
+      IF (ierr /= 0) CALL errore('compute_pmn_para', 'Error allocating dpqq', 1)
+      !
       CALL compute_qdipol(dpqq)
       IF (lspinorb) THEN
-        ALLOCATE(dpqq_so(nhm, nhm, nspin, 3, ntyp))
+        ALLOCATE(dpqq_so(nhm, nhm, nspin, 3, ntyp), STAT = ierr)
+        IF (ierr /= 0) CALL errore('compute_pmn_para', 'Error allocating dpqq_so', 1) 
         CALL compute_qdipol_so(dpqq, dpqq_so)
       ENDIF
       !
@@ -2804,216 +2467,6 @@
     !-----------------------------------------------------------------------
     !
     !-----------------------------------------------------------------------
-    SUBROUTINE phases_a_m
-    !-----------------------------------------------------------------------
-    !!
-    !! We will set phases here on the matrices. It should not affect
-    !! the spreads and centers found in w90, but it will leave
-    !! u_mat_opt and u_mat to reflect the known phases.
-    !!
-    !
-    USE kinds,           ONLY : DP
-    USE mp_global,       ONLY : inter_pool_comm
-    USE mp,              ONLY : mp_sum
-    USE input,           ONLY : xk_loc, lsda
-    USE wvfct,           ONLY : nbnd
-    USE wann_common,     ONLY : a_mat, m_mat, n_wannier, n_proj, &
-                                nnb, kpb, iknum, excluded_band
-    USE global_var,      ONLY : umat, umat_all, nk_loc, nkpts
-    USE ep_constants,    ONLY : czero, cone, zero
-    USE kfold,           ONLY : ktokpmq
-    USE lsda_mod,        ONLY : current_spin
-    !
-    IMPLICIT NONE
-    !
-    INTEGER :: ik
-    !! Counter on k-points
-    INTEGER :: ikb
-    !! Index of k-point nearest neighbour
-    INTEGER :: ib
-    !! Counter on b-vectors
-    INTEGER :: ipool
-    !! Index of current pool
-    INTEGER ::  nkq
-    !! Index of k-point in the pool
-    INTEGER ::  nkq_abs
-    !! Absolute index of k-point
-    INTEGER ::  ik_g
-    !! Temporary index of k-point, ik_g = nkq_abs
-    INTEGER :: m, n
-    !! Counter over bands
-    INTEGER :: ibnd_m, ibnd_n
-    !! Band index
-    INTEGER :: iw
-    !! Counter on number of projections
-    INTEGER :: ierr
-    !! Error status
-    !
-    REAL(KIND = DP) :: zero_vect(3)
-    !! Temporary zero vector
-    !
-    COMPLEX(KIND = DP), ALLOCATABLE :: a_mat_tmp(:, :, :)
-    !! Temporary a_mat matrices
-    COMPLEX(KIND = DP), ALLOCATABLE :: a_mat_tmp1(:, :, :)
-    !! Temporary a_mat matrices
-    COMPLEX(KIND = DP), ALLOCATABLE :: m_mn_tmp1(:, :)
-    !! Temporary m_mat matrices
-    COMPLEX(KIND = DP), ALLOCATABLE :: m_mn_tmp2(:, :)
-    !! Temporary m_mat matrices
-    COMPLEX(KIND = DP), ALLOCATABLE :: m_mn_tmp3(:, :, :, :)
-    !! Temporary m_mat matrices
-    COMPLEX(KIND = DP), ALLOCATABLE :: m_mat_tmp(:, :, :, :)
-    !! Temporary m_mat matrices
-    !
-    ! RM: Band-dimension of a_mat and m_mat is num_bands while that of
-    !     umat and umat_all is nbnd. This causes a problem if exclude_bands
-    !     is used because num_bands = nbnd - nexband
-    !     a_mat(num_bands,n_wannier,nkstot) in compute_amn_para
-    !     m_mat(num_bands,n_wannier,nnb,nkstot) in compute_mmn_para
-    !     umat(nbnd,nbnd,nks) and umat_mat(nbnd,nbnd,nkstot) in setphases_wrap
-    !
-    ALLOCATE(a_mat_tmp(nbnd, n_wannier, iknum), STAT = ierr)
-    IF (ierr /= 0) CALL errore('phases_a_m', 'Error allocating a_mat_tmp', 1)
-    ALLOCATE(a_mat_tmp1(nbnd, n_wannier, iknum), STAT = ierr)
-    IF (ierr /= 0) CALL errore('phases_a_m', 'Error allocating a_mat_tmp1', 1)
-    ALLOCATE(m_mat_tmp(nbnd, nbnd, nnb, iknum), STAT = ierr)
-    IF (ierr /= 0) CALL errore('phases_a_m', 'Error allocating m_mat_tmp', 1)
-    ALLOCATE(m_mn_tmp1(nbnd, nbnd), STAT = ierr)
-    IF (ierr /= 0) CALL errore('phases_a_m', 'Error allocating m_mn_tmp1', 1)
-    ALLOCATE(m_mn_tmp2(nbnd, nbnd), STAT = ierr)
-    IF (ierr /= 0) CALL errore('phases_a_m', 'Error allocating m_mn_tmp2', 1)
-    ALLOCATE(m_mn_tmp3(nbnd, nbnd, nnb, iknum), STAT = ierr)
-    IF (ierr /= 0) CALL errore('phases_a_m', 'Error allocating m_mn_tmp3', 1)
-    !
-    ! zero all temporary/work quantities
-    !
-    zero_vect(:) = zero
-    a_mat_tmp(:, :, :) = czero
-    a_mat_tmp1(:, :, :) = czero
-    m_mn_tmp1(:, :) = czero
-    m_mn_tmp2(:, :) = czero
-    m_mn_tmp3(:, :, :, :) = czero
-    m_mat_tmp(:, :, :, :) = czero
-    !
-    ! full size a_mat_tmp1 and m_mat_tmp matrices to nbnd bands
-    !
-    DO ik = 1, iknum
-      DO iw = 1, n_proj
-        ibnd_m = 0
-        DO m = 1, nbnd
-          IF (excluded_band(m)) CYCLE
-          ibnd_m = ibnd_m + 1
-          a_mat_tmp1(m, iw, ik) = a_mat(ibnd_m, iw, ik)
-        ENDDO
-      ENDDO
-      !
-      DO ib = 1, nnb
-        ibnd_n = 0
-        DO n = 1, nbnd
-          IF (excluded_band(n)) CYCLE
-          ibnd_n = ibnd_n + 1
-          ibnd_m = 0
-          DO m = 1, nbnd
-            IF (excluded_band(m)) CYCLE
-            ibnd_m = ibnd_m + 1
-            m_mat_tmp(m, n, ib, ik) = m_mat(ibnd_m, ibnd_n, ib, ik)
-          ENDDO
-        ENDDO
-      ENDDO
-    ENDDO
-    !
-    current_spin = 1
-    IF (TRIM(lsda) == 'down') current_spin = 2
-    !
-    DO ik = 1, nk_loc
-      !
-      ! returns in-pool index nkq and absolute index nkq_abs of xk
-      CALL ktokpmq(xk_loc(:, ik), zero_vect, +1, ipool, nkq, nkq_abs)
-      ik_g = nkq_abs - (current_spin - 1) * nkpts
-      !
-      !  GF_n are the guiding functions which are our initial guesses
-      !  Amn(k) = <psi_k,m|GF_n>.
-      !  We want U(k)^\dagger<psi_k,m|GF_m>
-      !
-      ! CALL ZGEMM('c', 'n', nbnd, n_wannier, nbnd, cone, umat(:, :, ik), &
-      !      nbnd, a_mat(:, :, ik_g), nbnd, czero, a_mat_tmp(:, :, ik_g), nbnd)
-      CALL ZGEMM('c', 'n', nbnd, n_wannier, nbnd, cone, umat(:, :, ik), &
-           nbnd, a_mat_tmp1(:, :, ik_g), nbnd, czero, a_mat_tmp(:, :, ik_g), nbnd)
-      !
-      DO ib = 1,nnb
-        ikb = kpb(ik_g, ib)
-        !
-        ! Mmn(k,k+b)  = <psi_k_m| psi_(k+b)_n> so we need
-        !  (U(k)^\dagger <psi_k_m| ) * (|psi_k+b_n> U(k+b)
-        ! = U(k)^\dagger (M_mn) = m_mat_tmp,
-        ! Mmn(k,k+b)' = m_mat_tmp*U(k+b)
-        !
-        ! CALL ZGEMM('c', 'n', nbnd, nbnd, nbnd, cone, umat(:, :, ik), &
-        !      nbnd, m_mat(:, :, ib, ik_g), nbnd, czero, m_mn_tmp1(:, :), nbnd)
-        CALL ZGEMM('c', 'n', nbnd, nbnd, nbnd, cone, umat(:, :, ik), &
-             nbnd, m_mat_tmp(:, :, ib, ik_g), nbnd, czero, m_mn_tmp1(:, :), nbnd)
-        CALL ZGEMM('n', 'n', nbnd, nbnd, nbnd, cone, m_mn_tmp1(:, :), &
-             nbnd, umat_all(:, :, ikb), nbnd, czero, m_mn_tmp2(:, :), nbnd)
-        !
-        ! m_mn_tmp1 = MATMUL(CONJG(TRANSPOSE(umat(:, :, ik))), m_mat(:, :, ib, ik_g))
-        ! m_mn_tmp2 = MATMUL(m_mn_tmp1, umat_g(:, :, ikb))
-        !
-        m_mn_tmp3(:, :, ib, ik_g) = m_mn_tmp2(:, :)
-      ENDDO
-    ENDDO
-    CALL mp_sum(a_mat_tmp, inter_pool_comm)
-    CALL mp_sum(m_mn_tmp3, inter_pool_comm)
-    !
-    ! a_mat(:, :, :) = a_mat_tmp(:, :, :)
-    ! m_mat(:, :, :, :) = m_mn_tmp3(:, :, :, :)
-    !
-    ! slim down a_mat and m_mat matrices to num_bands=nbnd-nexband bands
-    !
-    DO ik = 1, iknum
-      DO iw = 1, n_proj
-        ibnd_m = 0
-        DO m = 1, nbnd
-          IF (excluded_band(m)) CYCLE
-          ibnd_m = ibnd_m + 1
-          a_mat(ibnd_m, iw, ik) = a_mat_tmp(m, iw, ik)
-        ENDDO
-      ENDDO
-      !
-      DO ib = 1, nnb
-        ibnd_n = 0
-        DO n = 1, nbnd
-          IF (excluded_band(n)) CYCLE
-          ibnd_n = ibnd_n + 1
-          ibnd_m = 0
-          DO m = 1, nbnd
-            IF (excluded_band(m)) CYCLE
-            ibnd_m = ibnd_m + 1
-            m_mat(ibnd_m, ibnd_n, ib, ik) = m_mn_tmp3(m, n, ib, ik)
-          ENDDO
-        ENDDO
-      ENDDO
-    ENDDO
-    !
-    DEALLOCATE(a_mat_tmp, STAT = ierr)
-    IF (ierr /= 0) CALL errore('phases_a_m', 'Error deallocating a_mat_tmp', 1)
-    DEALLOCATE(a_mat_tmp1, STAT = ierr)
-    IF (ierr /= 0) CALL errore('phases_a_m', 'Error deallocating a_mat_tmp1', 1)
-    DEALLOCATE(m_mat_tmp, STAT = ierr)
-    IF (ierr /= 0) CALL errore('phases_a_m', 'Error deallocating m_mat_tmp', 1)
-    DEALLOCATE(m_mn_tmp1, STAT = ierr)
-    IF (ierr /= 0) CALL errore('phases_a_m', 'Error deallocating m_mn_tmp1', 1)
-    DEALLOCATE(m_mn_tmp2, STAT = ierr)
-    IF (ierr /= 0) CALL errore('phases_a_m', 'Error deallocating m_mn_tmp2', 1)
-    DEALLOCATE(m_mn_tmp3, STAT = ierr)
-    IF (ierr /= 0) CALL errore('phases_a_m', 'Error deallocating m_mn_tmp3', 1)
-    !
-    RETURN
-    !
-    !-----------------------------------------------------------------------
-    END SUBROUTINE phases_a_m
-    !-----------------------------------------------------------------------
-    !
-    !-----------------------------------------------------------------------
     SUBROUTINE generate_guiding_functions(ik)
     !-----------------------------------------------------------------------
     !!
@@ -3145,40 +2598,89 @@
     !!
     !! Write bands
     !!
+    USE kinds,         ONLY : DP
     USE wvfct,         ONLY : nbnd
     USE ep_constants,  ONLY : rytoev
     USE wann_common,   ONLY : iknum, num_bands, eigval, &
-                              excluded_band
+                              excluded_band, ispinw
     USE ep_constants,  ONLY : zero
-    USE input,         ONLY : et_all
+    USE input,         ONLY : et_all, eig_read
+    USE io_files,      ONLY : prefix
+    USE io_var,        ONLY : iuqpeig
+    USE io_global,     ONLY : stdout, meta_ionode, ionode_id
+    USE global_var,    ONLY : nkpts
+    USE mp,            ONLY : mp_bcast
+    USE mp_images,     ONLY : intra_image_comm
     !
     IMPLICIT NONE
     !
     ! Local variables
+    CHARACTER(LEN = 256) :: tempfile
+    !! Temporary file
+    CHARACTER(LEN = 80) :: line
+    !! Temporary character
     INTEGER :: ik
     !! Counter on k-point
     INTEGER :: ibnd
     !! Counter on bands
     INTEGER :: ibnd1
     !! Band index
+    INTEGER :: ios
+    !! IO error status
     INTEGER :: ierr
     !! Error status
+    REAL(KIND = DP), ALLOCATABLE :: eigvaltmp(:, :)
+    !! External eigenvalues read from file, in eV
     !
     ALLOCATE(eigval(num_bands, iknum), STAT = ierr)
     IF (ierr /= 0) CALL errore('write_band', 'Error allocating eigval', 1)
     eigval(:, :) = zero
     !
-    DO ik = 1, iknum
-      ibnd1 = 0
-      DO ibnd = 1, nbnd
-        IF (excluded_band(ibnd)) CYCLE
-        ibnd1 = ibnd1 + 1
-        !
-        ! RM - same value for rytoev as in wannier90
-        ! eigval(ibnd1, ikevc) = et(ibnd, ik) * ryd2ev
-        eigval(ibnd1, ik) = et_all(ibnd, ik) * rytoev
+    IF (eig_read) THEN
+      ! External (e.g. GW) eigenvalues, so that the disentanglement windows act on them rather than on the DFT ones
+      IF (meta_ionode) THEN
+        ALLOCATE(eigvaltmp(nbnd, iknum), STAT = ierr)
+        IF (ierr /= 0) CALL errore('write_band', 'Error allocating eigvaltmp', 1)
+        eigvaltmp(:, :) = zero
+        WRITE(stdout, '(5x, a, i5, a, i5, a)') "Reading external electronic eigenvalues (", &
+             nbnd, ",", nkpts,")"
+        tempfile = TRIM(prefix)//'.eig'
+        IF (ispinw == 2) tempfile = TRIM(prefix) // '.down.eig'
+        OPEN(iuqpeig, FILE = tempfile, FORM = 'formatted', ACTION = 'read', IOSTAT = ios)
+        IF (ios /= 0) CALL errore('write_band', 'error opening '//tempfile, 1)
+        READ(iuqpeig, '(a)') line
+        DO ik = 1, nkpts
+          ! We do not save the k-point for the moment ==> should be read and
+          ! tested against the current one
+          READ(iuqpeig, '(a)') line
+          READ(iuqpeig, *) eigvaltmp(:, ik)
+        ENDDO
+        CLOSE(iuqpeig)
+        DO ik = 1, nkpts
+          ibnd1 = 0
+          DO ibnd = 1, nbnd
+            IF (excluded_band(ibnd)) CYCLE
+            ibnd1 = ibnd1 + 1
+            eigval(ibnd1, ik) = eigvaltmp(ibnd, ik)
+          ENDDO
+        ENDDO
+        DEALLOCATE(eigvaltmp, STAT = ierr)
+        IF (ierr /= 0) CALL errore('write_band', 'Error deallocating eigvaltmp', 1)
+      ENDIF
+      ! The file is read on one rank only, but library mode needs eigval on every rank
+      CALL mp_bcast(eigval, ionode_id, intra_image_comm)
+    ELSE
+      DO ik = 1, iknum
+        ibnd1 = 0
+        DO ibnd = 1, nbnd
+          IF (excluded_band(ibnd)) CYCLE
+          ibnd1 = ibnd1 + 1
+          !
+          ! RM - same value for rytoev as in wannier90
+          eigval(ibnd1, ik) = et_all(ibnd, ik) * rytoev
+        ENDDO
       ENDDO
-    ENDDO
+    ENDIF
     !
     RETURN
     !
@@ -3200,7 +2702,7 @@
     !! and Wannier90 (subroutine of plot_wannier in /src/plot.F90)
     !!
     USE kinds,           ONLY : DP
-    USE io_global,       ONLY : stdout, meta_ionode, meta_ionode_id
+    USE io_global,       ONLY : stdout, meta_ionode, ionode_id
     USE wvfct,           ONLY : nbnd, npw, npwx
     USE wavefunctions,   ONLY : evc, psic, psic_nc
     USE wann_common,     ONLY : excluded_band, u_mat, u_mat_opt, iknum, &
@@ -3214,7 +2716,7 @@
     USE mp_pools,        ONLY : my_pool_id
     USE kfold,           ONLY : ktokpmq
     USE io,              ONLY : readwfc
-    USE mp_world,        ONLY : world_comm
+    USE mp_images,       ONLY : intra_image_comm
     USE global_var,      ONLY : nbndep, wanplotlist, num_wannier_plot, &
                                 nk_loc, nkpts
     USE cell_base,       ONLY : at, bg, alat, tpiba
@@ -3429,7 +2931,7 @@
       !
     ENDDO
     !
-    CALL mp_barrier(world_comm)
+    CALL mp_barrier(intra_image_comm)
     !
     ! Lengths of real and reciprocal lattice vectors
     !
@@ -3612,10 +3114,10 @@
 #if defined(__MPI)
       IF (meta_ionode) THEN
         CALL MPI_REDUCE( MPI_IN_PLACE, wann_func, 2 * npol * ngridwf_max, MPI_DOUBLE_PRECISION, &
-                         MPI_SUM, meta_ionode_id, world_comm, ierr )
+                         MPI_SUM, ionode_id, intra_image_comm, ierr )
       ELSE
         CALL MPI_REDUCE( wann_func, wann_func, 2 * npol * ngridwf_max, MPI_DOUBLE_PRECISION, &
-                         MPI_SUM, meta_ionode_id, world_comm, ierr )
+                         MPI_SUM, ionode_id, intra_image_comm, ierr )
       ENDIF
       IF (ierr /= 0) CALL errore('write_plot', 'mpi_reduce', ierr)
 #endif
@@ -3675,7 +3177,7 @@
         ENDIF
         CALL internal_cube_format(loop_w)
       ENDIF
-      CALL mp_barrier(world_comm)
+      CALL mp_barrier(intra_image_comm)
     ENDDO ! loop_w
     !
     DEALLOCATE(wann_func, STAT = ierr)

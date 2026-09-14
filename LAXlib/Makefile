@@ -42,6 +42,13 @@ clean :
 $(LAX) : laxlib.fh  laxlib_hi.fh  laxlib_kinds.fh  laxlib_low.fh  laxlib_mid.fh  laxlib_param.fh
 
 
+ifneq ($(TOLERATE_MISSING_DEPEND),)
+-include make.depend
+else
+ifeq ($(wildcard make.depend),)
+$(error make.depend not found in $(CURDIR) -- run "make depend" first, or "make veryclean"/"make distclean" to clean without it)
+endif
 include make.depend
+endif
 
 

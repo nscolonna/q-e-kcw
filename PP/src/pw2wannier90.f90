@@ -830,10 +830,9 @@ PROGRAM pw2wannier90
   CALL mp_bcast(atom_proj_exclude, ionode_id, world_comm)
   CALL mp_bcast(atom_proj_frozen, ionode_id, world_comm)
   !
-  ! Check: kpoint distribution with pools in library mode not implemented
-  !
-  IF (npool > 1 .and. wan_mode == 'library') CALL errore('pw2wannier90', &
-      'pools not implemented for library mode', 1)
+  IF (wan_mode /= 'standalone' .AND. wan_mode /= 'library' .AND. &
+      wan_mode /= 'wannier2sic') CALL errore('pw2wannier90', &
+      'wan_mode must be standalone, library or wannier2sic, not '//TRIM(wan_mode), 1)
   !
   ! Check: bands distribution not implemented
   IF (nbgrp > 1) CALL errore('pw2wannier90', 'bands (-nb) not implemented', nbgrp)
@@ -1083,35 +1082,10 @@ PROGRAM pw2wannier90
      WRITE(stdout,*) ' ------------'
      WRITE(stdout,*)
      !
-     WRITE(stdout, *)
-     CALL print_clock('init_pw2wan')
-     CALL print_clock('compute_dmn')
-     CALL print_clock('compute_amn')
-     CALL print_clock('compute_mmn')
-     CALL print_clock('compute_spin')
-     CALL print_clock('compute_immn')
-     CALL print_clock('compute_shc')
-     CALL print_clock('compute_orb')
-     CALL print_clock('write_unk')
-     CALL print_clock('write_parity')
-     !
-     WRITE(stdout, '(/5x, "Internal routines:")')
-     CALL print_clock('scdm_QRCP')
-     CALL print_clock('compute_u_kb')
-     CALL print_clock('h_psi')
-     !
-     CALL mp_barrier(world_comm)
-     !
-     ! not sure if this should be called also in 'library' mode or not !!
-     CALL environment_end( )
-     IF ( ionode ) WRITE( stdout, *  )
-     CALL stop_pp
-     !
   ENDIF
   !
   IF(wan_mode=='library') THEN
      !
-!     seedname='wannier'
      WRITE(stdout,*) ' Setting up...'
      CALL setup_nnkp
      WRITE(stdout,*)
@@ -1136,9 +1110,12 @@ PROGRAM pw2wannier90
      IF(write_unkg) THEN
         CALL write_parity
      ENDIF
+     WRITE(stdout,*)
+     WRITE(stdout,*) ' Running Wannier90 as a library'
      CALL run_wannier
+     WRITE(stdout,*) ' Wannier90 run finished, see ', TRIM(seedname)//'.wout'
+     WRITE(stdout,*)
      CALL lib_dealloc
-     CALL stop_pp
      !
   ENDIF
   !
@@ -1149,8 +1126,46 @@ PROGRAM pw2wannier90
      !
   ENDIF
   !
-  STOP
+  CALL print_clock_pw2wannier90()
+  !
+  CALL mp_barrier(world_comm)
+  !
+  CALL environment_end( )
+  IF ( ionode ) WRITE( stdout, *  )
+  CALL stop_pp
+  !
 END PROGRAM pw2wannier90
+!
+!-----------------------------------------------------------------------
+SUBROUTINE print_clock_pw2wannier90
+  !-----------------------------------------------------------------------
+  !! Report the timings of every step. print_clock is silent for a clock that
+  !! was never started, so each wan_mode prints only the steps it ran.
+  !
+  USE io_global, ONLY : stdout
+  !
+  IMPLICIT NONE
+  !
+  WRITE(stdout, *)
+  CALL print_clock('init_pw2wan')
+  CALL print_clock('compute_dmn')
+  CALL print_clock('compute_amn')
+  CALL print_clock('compute_mmn')
+  CALL print_clock('compute_spin')
+  CALL print_clock('compute_immn')
+  CALL print_clock('compute_shc')
+  CALL print_clock('compute_orb')
+  CALL print_clock('write_unk')
+  CALL print_clock('write_parity')
+  CALL print_clock('run_wannier')
+  !
+  WRITE(stdout, '(/5x, "Internal routines:")')
+  CALL print_clock('atomproj_wfc')
+  CALL print_clock('scdm_QRCP')
+  CALL print_clock('compute_u_kb')
+  CALL print_clock('h_psi')
+  !
+END SUBROUTINE print_clock_pw2wannier90
 !
 !-----------------------------------------------------------------------
 SUBROUTINE lib_dealloc
@@ -1177,6 +1192,11 @@ SUBROUTINE setup_nnkp
   USE ions_base, ONLY : nat, tau, ityp, atm
   USE klist,     ONLY : xk
   USE mp,        ONLY : mp_bcast, mp_sum
+  USE mp,        ONLY : mp_get_comm_self
+  USE w90_library, ONLY : w90_set_comm, w90_input_reader, w90_print_info,      &
+                          w90_get_nn, w90_get_nnkp, w90_get_gkpb, w90_get_proj,&
+                          w90_distribute_kpts
+  USE w90_library_extra, ONLY : input_reader_special, set_kpoint_distribution
   USE mp_pools,  ONLY : intra_pool_comm
   USE mp_world,  ONLY : world_comm
   USE wvfct,     ONLY : nbnd,npwx
@@ -1186,10 +1206,12 @@ SUBROUTINE setup_nnkp
 
   IMPLICIT NONE
   real(DP) :: g_(3), gg_
-  INTEGER  :: ik, ib, ig, iw, ia, indexb, TYPE, ierr
+  INTEGER  :: ik, ib, ig, iw, indexb, ierr
   INTEGER, ALLOCATABLE :: ig_check(:,:)
   real(DP) :: xnorm, znorm, coseno
   INTEGER  :: exclude_bands(nbnd)
+  INTEGER  :: n_proj_found, nexcl
+  INTEGER, ALLOCATABLE :: kpb_(:,:), g_kpb_(:,:,:), dist_k(:)
 
   ! aam: translations between PW2Wannier90 and Wannier90
   ! pw2wannier90   <==>   Wannier90
@@ -1210,13 +1232,9 @@ SUBROUTINE setup_nnkp
   !    xaxis,zaxis         proj_x,proj_z
   !    alpha_w             proj_zona
   !    exclude_bands       exclude_bands
-  !    atcart              atoms_cart
-  !    atsym               atom_symbols
 
   ALLOCATE( kpt_latt(3,iknum), stat=ierr)
   IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating kpt_latt', 1)
-  ALLOCATE( atcart(3,nat), atsym(nat), stat=ierr)
-  IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating atcart/atsym', 1)
   ALLOCATE( kpb(iknum,num_nnmax), g_kpb(3,iknum,num_nnmax), stat=ierr)
   IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating kpb/g_kpb', 1)
   ALLOCATE( center_w(3,nbnd), alpha_w(nbnd), l_w(nbnd), &
@@ -1224,35 +1242,118 @@ SUBROUTINE setup_nnkp
        IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating center_w/alpha_w/l_w/...', 1)
   ALLOCATE( excluded_band(nbnd), stat=ierr)
   IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating excluded_band', 1)
+  ! Wannier90 v4 reports the spin numbers and quantisation axes of the
+  ! projections, which wannier_setup did not: library mode used to reach the
+  ! spinor projection factors in compute_amn with these unallocated
+  ALLOCATE( spin_eig(nbnd), spin_qaxis(3,nbnd), stat=ierr)
+  IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating spin_eig/spin_qaxis', 1)
 
-  ! real lattice (Cartesians, Angstrom)
+  ! real lattice (Cartesians, Angstrom), for the cross-check against the .win
   rlatt(:,:) = transpose(at(:,:))*alat*bohr
-  ! reciprocal lattice (Cartesians, Angstrom)
-  glatt(:,:) = transpose(bg(:,:))*tpi/(alat*bohr)
   ! convert Cartesian k-points to crystallographic co-ordinates
   kpt_latt(:,1:iknum)=xk(:,1:iknum)
   CALL cryst_to_cart(iknum,kpt_latt,at,-1)
-  ! atom co-ordinates in Cartesian co-ords and Angstrom units
-  atcart(:,:) = tau(:,:)*bohr*alat
-  ! atom symbols
-  DO ia=1,nat
-     TYPE=ityp(ia)
-     atsym(ia)=atm(TYPE)
-  ENDDO
 
   ! MP grid dimensions
   CALL find_mp_grid()
 
   WRITE(stdout,'("  - Number of atoms is (",i3,")")') nat
 
-#if defined(__WANLIB)
   IF (ionode) THEN
-     CALL wannier_setup(seedname,mp_grid,iknum,rlatt, &               ! input
-          glatt,kpt_latt,nbnd,nat,atsym,atcart,gamma_only,noncolin, & ! input
-          nnb,kpb,g_kpb,num_bands,n_wannier,center_w, &               ! output
-          l_w,mr_w,r_w,zaxis,xaxis,alpha_w,exclude_bands)             ! output
+     !
+     ! Wannier90 v4 has no wannier_setup(). The .win file is the input, read
+     ! here by input_reader_special followed by w90_input_reader -- the sequence
+     ! wannier90.x itself uses -- and what wannier_setup used to return is read
+     ! back through the getters below. The queued-option interface cannot serve
+     ! here: w90_input_setopt validates num_wann, which in library mode is only
+     ! known once the .win has been read, and input_reader_special is also the
+     ! only one of the two that takes the seedname.
+     ! The library is given MPI_COMM_SELF so that it stays serial on this rank,
+     ! as wannier_setup was, and the mp_bcast calls that follow still distribute
+     ! everything it produced. Pools parallelise the A- and M-matrices only;
+     ! compute_amn and compute_mmn gather them here before the library runs.
+     !
+     ! TODO: parallelise the wannierisation itself. v4 can run distributed over
+     ! k: give w90_set_comm a real communicator instead of MPI_COMM_SELF, make
+     ! QE's pool k-distribution agree with what w90_distribute_kpts returns, and
+     ! hand w90_set_m_local only the local k-slice of m_mat. That also removes
+     ! the full-size m_mat every rank now holds.
+     OPEN(NEWUNIT=w90out, FILE=TRIM(seedname)//'.wout', STATUS='replace')
+     OPEN(NEWUNIT=w90err, FILE=TRIM(seedname)//'.werr', STATUS='replace')
+     CALL w90_set_comm(w90main, mp_get_comm_self())
+     !
+     CALL input_reader_special(w90main, TRIM(seedname), w90out, w90err, ierr)
+     IF (ierr /= 0) CALL errore('setup_nnkp', 'Error in input_reader_special', ierr)
+     CALL w90_input_reader(w90main, w90out, w90err, ierr)
+     IF (ierr /= 0) CALL errore('setup_nnkp', 'Error in w90_input_reader', ierr)
+     CALL w90_print_info(w90main, w90out, w90err, ierr)
+     IF (ierr /= 0) CALL errore('setup_nnkp', 'Error in w90_print_info', ierr)
+     !
+     num_bands = w90main%num_bands
+     n_wannier = w90main%num_wann
+     !
+     ! The k-mesh now comes from the .win rather than from the arguments v3
+     ! passed, and the b-vectors are built from it, so check it against the
+     ! ground state instead of trusting it -- as read_nnkp does for the
+     ! standalone path
+     IF (w90main%num_kpts /= iknum) CALL errore('setup_nnkp', &
+        ' number of k-points in .win does not match the calculation', 1)
+     ! rows of Wannier90's real_lattice are the lattice vectors in Angstrom
+     ! (see utility_frac_to_cart), which is how rlatt is laid out
+     IF (ANY(ABS(w90main%real_lattice - rlatt) > eps6)) CALL errore('setup_nnkp', &
+        ' unit cell in .win does not match the calculation', 1)
+     DO ik = 1, iknum
+        IF (ANY(ABS(w90main%kpt_latt(:,ik) - kpt_latt(:,ik)) > eps6)) &
+           CALL errore('setup_nnkp', ' k-point in .win does not match the calculation', ik)
+     ENDDO
+     !
+     ! One rank, so every k-point is local to it
+     ALLOCATE( dist_k(iknum), stat=ierr)
+     IF (ierr /= 0) CALL errore('setup_nnkp', 'Error allocating dist_k', 1)
+     CALL w90_distribute_kpts(w90main, iknum, 1, dist_k, w90out, w90err, ierr)
+     IF (ierr /= 0) CALL errore('setup_nnkp', 'Error in w90_distribute_kpts', ierr)
+     CALL set_kpoint_distribution(w90main, dist_k, w90out, w90err, ierr)
+     IF (ierr /= 0) CALL errore('setup_nnkp', 'Error in set_kpoint_distribution', ierr)
+     DEALLOCATE( dist_k)
+     !
+     ! The band_loop below expects the v3 convention: an index list padded with
+     ! zeros to nbnd
+     exclude_bands(:) = 0
+     IF (ALLOCATED(w90main%exclude_bands)) THEN
+        nexcl = SIZE(w90main%exclude_bands)
+        IF (nexcl > nbnd) CALL errore('setup_nnkp',' too many excluded bands',nexcl)
+        exclude_bands(1:nexcl) = w90main%exclude_bands(:)
+     ENDIF
+     !
+     CALL w90_get_nn(w90main, nnb, w90out, w90err, ierr)
+     IF (ierr /= 0) CALL errore('setup_nnkp', 'Error in w90_get_nn', ierr)
+     IF (nnb > num_nnmax) CALL errore('setup_nnkp',' nnb exceeds num_nnmax',nnb)
+     !
+     ! kpb and g_kpb are dimensioned num_nnmax and broadcast at that size, while
+     ! the getters want arrays of exactly nnb neighbours
+     ALLOCATE( kpb_(iknum,nnb), g_kpb_(3,iknum,nnb), stat=ierr)
+     IF (ierr /= 0) CALL errore('setup_nnkp', 'Error allocating kpb_/g_kpb_', 1)
+     CALL w90_get_nnkp(w90main, kpb_, w90out, w90err, ierr)
+     IF (ierr /= 0) CALL errore('setup_nnkp', 'Error in w90_get_nnkp', ierr)
+     CALL w90_get_gkpb(w90main, g_kpb_, w90out, w90err, ierr)
+     IF (ierr /= 0) CALL errore('setup_nnkp', 'Error in w90_get_gkpb', ierr)
+     kpb(:,1:nnb) = kpb_(:,:)
+     g_kpb(:,:,1:nnb) = g_kpb_(:,:,:)
+     DEALLOCATE( kpb_, g_kpb_)
+     !
+     ! n_proj_found is pure output here; the arrays only have to be large enough
+     CALL w90_get_proj(w90main, n_proj_found, center_w, l_w, mr_w, spin_eig,   &
+                       r_w, xaxis, zaxis, spin_qaxis, alpha_w,                &
+                       w90out, w90err, ierr)
+     IF (ierr /= 0) CALL errore('setup_nnkp', 'Error in w90_get_proj', ierr)
+     ! library mode cannot represent more projections than Wannier functions:
+     ! u_matrix_opt is (num_bands, num_wann, num_kpts), with no room for the
+     ! select_projections step standalone wannier90.x applies
+     IF (n_proj_found /= n_wannier) CALL errore('setup_nnkp', &
+        ' number of projections in .win does not equal num_wann', n_proj_found)
+     !
+     ! w90out and w90err stay open for run_wannier, which closes them
   ENDIF
-#endif
 
   CALL mp_bcast(nnb,ionode_id, world_comm)
   CALL mp_bcast(kpb,ionode_id, world_comm)
@@ -1266,13 +1367,18 @@ SUBROUTINE setup_nnkp
   CALL mp_bcast(zaxis,ionode_id, world_comm)
   CALL mp_bcast(xaxis,ionode_id, world_comm)
   CALL mp_bcast(alpha_w,ionode_id, world_comm)
+  CALL mp_bcast(spin_eig,ionode_id, world_comm)
+  CALL mp_bcast(spin_qaxis,ionode_id, world_comm)
   CALL mp_bcast(exclude_bands,ionode_id, world_comm)
 
-  IF(noncolin) THEN
-     n_proj=n_wannier/2
-  ELSE
-     n_proj=n_wannier
-  ENDIF
+  ! n_proj = n_wannier/2 is the v3 convention, where wannier_setup returned one
+  ! entry per projection line. w90_get_proj instead returns num_wann entries for
+  ! spinors, two per line, so half of a_mat would be left zero here. Library
+  ! mode has never supported spinor projections; refuse it rather than return
+  ! silently wrong overlaps.
+  IF(noncolin) CALL errore('setup_nnkp', &
+     ' noncollinear spinor projections are not supported in library mode, use wan_mode=standalone', 1)
+  n_proj=n_wannier
 
   ALLOCATE( gf(npwx,n_proj), csph(16,n_proj), stat=ierr)
   IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating gf/csph', 1)
@@ -1364,15 +1470,19 @@ SUBROUTINE run_wannier
   !-----------------------------------------------------------------------
   !
   USE io_global, ONLY : ionode, ionode_id
-  USE ions_base, ONLY : nat
   USE mp,        ONLY : mp_bcast
   USE mp_world,  ONLY : world_comm
-  USE control_flags, ONLY : gamma_only
+  USE w90_library, ONLY : w90_set_m_local, w90_set_eigval, w90_set_u_opt,      &
+                          w90_set_u_matrix, w90_disentangle,                   &
+                          w90_project_overlap, w90_wannierise, w90_plot,       &
+                          w90_get_centres, w90_get_spreads, w90_print_timings
   USE wannier
 
   IMPLICIT NONE
 
   INTEGER :: ierr
+
+  CALL start_clock('run_wannier')
 
   ALLOCATE(u_mat(n_wannier,n_wannier,iknum), stat=ierr)
   IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating u_mat', 1)
@@ -1385,21 +1495,51 @@ SUBROUTINE run_wannier
   ALLOCATE(wann_spreads(n_wannier), stat=ierr)
   IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating wann_spreads', 1)
 
-#if defined(__WANLIB)
   IF (ionode) THEN
-     CALL wannier_run(seedname,mp_grid,iknum,rlatt, &                ! input
-          glatt,kpt_latt,num_bands,n_wannier,nnb,nat, &              ! input
-          atsym,atcart,gamma_only,m_mat,a_mat,eigval, &              ! input
-          u_mat,u_mat_opt,lwindow,wann_centers,wann_spreads,spreads) ! output
+     !
+     ! Wannier90 v4 has no wannier_run() either: the minimisation steps are
+     ! called individually, on arrays that stay owned here. The setters hand the
+     ! library pointers to them, and the results come back in place.
+     CALL w90_set_m_local(w90main, m_mat)
+     CALL w90_set_eigval(w90main, eigval)
+     CALL w90_set_u_opt(w90main, u_mat_opt)
+     CALL w90_set_u_matrix(w90main, u_mat)
+     !
+     ! the initial projections are where the minimisation starts
+     u_mat_opt(:,:,:) = a_mat(:,:,:)
+     !
+     CALL w90_disentangle(w90main, w90out, w90err, ierr)
+     IF (ierr /= 0) CALL errore('run_wannier', 'Error in w90_disentangle', ierr)
+     CALL w90_project_overlap(w90main, w90out, w90err, ierr)
+     IF (ierr /= 0) CALL errore('run_wannier', 'Error in w90_project_overlap', ierr)
+     CALL w90_wannierise(w90main, w90out, w90err, ierr)
+     IF (ierr /= 0) CALL errore('run_wannier', 'Error in w90_wannierise', ierr)
+     CALL w90_plot(w90main, w90out, w90err, ierr)
+     IF (ierr /= 0) CALL errore('run_wannier', 'Error in w90_plot', ierr)
+     !
+     CALL w90_get_centres(w90main, wann_centers)
+     CALL w90_get_spreads(w90main, wann_spreads)
+     !
+     ! lwindow is only filled by the disentanglement step
+     IF (num_bands > n_wannier) THEN
+        lwindow = w90main%dis_manifold%lwindow
+     ELSE
+        lwindow = .true.
+     ENDIF
+     !
+     CALL w90_print_timings(w90main, w90out)
+     !
+     CLOSE(w90out)
+     CLOSE(w90err, STATUS='DELETE')
   ENDIF
-#endif
 
   CALL mp_bcast(u_mat,ionode_id, world_comm)
   CALL mp_bcast(u_mat_opt,ionode_id, world_comm)
   CALL mp_bcast(lwindow,ionode_id, world_comm)
   CALL mp_bcast(wann_centers,ionode_id, world_comm)
   CALL mp_bcast(wann_spreads,ionode_id, world_comm)
-  CALL mp_bcast(spreads,ionode_id, world_comm)
+
+  CALL stop_clock('run_wannier')
 
   RETURN
 END SUBROUTINE run_wannier
@@ -2706,7 +2846,8 @@ SUBROUTINE compute_mmn
    USE upf_spinorb,     ONLY : transform_qq_so
    USE becmod,          ONLY : bec_type, becp, calbec, &
                                allocate_bec_type, deallocate_bec_type
-   USE mp_pools,        ONLY : intra_pool_comm, root_pool, my_pool_id, me_pool, npool
+   USE mp_pools,        ONLY : intra_pool_comm, inter_pool_comm, root_pool,     &
+                               my_pool_id, me_pool, npool
    USE mp,              ONLY : mp_sum, mp_barrier
    USE noncollin_module,ONLY : noncolin, npol, lspinorb
    USE lsda_mod,        ONLY : lsda, isk
@@ -2763,8 +2904,10 @@ SUBROUTINE compute_mmn
    ENDIF
 
    IF (wan_mode=='library') THEN
-      ALLOCATE(m_mat(num_bands, num_bands, nnb, iknum))
+      ALLOCATE(m_mat(num_bands, num_bands, nnb, iknum), stat=ierr)
       IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating m_mat', 1)
+      ! Each pool fills only its own k-points; the rest are summed in below
+      m_mat = (0.0_DP, 0.0_DP)
    ENDIF
 
    IF (wan_mode=='standalone') THEN
@@ -3009,12 +3152,18 @@ SUBROUTINE compute_mmn
    !
    IF (me_pool == root_pool .AND. wan_mode=='standalone') CLOSE (iun_mmn, STATUS="KEEP")
    !
+   ! Collect the k-points of the other pools. Ranks of a pool all hold the same
+   ! Mkb (summed over intra_pool_comm above) and each global k belongs to one
+   ! pool only, so this leaves the full m_mat on every rank.
+   !
+   IF (wan_mode=='library') CALL mp_sum(m_mat, inter_pool_comm)
+   !
    CALL mp_barrier(world_comm)
    !
    ! If using pool parallelization, concatenate files written by other nodes
-   ! to the main output.
+   ! to the main output. Library mode wrote no files to merge.
    !
-   CALL utility_merge_files("mmn", .TRUE.)
+   IF (wan_mode=='standalone') CALL utility_merge_files("mmn", .TRUE.)
    !
    IF (gamma_only) DEALLOCATE(evc_kb_m)
    DEALLOCATE(Mkb)
@@ -5037,7 +5186,8 @@ SUBROUTINE compute_amn
    USE io_global,       ONLY : stdout, ionode
    USE mp,              ONLY : mp_sum, mp_barrier
    USE mp_world,        ONLY : world_comm
-   USE mp_pools,        ONLY : intra_pool_comm, me_pool, root_pool, my_pool_id
+   USE mp_pools,        ONLY : intra_pool_comm, inter_pool_comm, me_pool,        &
+                               root_pool, my_pool_id
    USE klist,           ONLY : nkstot, xk, ngk, igk_k, nks
    USE wvfct,           ONLY : nbnd, npwx
    USE control_flags,   ONLY : gamma_only
@@ -5087,6 +5237,8 @@ SUBROUTINE compute_amn
    IF (wan_mode=='library') THEN
       ALLOCATE(a_mat(num_bands, n_wannier, iknum), stat=ierr)
       IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating a_mat', 1)
+      ! Each pool fills only its own k-points; the rest are summed in below
+      a_mat = (0.0_DP, 0.0_DP)
    ENDIF
    !
    IF (wan_mode=='standalone') THEN
@@ -5190,14 +5342,18 @@ SUBROUTINE compute_amn
             ELSE ! .NOT. (spin_z_pos .OR. spin_z_neg)
                ! general routine
                ! for quantisation axis (a,b,c)
-               ! 'up'    eigenvector is 1/sqrt(1+c) [c+1,a+ib]
-               ! 'down'  eigenvector is 1/sqrt(1-c) [c-1,a+ib]
+               ! normalised eigenvectors of n.sigma for the axis (a,b,c):
+               !   'up'    1/sqrt(2*(1+c)) [c+1,a+ib]
+               !   'down'  1/sqrt(2*(1-c)) [c-1,a+ib]
+               ! the 2 matters: without it these have norm sqrt(2), while the
+               ! +z/-z branch above uses amplitude 1, so a run mixing on-axis
+               ! and off-axis projections would weight them differently
                IF (spin_eig(iw)==1) THEN
-                  fac(1)=(1.0_dp/sqrt(1+spin_qaxis(3,iw)))*(spin_qaxis(3,iw)+1)*cmplx(1.0d0,0.0d0,dp)
-                  fac(2)=(1.0_dp/sqrt(1+spin_qaxis(3,iw)))*cmplx(spin_qaxis(1,iw),spin_qaxis(2,iw),dp)
+                  fac(1)=(1.0_dp/sqrt(2*(1+spin_qaxis(3,iw))))*(spin_qaxis(3,iw)+1)*cmplx(1.0d0,0.0d0,dp)
+                  fac(2)=(1.0_dp/sqrt(2*(1+spin_qaxis(3,iw))))*cmplx(spin_qaxis(1,iw),spin_qaxis(2,iw),dp)
                ELSE
-                  fac(1)=(1.0_dp/sqrt(1-spin_qaxis(3,iw)))*(spin_qaxis(3,iw)-1)*cmplx(1.0d0,0.0d0,dp)
-                  fac(2)=(1.0_dp/sqrt(1-spin_qaxis(3,iw)))*cmplx(spin_qaxis(1,iw),spin_qaxis(2,iw),dp)
+                  fac(1)=(1.0_dp/sqrt(2*(1-spin_qaxis(3,iw))))*(spin_qaxis(3,iw)-1)*cmplx(1.0d0,0.0d0,dp)
+                  fac(2)=(1.0_dp/sqrt(2*(1-spin_qaxis(3,iw))))*cmplx(spin_qaxis(1,iw),spin_qaxis(2,iw),dp)
                ENDIF
                !
                DO ipol = 1, npol
@@ -5251,15 +5407,21 @@ SUBROUTINE compute_amn
    !
    IF (me_pool == root_pool .AND. wan_mode=='standalone') CLOSE (iun_amn, STATUS="KEEP")
    !
+   ! Collect the k-points of the other pools, as compute_mmn does for m_mat.
+   !
+   IF (wan_mode=='library') CALL mp_sum(a_mat, inter_pool_comm)
+   !
    CALL mp_barrier(world_comm)
    !
    ! If using pool parallelization, concatenate files written by other nodes
-   ! to the main output.
+   ! to the main output. Library mode wrote no files to merge.
    !
-   IF (irr_bz) THEN
-      CALL utility_merge_files("iamn", .TRUE.)
-   ELSE
-      CALL utility_merge_files("amn", .TRUE.)
+   IF (wan_mode=='standalone') THEN
+      IF (irr_bz) THEN
+         CALL utility_merge_files("iamn", .TRUE.)
+      ELSE
+         CALL utility_merge_files("amn", .TRUE.)
+      ENDIF
    ENDIF
    !
    DEALLOCATE(sgf)
@@ -6609,11 +6771,11 @@ subroutine orient_gf_spinor(npw)
         gf_spinor(istart:istart+npw-1, iw) = gf(1:npw, iw)
      else
        if(spin_eig(iw)==1) then
-          fac(1)=(1.0_dp/sqrt(1+spin_qaxis(3,iw)))*(spin_qaxis(3,iw)+1)*cmplx(1.0d0,0.0d0,dp)
-          fac(2)=(1.0_dp/sqrt(1+spin_qaxis(3,iw)))*cmplx(spin_qaxis(1,iw),spin_qaxis(2,iw),dp)
+          fac(1)=(1.0_dp/sqrt(2*(1+spin_qaxis(3,iw))))*(spin_qaxis(3,iw)+1)*cmplx(1.0d0,0.0d0,dp)
+          fac(2)=(1.0_dp/sqrt(2*(1+spin_qaxis(3,iw))))*cmplx(spin_qaxis(1,iw),spin_qaxis(2,iw),dp)
        else
-          fac(1)=(1.0_dp/sqrt(1+spin_qaxis(3,iw)))*(spin_qaxis(3,iw))*cmplx(1.0d0,0.0d0,dp)
-          fac(2)=(1.0_dp/sqrt(1-spin_qaxis(3,iw)))*cmplx(spin_qaxis(1,iw),spin_qaxis(2,iw),dp)
+          fac(1)=(1.0_dp/sqrt(2*(1-spin_qaxis(3,iw))))*(spin_qaxis(3,iw)-1)*cmplx(1.0d0,0.0d0,dp)
+          fac(2)=(1.0_dp/sqrt(2*(1-spin_qaxis(3,iw))))*cmplx(spin_qaxis(1,iw),spin_qaxis(2,iw),dp)
        endif
        gf_spinor(1:npw, iw) = gf(1:npw, iw) * fac(1)
        gf_spinor(npwx + 1:npwx + npw, iw) = gf(1:npw, iw) * fac(2)
@@ -6753,7 +6915,8 @@ SUBROUTINE write_band
    !
    CALL mp_barrier(world_comm)
    !
-   CALL utility_merge_files("eig", .TRUE.)
+   ! Library mode wrote no files to merge.
+   IF (wan_mode == 'standalone') CALL utility_merge_files("eig", .TRUE.)
    !
 END SUBROUTINE write_band
 

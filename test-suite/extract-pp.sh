@@ -21,6 +21,15 @@ etnl=`grep 'T_c^nl' $fname | awk '{print $2}'`
 ekc=`grep 'Kinetic-correlation Energy' $fname | awk '{print $3}'`
 enl=`grep 'Non-local energy' $fname | awk '{print $4}'`
 
+# PW2WANNIER90 in library mode: Wannier90 results, from the appended .wout
+wf=`sed -n '/Final State/,/Sum of centres/p' $fname | grep 'WF centre and spread' \
+    | sed 's/[(),]/ /g' | awk '{print $6, $7, $8, $9}'`
+omegai=`grep 'Omega I  ' $fname | tail -1 | awk '{print $NF}'`
+omegad=`grep 'Omega D  ' $fname | tail -1 | awk '{print $NF}'`
+omegaod=`grep 'Omega OD ' $fname | tail -1 | awk '{print $NF}'`
+omegatot=`grep 'Omega Total' $fname | tail -1 | awk '{print $NF}'`
+disomegai=`grep 'Final Omega_I' $fname | tail -1 | awk '{print $3}'`
+
 if test "$e1" != ""; then
         echo e1
         echo $e1
@@ -56,4 +65,28 @@ fi
 if test "$enl" != ""; then
         echo enl
         echo $enl
+fi
+if test "$wf" != ""; then
+        echo wfcx wfcy wfcz wfspread
+        echo "$wf"
+fi
+if test "$omegai" != ""; then
+        echo omegai
+        echo $omegai
+fi
+if test "$omegad" != ""; then
+        echo omegad
+        echo $omegad
+fi
+if test "$omegaod" != ""; then
+        echo omegaod
+        echo $omegaod
+fi
+if test "$omegatot" != ""; then
+        echo omegatot
+        echo $omegatot
+fi
+if test "$disomegai" != ""; then
+        echo disomegai
+        echo $disomegai
 fi

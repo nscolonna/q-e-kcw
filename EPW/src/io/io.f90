@@ -2143,11 +2143,11 @@
     !!
     !
     USE kinds,      ONLY : DP
-    USE mp_global,  ONLY : world_comm, inter_pool_comm
-    USE mp,         ONLY : mp_bcast, mp_max
-    USE io_global,  ONLY : meta_ionode,ionode_id,ionode, meta_ionode_id
+    USE mp_world,   ONLY : world_comm
+    USE mp,         ONLY : mp_bcast
+    USE io_global,  ONLY : meta_ionode_id, meta_ionode
     USE io_var,     ONLY : iukgmap
-    USE global_var, ONLY : ngxxf, ngxx, ng0vec, shift, gmap, g0vec_all_r
+    USE global_var, ONLY : ngxxf, ngxx, ng0vec, gmap, g0vec_all_r
     USE io_files,   ONLY : prefix
     USE input,      ONLY : lsda
     !
@@ -2161,6 +2161,8 @@
     !! Counter on k-points
     INTEGER :: ik1
     !! Temporary indices when reading kgmap files
+    INTEGER :: itmp
+    !! Discarded field when reading kgmap files
     INTEGER :: ig0
     !! Counter on G_0 vectors
     INTEGER :: ishift
@@ -2174,6 +2176,9 @@
     CHARACTER(LEN = 256) :: fnm
     !! Buffer file name
     !
+    ! .kgmap is a single shared file: one rank reads it and feeds the whole run, so
+    ! every gate and broadcast below is on meta_ionode
+    !
     IF (meta_ionode) THEN
       !
       fnm = TRIM(prefix) // '.kgmap'
@@ -2183,10 +2188,11 @@
       !
       READ(iukgmap, *) ngxxf
       !
-      !! HL: The part below should be removed later since it is useless.
+      ! These records are superseded by readkmap, but must still be stepped over
+      ! to leave the file positioned on ng0vec. shift is not allocated yet.
       !
       DO ik = 1, nkstot
-        READ(iukgmap, *) ik1, shift(ik1)
+        READ(iukgmap, *) ik1, itmp
       ENDDO
       !
       READ(iukgmap, *) ng0vec
@@ -2195,14 +2201,14 @@
     !
     ! first node broadcasts ng0vec to all nodes for allocation of gmap
     !
-    CALL mp_bcast(ngxxf, ionode_id, inter_pool_comm)
-    CALL mp_bcast(ng0vec, ionode_id, inter_pool_comm)
+    CALL mp_bcast(ngxxf, meta_ionode_id, world_comm)
+    CALL mp_bcast(ng0vec, meta_ionode_id, world_comm)
     !
     ALLOCATE(gmap(ngxx * ng0vec), STAT = ierr)
     IF (ierr /= 0) CALL errore('readgmap', 'Error allocating gmap', 1)
     gmap(:) = 0
     !
-    IF (ionode) THEN
+    IF (meta_ionode) THEN
        !
       DO ig0 = 1, ng0vec
         READ(iukgmap,*) g0vec_all_r(:,ig0)
