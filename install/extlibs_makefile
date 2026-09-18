@@ -11,6 +11,11 @@
 sinclude ../make.inc
 include install_utils
 
+# The stamps below record that the checkout step ran, not that the submodule is
+# at the recorded commit, so they are tied to the record file: bumping a pin
+# must force the checkout to be redone.
+SUBMODULE_RECORDS = $(TOPDIR)/external/submodule_commit_hash_records
+
 all: libdevx libmbd libw90
 
 ###################################
@@ -19,7 +24,7 @@ all: libdevx libmbd libw90
 
 libdevx : git_devx make_devx
 
-git_devx :
+git_devx : $(SUBMODULE_RECORDS)
 	$(call update_submodule,external,devxlib)
 	touch git_devx
 
@@ -47,7 +52,7 @@ distclean_devx:
 
 libmbd: git_mbd make_mbd
 
-git_mbd:
+git_mbd: $(SUBMODULE_RECORDS)
 	$(call update_submodule,external,mbd)
 	touch git_mbd
 
@@ -74,7 +79,7 @@ distclean_mbd:
 
 libw90: git_w90 make_w90
 
-git_w90:
+git_w90: $(SUBMODULE_RECORDS)
 	$(call update_submodule,external,wannier90)
 	touch git_w90
 
