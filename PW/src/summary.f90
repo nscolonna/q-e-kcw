@@ -109,13 +109,7 @@ SUBROUTINE summary()
   WRITE( stdout, 103) nbnd, ecutwfc, ecutrho
   IF ( xclib_dft_is('hybrid') ) WRITE( stdout, 104) ecutfock
   IF ( lscf) WRITE( stdout, 105) tr2, mixing_beta, nmix, mixing_style
-  IF ( imix == 3 ) WRITE( stdout, 115) maxlinmix, simplemix 
-!          THEN
-!       WRITE( stdout, * ) ' maxlinmix = '
-!       WRITE( stdout, * ) maxlinmix 
-!       WRITE( stdout, * ) ' simplemix = '
-!       WRITE( stdout, * ) simplemix 
-! ENDIF
+  IF ( lscf .AND. imix == 3 ) WRITE( stdout, 108) maxlinmix, simplemix
   IF ( lmd .OR. lbfgs ) WRITE (stdout, 106) epse, epsf
   IF ( lmovecell ) WRITE (stdout, 107) epsp
   !
@@ -144,9 +138,9 @@ SUBROUTINE summary()
        &     'force convergence thresh. = ',1PE12.1)
 107 FORMAT(5X, &
        &     'press convergence thresh. = ',1PE12.1)
-115 FORMAT(5X, &
+108 FORMAT(5X, &
        &     'magn linear mixing # iter = ',I12,/,5X, &
-       &     'magn linear mixing coeff  = ',F12.4,/)                         
+       &     'magn linear mixing coeff  = ',F12.4)
   !
   call write_dft_name ( ) 
   !

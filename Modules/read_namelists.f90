@@ -399,12 +399,12 @@ MODULE read_namelists_module
        diis_rothr  = 0.0_DP
        diis_ethr   = 0.0_DP
        diis_chguess = .FALSE.
-       maxlinmix = 7 
-       simplemix = 1.5_DP
        mixing_mode = 'plain'
        mixing_fixed_ns = 0
        mixing_beta = -1.0_DP
        mixing_ndim = 8
+       maxlinmix = 7
+       simplemix = 1.5_DP
        diagonalization = 'david'
        diago_thr_init = 0.0_DP
        diago_cg_maxiter = 20

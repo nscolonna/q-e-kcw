@@ -394,8 +394,8 @@ SUBROUTINE control_iosys()
   ! ... ELECTRONS namelist
   !
   USE input_parameters, ONLY : exx_maxstep, electron_maxstep, mixing_mode, mixing_beta, &
-                               maxlinmix, simplemix,                       &
                                mixing_ndim, mixing_fixed_ns, conv_thr,     &
+                               maxlinmix, simplemix,                       &
                                tqr, tq_smoothing, tbeta_smoothing,         &
                                diago_thr_init,                             &
                                diago_cg_maxiter,                           &
@@ -826,6 +826,7 @@ SUBROUTINE control_iosys()
   ENDIF
   !
   nsp = ntyp
+  !
   !
   ! STARTING AND RESTARTING
   !

@@ -26,7 +26,7 @@ SUBROUTINE electrons()
   USE scf,                  ONLY : rho, rho_core, rhog_core, tau_core, v, vltot, &
                                    vrs, kedtau, vnew
   USE control_flags,        ONLY : tr2, nexxiter, conv_elec, restart, lmd, &
-                                   do_makov_payne, sic            
+                                   do_makov_payne, sic
   USE sic_mod,              ONLY : sic_energy, occ_f2fn, occ_fn2f, save_rhon, sic_first
   USE io_files,             ONLY : iunres, seqopn
   USE ldaU,                 ONLY : eth
@@ -38,7 +38,7 @@ SUBROUTINE electrons()
                                    fock0, fock1, fock2, fock3, dexx, use_ace, local_thr, &
                                    domat
   USE xc_lib,               ONLY : xclib_dft_is, exx_is_active, stop_exx
-  USE control_flags,        ONLY : adapt_thr, tr2_init, tr2_multi, gamma_only               
+  USE control_flags,        ONLY : adapt_thr, tr2_init, tr2_multi, gamma_only
   !
   USE paw_variables,        ONLY : okpaw, ddd_paw, total_core_energy, only_paw
   USE paw_onecenter,        ONLY : PAW_potential
@@ -416,7 +416,7 @@ SUBROUTINE electrons_scf ( printout, exxen )
                                    restart, io_level, do_makov_payne,  &
                                    gamma_only, iverbosity, textfor,     &
                                    llondon, ldftd3, scf_must_converge, lxdm, ts_vdw, &
-                                   mbd_vdw, use_gpu      
+                                   mbd_vdw, use_gpu
   USE control_flags,        ONLY : n_scf_steps, scf_error, scissor, gamma_only
   USE sci_mod,              ONLY : sci_iter
 

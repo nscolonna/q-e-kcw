@@ -85,7 +85,7 @@ CONTAINS
 !
 !----------------------------------------------------------------------------
 SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
-                    iunmix, conv, maxlinmix2, simplemix2 )
+                    iunmix, conv, maxlinmix, simplemix )
   !----------------------------------------------------------------------------
   !! * Modified Broyden's method for charge density mixing: D.D. Johnson,
   !!   PRB 38, 12807 (1988) ;
@@ -93,7 +93,13 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
   !!   PRB 64,121101 (2001) ;
   !! * Extended to mix also quantities needed for PAW, meta-GGA, DFT+U(+V) ;
   !! * Electric field (all these are included into \(\text{mix_type}\)) ;
-  !! * On output: the mixed density is in \(\text{rhoin}\), 
+  !! * imix==3 ('simple-magn'): for the first maxlinmix iterations the
+  !!   magnetization (spin channels 2:nspin) is mixed with plain linear
+  !!   mixing at rate simplemix instead of Broyden, while the Broyden
+  !!   df/dv history keeps accumulating the real (unrestricted) residual
+  !!   throughout, so the handover to full Broyden mixing after maxlinmix
+  !!   iterations starts from a populated history instead of a cold one ;
+  !! * On output: the mixed density is in \(\text{rhoin}\),
   !!   \(\text{input_rhout}\) is unchanged.
   !
   USE kinds,          ONLY : DP
@@ -137,17 +143,19 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
   !! the estimated error on the energy
   LOGICAL, INTENT(OUT) :: conv
   !! .TRUE. if the convergence has been reached
+  INTEGER, OPTIONAL, INTENT(IN) :: maxlinmix
+  !! (imix==3 only) number of iterations using plain mixing for magnetization
+  REAL(DP), OPTIONAL, INTENT(IN) :: simplemix
+  !! (imix==3 only) plain mixing coefficient for magnetization
   !
   TYPE(scf_type), INTENT(INOUT) :: input_rhout
   TYPE(scf_type), INTENT(INOUT) :: rhoin
   !
-  ! ... @au
-  integer, intent(in), optional :: maxlinmix2
-  real(DP), intent(in), optional :: simplemix2
-  !
   ! ... local variables
   !
   TYPE(mix_type) :: rhout_m, rhoin_m
+  TYPE(mix_type) :: rhout_m_lin, rhoin_m_lin
+     ! pristine (pre-Broyden-correction) snapshots, used only for imix==3
   INTEGER, PARAMETER :: &
     maxmix = 25     ! max number of iterations for charge mixing
   INTEGER ::       &
@@ -167,12 +175,6 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
 #if defined(__NORMALIZE_BETAMIX)
   REAL(DP) :: norm2, obn
 #endif
-  !
-  integer :: sstart
-  integer :: sstop
-  real(DP) :: scal
-! integer, parameter :: & 
-!   maxlinmix = 7  ! max number of iterations for simple magnetization mixing 
   !
   ! ... saved variables and arrays
   !
@@ -204,20 +206,6 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
   !
   mixrho_iter = iter
   !
-  sstart = 1
-  sstop = nspin
-  !
-  if ( imix == 3 ) then
-    if ( mixrho_iter <= maxlinmix2 ) then
-       sstart = 1
-       sstop = 1
-    else    
-       sstart = 1
-       sstop = nspin
-    endif   
-  endif     
-  !
-  !
   IF ( n_iter > maxmix ) CALL errore( 'mix_rho', 'n_iter too big', 1 )
   !
   ! define mix_type variables and copy scf_type variables there
@@ -227,7 +215,25 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
   !
   call assign_scf_to_mix_type(rhoin, rhoin_m)
   call assign_scf_to_mix_type(input_rhout, rhout_m)
-  call mix_type_AXPY ( -1.d0, rhoin_m, rhout_m, sstart, sstop )  ! sstart = sstop = 1
+  call mix_type_AXPY ( -1.d0, rhoin_m, rhout_m )
+  !
+  ! ... imix==3 ('simple-magn'): snapshot the pristine input density and
+  ! ... the just-computed (unrestricted) residual, before Broyden's own
+  ! ... history-based correction (below) modifies both. These snapshots
+  ! ... are what the plain-mixing magnetization update further down is
+  ! ... built from; everything else in between (residual, dr2, df/dv
+  ! ... history, betamix) is left untouched so it keeps operating on the
+  ! ... full spin range, which is what lets Broyden's history be already
+  ! ... populated for magnetization once iter > maxlinmix.
+  !
+  IF ( imix == 3 .AND. PRESENT(maxlinmix) ) THEN
+     IF ( mixrho_iter <= maxlinmix ) THEN
+        CALL create_mix_type( rhoin_m_lin )
+        CALL create_mix_type( rhout_m_lin )
+        CALL mix_type_COPY( rhoin_m, rhoin_m_lin )
+        CALL mix_type_COPY( rhout_m, rhout_m_lin )
+     END IF
+  END IF
   !
   IF ( lgcscf ) THEN
      !
@@ -235,7 +241,7 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
      !
   ELSE
      !
-     dr2 = rho_ddot( rhout_m, rhout_m, ngms, spinstop = sstop )  !!!! this used to be ngm NOT ngms
+     dr2 = rho_ddot( rhout_m, rhout_m, ngms )  !!!! this used to be ngm NOT ngms
      !
   END IF
   !
@@ -279,6 +285,13 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
      !
      call destroy_mix_type(rhoin_m)
      call destroy_mix_type(rhout_m)
+     !
+     IF ( imix == 3 .AND. PRESENT(maxlinmix) ) THEN
+        IF ( mixrho_iter <= maxlinmix ) THEN
+           CALL destroy_mix_type( rhoin_m_lin )
+           CALL destroy_mix_type( rhout_m_lin )
+        END IF
+     END IF
      !
 #if defined (__OSCDFT)
   IF (use_oscdft .AND. (oscdft_ctx%inp%oscdft_type==2)) THEN
@@ -356,8 +369,8 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
      CALL davcio_mix_type( df(ipos), iunmix, 1, read_ )
      CALL davcio_mix_type( dv(ipos), iunmix, 2, read_ )
      !
-     call mix_type_AXPY ( -1.d0, rhout_m, df(ipos), sstart, sstop )   ! sstart = sstop = 1
-     call mix_type_AXPY ( -1.d0, rhoin_m, dv(ipos), sstart, sstop )   ! sstart = sstop = 1
+     call mix_type_AXPY ( -1.d0, rhout_m, df(ipos) )
+     call mix_type_AXPY ( -1.d0, rhoin_m, dv(ipos) )
      !
 #if defined (__OSCDFT)
   IF (use_oscdft .AND. (oscdft_ctx%inp%oscdft_type==2)) THEN
@@ -376,11 +389,11 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
      IF ( lgcscf ) THEN
         norm2 = rho_ddot( df(ipos), df(ipos), ngm0, gcscf_gh )
      ELSE
-        norm2 = rho_ddot( df(ipos), df(ipos), ngm0, spinstop = sstop )          ! sstop = 1
+        norm2 = rho_ddot( df(ipos), df(ipos), ngm0 )
      END IF
      obn = 1.d0/sqrt(norm2)
-     call mix_type_SCAL (obn,df(ipos),sstart,sstop)                  ! sstart = sstop = 1
-     call mix_type_SCAL (obn,dv(ipos),sstart,sstop)
+     call mix_type_SCAL (obn,df(ipos))
+     call mix_type_SCAL (obn,dv(ipos))
 #if defined (__OSCDFT)
   IF (use_oscdft .AND. (oscdft_ctx%inp%oscdft_type==2)) THEN
      IF (oscdft_ctx%is_constraint .AND. .NOT.oscdft_ctx%conv) THEN
@@ -441,7 +454,7 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
                !
             ELSE
                !
-               betamix(i,j) = rho_ddot( df(j), df(i), ngm0, spinstop = sstop )   ! sstop = 1
+               betamix(i,j) = rho_ddot( df(j), df(i), ngm0 )
                !
             END IF
             !
@@ -470,7 +483,7 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
           !
        ELSE
           !
-          work(i) = rho_ddot( df(i), rhout_m, ngm0, spinstop = sstop )       ! sstop = 1
+          work(i) = rho_ddot( df(i), rhout_m, ngm0 )
           !
        END IF
        !
@@ -480,8 +493,8 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
         !
         gamma0 = DOT_PRODUCT( betamix(1:iter_used,i), work(1:iter_used) )
         !
-        call mix_type_AXPY ( -gamma0, dv(i), rhoin_m, sstart, sstop )     ! sstart = sstop = 1
-        call mix_type_AXPY ( -gamma0, df(i), rhout_m, sstart, sstop )     ! sstart = sstop = 1
+        call mix_type_AXPY ( -gamma0, dv(i), rhoin_m )
+        call mix_type_AXPY ( -gamma0, df(i), rhout_m )
         !
 #if defined (__OSCDFT)
   IF (use_oscdft .AND. (oscdft_ctx%inp%oscdft_type==2)) THEN
@@ -503,7 +516,7 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
      DO i=1, n_iter
         call destroy_mix_type(df(i))
      END DO
-      DEALLOCATE( df )
+     DEALLOCATE( df )
   END IF
   IF ( ALLOCATED( dv ) ) THEN
      DO i=1, n_iter
@@ -538,24 +551,24 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
   !
   ! ... set new trial density
   !
-  call mix_type_AXPY ( alphamix, rhout_m, rhoin_m, sstart, sstop )  ! sstart = sstop = 1
+  call mix_type_AXPY ( alphamix, rhout_m, rhoin_m )
   !
-  ! ...@au: linear mixing for the magnetization (spin channels 2:nspin),
-  ! ... for the first maxlinmix2 iterations
+  ! ... imix==3 ('simple-magn'): still in the plain-mixing startup phase for
+  ! ... magnetization - overwrite whatever Broyden just computed for spin
+  ! ... channels 2:nspin with newmag = simplemix*rhout_raw + (1-simplemix)*rhoin_old,
+  ! ... built from the pristine snapshots taken above. Broyden's own df/dv
+  ! ... history (already updated over the full spin range) is left as is,
+  ! ... ready to be used once iter > maxlinmix.
   !
-  if ( imix == 3 ) then
-     if ( mixrho_iter <= maxlinmix2 ) then
-        !
-        sstart = 2
-        sstop = nspin
-        !
-        scal = 1.d0 - simplemix2
-        call mix_type_SCAL ( simplemix2, rhout_m, sstart, sstop )
-        call mix_type_SCAL ( scal, rhoin_m, sstart, sstop )
-        call mix_type_AXPY ( 1.d0, rhout_m, rhoin_m, sstart, sstop )
-        !
-     endif
-  endif
+  IF ( imix == 3 .AND. PRESENT(maxlinmix) .AND. PRESENT(simplemix) ) THEN
+     IF ( mixrho_iter <= maxlinmix ) THEN
+        CALL mix_type_SCAL( simplemix, rhout_m_lin )
+        CALL mix_type_AXPY( 1.0_DP, rhout_m_lin, rhoin_m_lin )
+        CALL mix_type_COPY( rhoin_m_lin, rhoin_m, 2, nspin )
+        CALL destroy_mix_type( rhoin_m_lin )
+        CALL destroy_mix_type( rhout_m_lin )
+     END IF
+  END IF
   !
 #if defined (__OSCDFT)
   IF (use_oscdft .AND. (oscdft_ctx%inp%oscdft_type==2)) THEN
@@ -564,7 +577,7 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
            oscdft_ctx%constraint(:, :, :, :) = t_cons2(:, :, :, :) + &
                                      alphamix * delta_cons(:, :, :, :)
         ELSE
-           oscdft_ctx%constraint(:, :, :, :) = 0.8 * t_cons1(:, :, :, :)
+           oscdft_ctx%constraint(:, :, :, :) = 0.8 * t_cons1(:, :, :, :) 
         ENDIF
      ENDIF
   ENDIF
@@ -572,7 +585,6 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
   !
   ! ... simple mixing for high_frequencies (and set to zero the smooth ones)
   call high_frequency_mixing ( rhoin, input_rhout, alphamix )
-! call high_frequency_mixing ( rhoin, input_rhout, alphamix, sstart, sstop )
   ! ... add the mixed rho for the smooth frequencies
   call assign_mix_to_scf_type(rhoin_m,rhoin)
   !
@@ -715,14 +727,7 @@ END SUBROUTINE mix_rho
    IF (lda_plus_u_co)  rho_m%ns     = rho_s%ns
    IF (lda_plus_u_cob) rho_m%nsb    = rho_s%nsb
    IF (lda_plus_u_v)   rho_m%nsg    = rho_s%nsg
-   IF (okpaw)  THEN
-      IF (nspin == 2 ) THEN
-           rho_m%bec(:,:,1)     = 0.5_dp * (rho_s%bec(:,:,1) + rho_s%bec(:,:,2))
-           rho_m%bec(:,:,2)     = 0.5_dp * (rho_s%bec(:,:,1) - rho_s%bec(:,:,2))
-      ELSE
-          rho_m%bec = rho_s%bec
-      END IF
-   END IF
+   IF (okpaw)          rho_m%bec    = rho_s%bec
    !
    rho_m%el_dipole = rho_s%el_dipole
    !
@@ -770,14 +775,7 @@ END SUBROUTINE mix_rho
    IF (lda_plus_u_co)  rho_s%ns(:,:,:,:)    = rho_m%ns(:,:,:,:)
    IF (lda_plus_u_cob) rho_s%nsb(:,:,:,:)   = rho_m%nsb(:,:,:,:)
    IF (lda_plus_u_v)   rho_s%nsg(:,:,:,:,:)   = rho_m%nsg(:,:,:,:,:)
-   IF (okpaw)  THEN
-     IF (nspin == 2 ) THEN
-       rho_s%bec(:,:,1) = rho_m%bec(:,:,1) + rho_m%bec(:,:,2)
-       rho_s%bec(:,:,2) = rho_m%bec(:,:,1) - rho_m%bec(:,:,2)
-     ELSE
-       rho_s%bec = rho_m%bec
-     END IF
-   END IF
+   IF (okpaw)          rho_s%bec(:,:,:)     = rho_m%bec(:,:,:)
    !
    rho_s%el_dipole = rho_m%el_dipole
    !
@@ -787,7 +785,7 @@ END SUBROUTINE mix_rho
  !
  !
  !----------------------------------------------------------------------------
- SUBROUTINE mix_type_AXPY( A, X, Y, spinstart, spinstop )
+ SUBROUTINE mix_type_AXPY( A, X, Y )
   !----------------------------------------------------------------------------
   !! Works like daxpy for \(\text{scf_type}\) variables: \(Y = A\cdot X + Y\)
   ! NB: A is a REAL(DP) number
@@ -799,31 +797,24 @@ END SUBROUTINE mix_rho
   REAL(DP) :: A
   TYPE(mix_type), INTENT(IN)    :: X
   TYPE(mix_type), INTENT(INOUT) :: Y
-  INTEGER, OPTIONAL, INTENT(IN) :: spinstart
-  INTEGER, OPTIONAL, INTENT(IN) :: spinstop
   !
-  integer :: calls = 0
-  integer :: sstart, sstop
-  calls = calls + 1
-  sstart = 1
-  sstop = nspin
-  IF (PRESENT(spinstart)) sstart = spinstart
-  IF (PRESENT(spinstop))  sstop  = spinstop
+  integer :: calls = 0 
+  calls = calls + 1 
  !$acc data  present(X,Y)
- !$acc kernels present(X%of_g, Y%of_g)
-  Y%of_g(:,sstart:sstop) = Y%of_g(:,sstart:sstop)  + A * X%of_g(:,sstart:sstop)
- !$acc end kernels
+ !$acc kernels present(X%of_g, Y%of_g) 
+  Y%of_g = Y%of_g  + A * X%of_g
+ !$acc end kernels 
   !
-  IF (need_ked) THEN
+  IF (need_ked) THEN 
    !$acc kernels present(X%kin_g, Y%kin_g)
-    Y%kin_g(:,sstart:sstop)     = Y%kin_g(:,sstart:sstop)     + A * X%kin_g(:,sstart:sstop)
+    Y%kin_g     = Y%kin_g     + A * X%kin_g
    !$acc end kernels
-  END IF
+  END IF 
   IF (lda_plus_u_nc)           Y%ns_nc     = Y%ns_nc     + A * X%ns_nc
   IF (lda_plus_u_co)           Y%ns        = Y%ns        + A * X%ns
   IF (lda_plus_u_cob)          Y%nsb       = Y%nsb       + A * X%nsb
   IF (lda_plus_u_v)            Y%nsg       = Y%nsg       + A * X%nsg
-  IF (okpaw)                   Y%bec(:,:,sstart:sstop) = Y%bec(:,:,sstart:sstop) + A * X%bec(:,:,sstart:sstop)
+  IF (okpaw)                   Y%bec       = Y%bec       + A * X%bec
   IF (sic)                     Y%pol_g     = Y%pol_g     + A * X%pol_g
   ! No need to spare an operation on a single number
   ! IF (dipfield)                Y%el_dipole = Y%el_dipole + A * X%el_dipole
@@ -836,9 +827,13 @@ END SUBROUTINE mix_rho
  !
  !
  !----------------------------------------------------------------------------
- SUBROUTINE mix_type_COPY( X, Y )
+ SUBROUTINE mix_type_COPY( X, Y, spinstart, spinstop )
   !----------------------------------------------------------------------------
   !! Works like DCOPY for \(\text{mix_type}\) copy variables: \(Y = X\).
+  !! An optional \(\text{spinstart}:\text{spinstop}\) range restricts the
+  !! copy of the spin-resolved fields (of_g, kin_g, bec) to those spin
+  !! channels; used to selectively restore the magnetization channels
+  !! after a plain-mixing update (see mix_rho, imix==3).
   !
   USE kinds, ONLY : DP
   !
@@ -846,22 +841,31 @@ END SUBROUTINE mix_rho
   !
   TYPE(mix_type), INTENT(IN)    :: X
   TYPE(mix_type), INTENT(INOUT) :: Y
+  INTEGER, OPTIONAL, INTENT(IN) :: spinstart
+  INTEGER, OPTIONAL, INTENT(IN) :: spinstop
+  !
+  INTEGER :: sstart, sstop
+  !
+  sstart = 1
+  sstop  = nspin
+  IF (PRESENT(spinstart)) sstart = spinstart
+  IF (PRESENT(spinstop))  sstop  = spinstop
   !
  !$acc data present_or_copyin(Y,X)
- !$acc kernels  present_or_copyin(X%of_g, Y%of_g) 
-  Y%of_g  = X%of_g
+ !$acc kernels  present_or_copyin(X%of_g, Y%of_g)
+  Y%of_g(:,sstart:sstop)  = X%of_g(:,sstart:sstop)
  !$acc end kernels
   !
   IF (need_ked) THEN
-   !$acc kernels present_or_copyin(X%kin_g, Y%kin_g) 
-    Y%kin_g     = X%kin_g
+   !$acc kernels present_or_copyin(X%kin_g, Y%kin_g)
+    Y%kin_g(:,sstart:sstop)     = X%kin_g(:,sstart:sstop)
    !$acc end kernels
   END IF
   IF (lda_plus_u_nc)           Y%ns_nc     = X%ns_nc
   IF (lda_plus_u_co)           Y%ns        = X%ns
   IF (lda_plus_u_cob)          Y%nsb       = X%nsb
   IF (lda_plus_u_v)            Y%nsg       = X%nsg
-  IF (okpaw)                   Y%bec       = X%bec
+  IF (okpaw)                   Y%bec(:,:,sstart:sstop) = X%bec(:,:,sstart:sstop)
   IF (sic)                     Y%pol_g     = X%pol_g
   Y%el_dipole = X%el_dipole
   !
@@ -872,9 +876,9 @@ END SUBROUTINE mix_rho
  !
  !
  !----------------------------------------------------------------------------
- SUBROUTINE mix_type_SCAL( A, X, spinstart, spinstop )
+ SUBROUTINE mix_type_SCAL( A, X )
   !----------------------------------------------------------------------------
-  !! Works like DSCAL for \(\text{mix_type}\) copy variables: \(X = A \cdot X\)
+  !! Works like DSCAL for \(\text{mix_type}\) copy variables: \(X = A \cdot X\)  
   !! NB: A is a REAL(DP) number
   !
   USE kinds, ONLY : DP
@@ -882,30 +886,23 @@ END SUBROUTINE mix_rho
   !
   REAL(DP),       INTENT(IN)    :: A
   TYPE(mix_type), INTENT(INOUT) :: X
-  INTEGER, OPTIONAL, INTENT(IN) :: spinstart
-  INTEGER, OPTIONAL, INTENT(IN) :: spinstop
   !
-  integer :: sstart, sstop
-  sstart = 1
-  sstop = nspin
-  IF (PRESENT(spinstart)) sstart = spinstart
-  IF (PRESENT(spinstop))  sstop  = spinstop
   !
  !$acc data present_or_copyin(X)
- !$acc kernels present_or_copyin(X%of_g)
-  X%of_g(:,sstart:sstop) = A * X%of_g(:,sstart:sstop)
+ !$acc kernels present_or_copyin(X%of_g) 
+  X%of_g(:,:) = A * X%of_g(:,:)
  !$acc end kernels
   !
   IF (need_ked) THEN
    !$acc kernels present_or_copyin(X%kin_g)
-    X%kin_g(:,sstart:sstop)     = A * X%kin_g(:,sstart:sstop)
+    X%kin_g     = A * X%kin_g
    !$acc end kernels
-  END IF
+  END IF 
   IF (lda_plus_u_nc)           X%ns_nc     = A * X%ns_nc
   IF (lda_plus_u_co)           X%ns        = A * X%ns
   IF (lda_plus_u_cob)          X%nsb       = A * X%nsb
   IF (lda_plus_u_v)            X%nsg       = A * X%nsg
-  IF (okpaw)                   X%bec(:,:,sstart:sstop) = A * X%bec(:,:,sstart:sstop)
+  IF (okpaw)                   X%bec       = A * X%bec
   IF (sic)                     X%pol_g     = A * X%pol_g
   X%el_dipole = A * X%el_dipole
   !
@@ -1115,7 +1112,7 @@ END SUBROUTINE mix_rho
  !
  !
  !-----------------------------------------------------------------------------------
-FUNCTION rho_ddot( rho1, rho2, gf, g0, spinstop )
+FUNCTION rho_ddot( rho1, rho2, gf, g0 )
   !----------------------------------------------------------------------------------
   !! Calculates \(4\pi/G^2\ \rho_1(-G)\ \rho_2(G) = V1_\text{Hartree}(-G)\ \rho_2(G)\)
   !! used as an estimate of the self-consistency error on the energy.
@@ -1140,8 +1137,6 @@ FUNCTION rho_ddot( rho1, rho2, gf, g0, spinstop )
   !! points delimiter
   REAL(DP), OPTIONAL, INTENT(IN) :: g0
   !! factorized G-vector norm of G=0 used in GC-SCF
-  INTEGER, OPTIONAL, INTENT(IN) :: spinstop
-  !! (imix==3) restrict the magnetization cross term to spin channels 2:spinstop
   REAL(DP) :: rho_ddot
   !! output: see function comments
   !
@@ -1152,10 +1147,6 @@ FUNCTION rho_ddot( rho1, rho2, gf, g0, spinstop )
   REAL(DP) :: gg0
   REAL(DP) :: rho0
   INTEGER  :: ig
-  INTEGER  :: sstop
-  !
-  sstop = nspin
-  IF ( PRESENT(spinstop) ) sstop = spinstop
   !
   fac = e2 * fpi / tpiba2
   !
@@ -1209,12 +1200,12 @@ FUNCTION rho_ddot( rho1, rho2, gf, g0, spinstop )
   !
   rho_ddot = fac*rho_ddot
   !
-  IF ( sstop >= 2 )  THEN
+  IF ( nspin >= 2 )  THEN
      fac = e2*fpi / tpi**2  ! lambda=1 a.u.
      IF ( gstart == 2 ) THEN
-        !$acc update host(rho1%of_g(1,2:sstop), rho2%of_g(1,2:sstop))
+        !$acc update host(rho1%of_g(1,2:nspin), rho2%of_g(1,2:nspin))
         rho_ddot = rho_ddot + &
-                fac * SUM(REAL(CONJG( rho1%of_g(1,2:sstop))*(rho2%of_g(1,2:sstop) ), DP))
+                fac * SUM(REAL(CONJG( rho1%of_g(1,2:nspin))*(rho2%of_g(1,2:nspin) ), DP))
      ENDIF
      !
      IF ( gamma_only ) fac = 2.D0 * fac
@@ -1222,7 +1213,7 @@ FUNCTION rho_ddot( rho1, rho2, gf, g0, spinstop )
     !$acc parallel loop reduction(+:rho_ddot)
      DO ig = gstart, gf
         rho_ddot = rho_ddot + &
-              fac * SUM(REAL(CONJG( rho1%of_g(ig,2:sstop))*(rho2%of_g(ig,2:sstop) ), DP))
+              fac * SUM(REAL(CONJG( rho1%of_g(ig,2:nspin))*(rho2%of_g(ig,2:nspin) ), DP))
      ENDDO
     !$acc end parallel do
   ENDIF
