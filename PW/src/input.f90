@@ -300,6 +300,7 @@ SUBROUTINE control_iosys()
                             tolp_             => tolp, &
                             upscale_          => upscale, &
                             mixing_beta_      => mixing_beta, &
+                            simple_magn_mix_  => simple_magn_mix, &
                             maxlinmix_        => maxlinmix, &
                             simplemix_        => simplemix, &
                             nstep_            => nstep, &
@@ -395,7 +396,7 @@ SUBROUTINE control_iosys()
   !
   USE input_parameters, ONLY : exx_maxstep, electron_maxstep, mixing_mode, mixing_beta, &
                                mixing_ndim, mixing_fixed_ns, conv_thr,     &
-                               maxlinmix, simplemix,                       &
+                               simple_magn_mix, maxlinmix, simplemix,      &
                                tqr, tq_smoothing, tbeta_smoothing,         &
                                diago_thr_init,                             &
                                diago_cg_maxiter,                           &
@@ -1179,8 +1180,6 @@ SUBROUTINE control_iosys()
      imix = 1
   CASE( 'local-TF' )
      imix = 2
-  CASE( 'simple-magn' )
-     imix = 3
   CASE( 'potential' )
      CALL errore( 'iosys', 'potential mixing no longer implemented', 1 )
   CASE DEFAULT
@@ -1208,6 +1207,7 @@ SUBROUTINE control_iosys()
   starting_scf_threshold = tr2
   nmix                   = mixing_ndim
   mixing_beta_           = mixing_beta
+  simple_magn_mix_       = simple_magn_mix
   maxlinmix_             = maxlinmix
   simplemix_             = simplemix
   niter_with_fixed_ns    = mixing_fixed_ns

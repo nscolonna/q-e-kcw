@@ -915,14 +915,20 @@ MODULE input_parameters
         INTEGER :: mixing_ndim = 0
         !! dimension of mixing subspace. Used in PWscf only.
 
+        LOGICAL :: simple_magn_mix = .FALSE.
+        !! if .TRUE., mix the magnetization with plain mixing for the first
+        !! maxlinmix iterations instead of Broyden, independent of
+        !! mixing_mode (TF/local-TF preconditioning of the charge channel
+        !! keeps working as usual). Used in PWscf only.
+
         INTEGER :: maxlinmix = 7
-        !! mixing_mode='simple-magn' only: number of iterations for which
-        !! the magnetization is mixed with plain mixing instead of Broyden.
+        !! simple_magn_mix only: number of iterations for which the
+        !! magnetization is mixed with plain mixing instead of Broyden.
         !! Used in PWscf only.
 
         REAL(DP) :: simplemix = 1.5_DP
-        !! mixing_mode='simple-magn' only: plain mixing coefficient for
-        !! the magnetization density. Used in PWscf only.
+        !! simple_magn_mix only: plain mixing coefficient for the
+        !! magnetization density. Used in PWscf only.
 
         CHARACTER(len=80) :: diagonalization = 'david'
         !! diagonalization = 'david', 'cg', 'paro' or 'rmm'
@@ -1087,7 +1093,7 @@ MODULE input_parameters
           diis_temp, diis_achmix, diis_g0chmix, diis_g1chmix,          &
           diis_nchmix, diis_nrot, diis_rothr, diis_ethr, diis_chguess, &
           mixing_mode, mixing_beta, mixing_ndim, mixing_fixed_ns,      &
-          maxlinmix, simplemix,                                        &
+          simple_magn_mix, maxlinmix, simplemix,                       &
           tqr, tq_smoothing, tbeta_smoothing,                          &
           diago_cg_maxiter, diago_david_ndim, diago_rmm_ndim,          &
           diago_rmm_conv, diago_gs_nblock, diagonalization,            &

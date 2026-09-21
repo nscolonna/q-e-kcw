@@ -403,6 +403,7 @@ MODULE read_namelists_module
        mixing_fixed_ns = 0
        mixing_beta = -1.0_DP
        mixing_ndim = 8
+       simple_magn_mix = .FALSE.
        maxlinmix = 7
        simplemix = 1.5_DP
        diagonalization = 'david'
@@ -1160,6 +1161,7 @@ MODULE read_namelists_module
        CALL mp_bcast( mixing_mode,          ionode_id, intra_image_comm )
        CALL mp_bcast( mixing_beta,          ionode_id, intra_image_comm )
        CALL mp_bcast( mixing_ndim,          ionode_id, intra_image_comm )
+       CALL mp_bcast( simple_magn_mix,      ionode_id, intra_image_comm )
        CALL mp_bcast( maxlinmix,            ionode_id, intra_image_comm )
        CALL mp_bcast( simplemix,            ionode_id, intra_image_comm )
        CALL mp_bcast( tqr,                  ionode_id, intra_image_comm )

@@ -34,7 +34,7 @@ SUBROUTINE summary()
   USE control_flags,   ONLY : imix, nmix, mixing_beta, nstep, lscf, &
                               tr2, isolve, lmd, lbfgs, iverbosity, tqr, &
                               tq_smoothing, tbeta_smoothing, llondon, ldftd3, &
-                              maxlinmix, simplemix
+                              simple_magn_mix, maxlinmix, simplemix
   USE noncollin_module,ONLY : noncolin, domag, lspinorb
   USE funct,           ONLY : write_dft_name
   USE xc_lib,          ONLY : xclib_dft_is
@@ -87,7 +87,7 @@ SUBROUTINE summary()
     ! atomic coordinate referred to the crystal axes
   REAL(DP) :: xkg(3)
     ! coordinates of the k point in crystal axes
-  CHARACTER :: mixing_style * 11
+  CHARACTER :: mixing_style * 9
   REAL(DP) :: xp
     ! fraction contributing to a given atom type (obsolescent)
   !
@@ -96,7 +96,6 @@ SUBROUTINE summary()
   IF ( imix ==  0 ) mixing_style = 'plain'
   IF ( imix ==  1 ) mixing_style = 'TF'
   IF ( imix ==  2 ) mixing_style = 'local-TF'
-  IF ( imix ==  3 ) mixing_style = 'simple-magn'
   !
   IF ( title /= ' ') WRITE( stdout, "(/,5X,'Title: ',/,5X,A75)" ) title
   !
@@ -109,7 +108,7 @@ SUBROUTINE summary()
   WRITE( stdout, 103) nbnd, ecutwfc, ecutrho
   IF ( xclib_dft_is('hybrid') ) WRITE( stdout, 104) ecutfock
   IF ( lscf) WRITE( stdout, 105) tr2, mixing_beta, nmix, mixing_style
-  IF ( lscf .AND. imix == 3 ) WRITE( stdout, 108) maxlinmix, simplemix
+  IF ( lscf .AND. simple_magn_mix ) WRITE( stdout, 108) maxlinmix, simplemix
   IF ( lmd .OR. lbfgs ) WRITE (stdout, 106) epse, epsf
   IF ( lmovecell ) WRITE (stdout, 107) epsp
   !

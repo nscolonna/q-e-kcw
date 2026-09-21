@@ -85,7 +85,7 @@ CONTAINS
 !
 !----------------------------------------------------------------------------
 SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
-                    iunmix, conv, maxlinmix, simplemix )
+                    iunmix, conv, maxlinmix, simplemix, simple_magn_mix )
   !----------------------------------------------------------------------------
   !! * Modified Broyden's method for charge density mixing: D.D. Johnson,
   !!   PRB 38, 12807 (1988) ;
@@ -93,12 +93,14 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
   !!   PRB 64,121101 (2001) ;
   !! * Extended to mix also quantities needed for PAW, meta-GGA, DFT+U(+V) ;
   !! * Electric field (all these are included into \(\text{mix_type}\)) ;
-  !! * imix==3 ('simple-magn'): for the first maxlinmix iterations the
-  !!   magnetization (spin channels 2:nspin) is mixed with plain linear
-  !!   mixing at rate simplemix instead of Broyden, while the Broyden
-  !!   df/dv history keeps accumulating the real (unrestricted) residual
-  !!   throughout, so the handover to full Broyden mixing after maxlinmix
-  !!   iterations starts from a populated history instead of a cold one ;
+  !! * simple_magn_mix: for the first maxlinmix iterations the magnetization
+  !!   (spin channels 2:nspin) is mixed with plain linear mixing at rate
+  !!   simplemix instead of Broyden, while the Broyden df/dv history keeps
+  !!   accumulating the real (unrestricted) residual throughout, so the
+  !!   handover to full Broyden mixing after maxlinmix iterations starts
+  !!   from a populated history instead of a cold one. Independent of imix,
+  !!   so TF/local-TF preconditioning of the charge channel (see below)
+  !!   keeps working unchanged whether or not this is active ;
   !! * On output: the mixed density is in \(\text{rhoin}\),
   !!   \(\text{input_rhout}\) is unchanged.
   !
@@ -144,9 +146,13 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
   LOGICAL, INTENT(OUT) :: conv
   !! .TRUE. if the convergence has been reached
   INTEGER, OPTIONAL, INTENT(IN) :: maxlinmix
-  !! (imix==3 only) number of iterations using plain mixing for magnetization
+  !! (simple_magn_mix only) number of iterations using plain mixing for magnetization
   REAL(DP), OPTIONAL, INTENT(IN) :: simplemix
-  !! (imix==3 only) plain mixing coefficient for magnetization
+  !! (simple_magn_mix only) plain mixing coefficient for magnetization
+  LOGICAL, OPTIONAL, INTENT(IN) :: simple_magn_mix
+  !! if .TRUE., mix the magnetization with plain mixing for the first
+  !! maxlinmix iterations, independent of imix (TF/local-TF preconditioning
+  !! of the charge channel keeps working as usual)
   !
   TYPE(scf_type), INTENT(INOUT) :: input_rhout
   TYPE(scf_type), INTENT(INOUT) :: rhoin
@@ -155,7 +161,9 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
   !
   TYPE(mix_type) :: rhout_m, rhoin_m
   TYPE(mix_type) :: rhout_m_lin, rhoin_m_lin
-     ! pristine (pre-Broyden-correction) snapshots, used only for imix==3
+     ! pristine (pre-Broyden-correction) snapshots, used only when simple_magn_mix
+  LOGICAL :: do_magsimple
+     ! simple_magn_mix, resolved once for this call (PRESENT(...) checked here only)
   INTEGER, PARAMETER :: &
     maxmix = 25     ! max number of iterations for charge mixing
   INTEGER ::       &
@@ -206,6 +214,9 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
   !
   mixrho_iter = iter
   !
+  do_magsimple = .FALSE.
+  IF ( PRESENT(simple_magn_mix) ) do_magsimple = simple_magn_mix .AND. PRESENT(maxlinmix)
+  !
   IF ( n_iter > maxmix ) CALL errore( 'mix_rho', 'n_iter too big', 1 )
   !
   ! define mix_type variables and copy scf_type variables there
@@ -217,8 +228,8 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
   call assign_scf_to_mix_type(input_rhout, rhout_m)
   call mix_type_AXPY ( -1.d0, rhoin_m, rhout_m )
   !
-  ! ... imix==3 ('simple-magn'): snapshot the pristine input density and
-  ! ... the just-computed (unrestricted) residual, before Broyden's own
+  ! ... simple_magn_mix: snapshot the pristine input density and the
+  ! ... just-computed (unrestricted) residual, before Broyden's own
   ! ... history-based correction (below) modifies both. These snapshots
   ! ... are what the plain-mixing magnetization update further down is
   ! ... built from; everything else in between (residual, dr2, df/dv
@@ -226,7 +237,7 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
   ! ... full spin range, which is what lets Broyden's history be already
   ! ... populated for magnetization once iter > maxlinmix.
   !
-  IF ( imix == 3 .AND. PRESENT(maxlinmix) ) THEN
+  IF ( do_magsimple ) THEN
      IF ( mixrho_iter <= maxlinmix ) THEN
         CALL create_mix_type( rhoin_m_lin )
         CALL create_mix_type( rhout_m_lin )
@@ -286,7 +297,7 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
      call destroy_mix_type(rhoin_m)
      call destroy_mix_type(rhout_m)
      !
-     IF ( imix == 3 .AND. PRESENT(maxlinmix) ) THEN
+     IF ( do_magsimple ) THEN
         IF ( mixrho_iter <= maxlinmix ) THEN
            CALL destroy_mix_type( rhoin_m_lin )
            CALL destroy_mix_type( rhout_m_lin )
@@ -553,14 +564,16 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
   !
   call mix_type_AXPY ( alphamix, rhout_m, rhoin_m )
   !
-  ! ... imix==3 ('simple-magn'): still in the plain-mixing startup phase for
+  ! ... simple_magn_mix: still in the plain-mixing startup phase for
   ! ... magnetization - overwrite whatever Broyden just computed for spin
   ! ... channels 2:nspin with newmag = simplemix*rhout_raw + (1-simplemix)*rhoin_old,
   ! ... built from the pristine snapshots taken above. Broyden's own df/dv
   ! ... history (already updated over the full spin range) is left as is,
-  ! ... ready to be used once iter > maxlinmix.
+  ! ... ready to be used once iter > maxlinmix. Independent of imix, so the
+  ! ... TF/local-TF preconditioning just above keeps applying to the charge
+  ! ... channel whether or not this is active.
   !
-  IF ( imix == 3 .AND. PRESENT(maxlinmix) .AND. PRESENT(simplemix) ) THEN
+  IF ( do_magsimple .AND. PRESENT(simplemix) ) THEN
      IF ( mixrho_iter <= maxlinmix ) THEN
         CALL mix_type_SCAL( simplemix, rhout_m_lin )
         CALL mix_type_AXPY( 1.0_DP, rhout_m_lin, rhoin_m_lin )
@@ -833,7 +846,7 @@ END SUBROUTINE mix_rho
   !! An optional \(\text{spinstart}:\text{spinstop}\) range restricts the
   !! copy of the spin-resolved fields (of_g, kin_g, bec) to those spin
   !! channels; used to selectively restore the magnetization channels
-  !! after a plain-mixing update (see mix_rho, imix==3).
+  !! after a plain-mixing update (see mix_rho, simple_magn_mix).
   !
   USE kinds, ONLY : DP
   !
