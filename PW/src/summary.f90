@@ -33,7 +33,8 @@ SUBROUTINE summary()
                               wk, nelec, nelup, neldw, two_fermi_energies
   USE control_flags,   ONLY : imix, nmix, mixing_beta, nstep, lscf, &
                               tr2, isolve, lmd, lbfgs, iverbosity, tqr, &
-                              tq_smoothing, tbeta_smoothing, llondon, ldftd3
+                              tq_smoothing, tbeta_smoothing, llondon, ldftd3, &
+                              simple_magn_mix, maxlinmix, simplemix
   USE noncollin_module,ONLY : noncolin, domag, lspinorb
   USE funct,           ONLY : write_dft_name
   USE xc_lib,          ONLY : xclib_dft_is
@@ -107,6 +108,7 @@ SUBROUTINE summary()
   WRITE( stdout, 103) nbnd, ecutwfc, ecutrho
   IF ( xclib_dft_is('hybrid') ) WRITE( stdout, 104) ecutfock
   IF ( lscf) WRITE( stdout, 105) tr2, mixing_beta, nmix, mixing_style
+  IF ( lscf .AND. simple_magn_mix ) WRITE( stdout, 108) maxlinmix, simplemix
   IF ( lmd .OR. lbfgs ) WRITE (stdout, 106) epse, epsf
   IF ( lmovecell ) WRITE (stdout, 107) epsp
   !
@@ -135,6 +137,9 @@ SUBROUTINE summary()
        &     'force convergence thresh. = ',1PE12.1)
 107 FORMAT(5X, &
        &     'press convergence thresh. = ',1PE12.1)
+108 FORMAT(5X, &
+       &     'magn linear mixing # iter = ',I12,/,5X, &
+       &     'magn linear mixing coeff  = ',F12.4)
   !
   call write_dft_name ( ) 
   !

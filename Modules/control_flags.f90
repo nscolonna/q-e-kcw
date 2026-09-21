@@ -77,15 +77,20 @@ MODULE control_flags
     nexxiter,         &! the maximum number of outer iteration (exx)
     niter,            &! the maximum number of iteration
     nmix,             &! the number of iteration kept in the history
-    imix               ! the type of mixing (0=plain,1=TF,2=local-TF)
+    imix,             &! the type of mixing (0=plain,1=TF,2=local-TF)
+    maxlinmix          ! (simple_magn_mix) number of iterations using plain mixing for magnetization
   INTEGER :: &
     n_scf_steps        ! number of scf iterations to reach convergence
   REAL(DP) :: &
     mixing_beta,      &! the mixing parameter
     tr2,              &! the convergence threshold for potential
-    scf_error=0.0      ! actual convergence reached
+    scf_error=0.0,    &! actual convergence reached
+    simplemix          ! (simple_magn_mix) plain mixing coefficient for magnetization
 
   LOGICAL :: &
+    simple_magn_mix,  &! if .TRUE. mix the magnetization with plain mixing for the
+                       ! first maxlinmix iterations, independent of imix (TF/local-TF
+                       ! preconditioning of the charge channel keeps working as usual)
     conv_elec          ! if .TRUE. electron convergence has been reached
   ! next 3 variables used for EXX calculations
   LOGICAL :: &

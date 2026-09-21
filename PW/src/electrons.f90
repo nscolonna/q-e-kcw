@@ -412,6 +412,7 @@ SUBROUTINE electrons_scf ( printout, exxen )
   USE mix,                  ONLY : open_mix_file, close_mix_file, mix_rho
   USE control_flags,        ONLY : mixing_beta, tr2, ethr, niter, nmix, &
                                    conv_elec, sic, &
+                                   simple_magn_mix, maxlinmix, simplemix, &
                                    restart, io_level, do_makov_payne,  &
                                    gamma_only, iverbosity, textfor,     &
                                    llondon, ldftd3, scf_must_converge, lxdm, ts_vdw, &
@@ -794,7 +795,8 @@ SUBROUTINE electrons_scf ( printout, exxen )
         !
         IF ( my_pool_id == root_pool ) THEN
             CALL mix_rho( rho, rhoin, &
-                mixing_beta, dr2, tr2_min, iter, nmix, iunmix, conv_elec )
+                mixing_beta, dr2, tr2_min, iter, nmix, iunmix, conv_elec, &
+                maxlinmix, simplemix, simple_magn_mix )
         END IF
         !
         ! ... Results are broadcast from pool 0 to others to prevent trouble
