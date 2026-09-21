@@ -187,7 +187,7 @@ subroutine scat_states_plot(ik,ien,norb,nocros,nchan,vec,veceig,left_to_right)
 !--
       filename=TRIM(filename)
       OPEN (UNIT=ounit, FILE=filename, FORM='formatted', &
-               STATUS='unknown', ERR=100, IOSTAT=ios)
+               STATUS='unknown', ERR=100, IOSTAT=ios, access='stream')
 100   CALL errore('write_states','opening file'//filename,ABS(ios))
       call xsf_struct (alat, at, nat, tau, atm, ityp, ounit)
       ix = 1

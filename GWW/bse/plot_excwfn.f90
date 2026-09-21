@@ -165,7 +165,7 @@ if(ionode) then
    if(.not.l_plotaverage)   then
        write(nfile,'(5i1)') &
         & nstart/10000,mod(nstart,10000)/1000,mod(nstart,1000)/100,mod(nstart,100)/10,mod(nstart,10)
-      open(ounit,file=trim(tmp_dir)//trim(prefix)//'.exc.xsf'//nfile,form='formatted')
+      open(ounit,file=trim(tmp_dir)//trim(prefix)//'.exc.xsf'//nfile,form='formatted',access='stream')
    endif
    CALL xsf_struct (alat, at, nat, tau, atm, ityp, ounit)
    CALL xsf_fast_datagrid_3d &
