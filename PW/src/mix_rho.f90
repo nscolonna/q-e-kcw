@@ -798,7 +798,7 @@ END SUBROUTINE mix_rho
  !
  !
  !----------------------------------------------------------------------------
- SUBROUTINE mix_type_AXPY( A, X, Y )
+ SUBROUTINE mix_type_AXPY( A, X, Y, spinstart, spinstop )
   !----------------------------------------------------------------------------
   !! Works like daxpy for \(\text{scf_type}\) variables: \(Y = A\cdot X + Y\)
   ! NB: A is a REAL(DP) number
@@ -810,24 +810,32 @@ END SUBROUTINE mix_rho
   REAL(DP) :: A
   TYPE(mix_type), INTENT(IN)    :: X
   TYPE(mix_type), INTENT(INOUT) :: Y
+  INTEGER, OPTIONAL, INTENT(IN) :: spinstart
+  !! restrict the update to spin channels spinstart:spinstop (default 1:nspin)
+  INTEGER, OPTIONAL, INTENT(IN) :: spinstop
   !
-  integer :: calls = 0 
-  calls = calls + 1 
+  integer :: calls = 0
+  integer :: sstart, sstop
+  calls = calls + 1
+  sstart = 1
+  sstop = nspin
+  IF (PRESENT(spinstart)) sstart = spinstart
+  IF (PRESENT(spinstop))  sstop  = spinstop
  !$acc data  present(X,Y)
- !$acc kernels present(X%of_g, Y%of_g) 
-  Y%of_g = Y%of_g  + A * X%of_g
- !$acc end kernels 
+ !$acc kernels present(X%of_g, Y%of_g)
+  Y%of_g(:,sstart:sstop) = Y%of_g(:,sstart:sstop)  + A * X%of_g(:,sstart:sstop)
+ !$acc end kernels
   !
-  IF (need_ked) THEN 
+  IF (need_ked) THEN
    !$acc kernels present(X%kin_g, Y%kin_g)
-    Y%kin_g     = Y%kin_g     + A * X%kin_g
+    Y%kin_g(:,sstart:sstop)     = Y%kin_g(:,sstart:sstop)     + A * X%kin_g(:,sstart:sstop)
    !$acc end kernels
-  END IF 
+  END IF
   IF (lda_plus_u_nc)           Y%ns_nc     = Y%ns_nc     + A * X%ns_nc
   IF (lda_plus_u_co)           Y%ns        = Y%ns        + A * X%ns
   IF (lda_plus_u_cob)          Y%nsb       = Y%nsb       + A * X%nsb
   IF (lda_plus_u_v)            Y%nsg       = Y%nsg       + A * X%nsg
-  IF (okpaw)                   Y%bec       = Y%bec       + A * X%bec
+  IF (okpaw)                   Y%bec(:,:,sstart:sstop) = Y%bec(:,:,sstart:sstop) + A * X%bec(:,:,sstart:sstop)
   IF (sic)                     Y%pol_g     = Y%pol_g     + A * X%pol_g
   ! No need to spare an operation on a single number
   ! IF (dipfield)                Y%el_dipole = Y%el_dipole + A * X%el_dipole
@@ -889,9 +897,9 @@ END SUBROUTINE mix_rho
  !
  !
  !----------------------------------------------------------------------------
- SUBROUTINE mix_type_SCAL( A, X )
+ SUBROUTINE mix_type_SCAL( A, X, spinstart, spinstop )
   !----------------------------------------------------------------------------
-  !! Works like DSCAL for \(\text{mix_type}\) copy variables: \(X = A \cdot X\)  
+  !! Works like DSCAL for \(\text{mix_type}\) copy variables: \(X = A \cdot X\)
   !! NB: A is a REAL(DP) number
   !
   USE kinds, ONLY : DP
@@ -899,23 +907,31 @@ END SUBROUTINE mix_rho
   !
   REAL(DP),       INTENT(IN)    :: A
   TYPE(mix_type), INTENT(INOUT) :: X
+  INTEGER, OPTIONAL, INTENT(IN) :: spinstart
+  !! restrict the scaling to spin channels spinstart:spinstop (default 1:nspin)
+  INTEGER, OPTIONAL, INTENT(IN) :: spinstop
   !
+  integer :: sstart, sstop
+  sstart = 1
+  sstop = nspin
+  IF (PRESENT(spinstart)) sstart = spinstart
+  IF (PRESENT(spinstop))  sstop  = spinstop
   !
  !$acc data present_or_copyin(X)
- !$acc kernels present_or_copyin(X%of_g) 
-  X%of_g(:,:) = A * X%of_g(:,:)
+ !$acc kernels present_or_copyin(X%of_g)
+  X%of_g(:,sstart:sstop) = A * X%of_g(:,sstart:sstop)
  !$acc end kernels
   !
   IF (need_ked) THEN
    !$acc kernels present_or_copyin(X%kin_g)
-    X%kin_g     = A * X%kin_g
+    X%kin_g(:,sstart:sstop)     = A * X%kin_g(:,sstart:sstop)
    !$acc end kernels
-  END IF 
+  END IF
   IF (lda_plus_u_nc)           X%ns_nc     = A * X%ns_nc
   IF (lda_plus_u_co)           X%ns        = A * X%ns
   IF (lda_plus_u_cob)          X%nsb       = A * X%nsb
   IF (lda_plus_u_v)            X%nsg       = A * X%nsg
-  IF (okpaw)                   X%bec       = A * X%bec
+  IF (okpaw)                   X%bec(:,:,sstart:sstop) = A * X%bec(:,:,sstart:sstop)
   IF (sic)                     X%pol_g     = A * X%pol_g
   X%el_dipole = A * X%el_dipole
   !
@@ -1125,7 +1141,7 @@ END SUBROUTINE mix_rho
  !
  !
  !-----------------------------------------------------------------------------------
-FUNCTION rho_ddot( rho1, rho2, gf, g0 )
+FUNCTION rho_ddot( rho1, rho2, gf, g0, spinstop )
   !----------------------------------------------------------------------------------
   !! Calculates \(4\pi/G^2\ \rho_1(-G)\ \rho_2(G) = V1_\text{Hartree}(-G)\ \rho_2(G)\)
   !! used as an estimate of the self-consistency error on the energy.
@@ -1150,6 +1166,9 @@ FUNCTION rho_ddot( rho1, rho2, gf, g0 )
   !! points delimiter
   REAL(DP), OPTIONAL, INTENT(IN) :: g0
   !! factorized G-vector norm of G=0 used in GC-SCF
+  INTEGER, OPTIONAL, INTENT(IN) :: spinstop
+  !! restrict the magnetization cross term to spin channels 2:spinstop
+  !! (default nspin)
   REAL(DP) :: rho_ddot
   !! output: see function comments
   !
@@ -1160,6 +1179,10 @@ FUNCTION rho_ddot( rho1, rho2, gf, g0 )
   REAL(DP) :: gg0
   REAL(DP) :: rho0
   INTEGER  :: ig
+  INTEGER  :: sstop
+  !
+  sstop = nspin
+  IF ( PRESENT(spinstop) ) sstop = spinstop
   !
   fac = e2 * fpi / tpiba2
   !
@@ -1213,12 +1236,12 @@ FUNCTION rho_ddot( rho1, rho2, gf, g0 )
   !
   rho_ddot = fac*rho_ddot
   !
-  IF ( nspin >= 2 )  THEN
+  IF ( sstop >= 2 )  THEN
      fac = e2*fpi / tpi**2  ! lambda=1 a.u.
      IF ( gstart == 2 ) THEN
-        !$acc update host(rho1%of_g(1,2:nspin), rho2%of_g(1,2:nspin))
+        !$acc update host(rho1%of_g(1,2:sstop), rho2%of_g(1,2:sstop))
         rho_ddot = rho_ddot + &
-                fac * SUM(REAL(CONJG( rho1%of_g(1,2:nspin))*(rho2%of_g(1,2:nspin) ), DP))
+                fac * SUM(REAL(CONJG( rho1%of_g(1,2:sstop))*(rho2%of_g(1,2:sstop) ), DP))
      ENDIF
      !
      IF ( gamma_only ) fac = 2.D0 * fac
@@ -1226,7 +1249,7 @@ FUNCTION rho_ddot( rho1, rho2, gf, g0 )
     !$acc parallel loop reduction(+:rho_ddot)
      DO ig = gstart, gf
         rho_ddot = rho_ddot + &
-              fac * SUM(REAL(CONJG( rho1%of_g(ig,2:nspin))*(rho2%of_g(ig,2:nspin) ), DP))
+              fac * SUM(REAL(CONJG( rho1%of_g(ig,2:sstop))*(rho2%of_g(ig,2:sstop) ), DP))
      ENDDO
     !$acc end parallel do
   ENDIF
