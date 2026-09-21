@@ -2545,6 +2545,43 @@ input_description -distribution {Quantum ESPRESSO} -package PWscf -program pw.x 
             }
         }
 
+        var simple_magn_mix -type LOGICAL {
+            default { .false. }
+
+            info {
+                For spin-polarized calculations: if .TRUE., mix the
+                magnetization (as opposed to the total charge density) with
+                plain mixing, at rate @ref simplemix, for the first
+                @ref maxlinmix scf iterations, then switch to the same
+                Broyden mixing scheme used for the total charge density.
+                Independent of @ref mixing_mode: TF/local-TF preconditioning
+                of the charge-density channel keeps working as usual whether
+                or not this is set. Can help convergence when starting from
+                a small or zero @ref starting_magnetization.
+            }
+        }
+
+        var maxlinmix -type INTEGER {
+            default { 7 }
+
+            info {
+                Meaningful only if @ref simple_magn_mix = .TRUE. : number of
+                scf iterations for which the magnetization is mixed with
+                plain mixing instead of Broyden mixing.
+            }
+        }
+
+        var simplemix -type REAL {
+            dimensionality { dimensionless }
+            default { 1.5 }
+
+            info {
+                Meaningful only if @ref simple_magn_mix = .TRUE. : plain
+                mixing factor for the magnetization, used for the first
+                @ref maxlinmix scf iterations.
+            }
+        }
+
         var diagonalization -type CHARACTER {
             default { 'david' }
 
