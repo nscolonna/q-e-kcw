@@ -1096,7 +1096,7 @@ CONTAINS
     LOGICAL, INTENT(IN) :: domag
     !! 1: unpolarized case; 2: polarized
     INTEGER :: i, ii, iid, iexx, iscr, ip, nspin0, iflag, family
-    INTEGER :: id_vec(6), flags_tot
+    INTEGER :: id_vec(6), flags_tot, nflags
     !
 #if defined(__LIBXC)
     CHARACTER(LEN=100) :: pdesc
