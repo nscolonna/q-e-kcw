@@ -1,0 +1,402 @@
+
+     =--------------------------------------------------------------------------------=
+                      :::    :::           ::::::::         :::       ::: 
+                     :+:   :+:           :+:    :+:        :+:       :+:  
+                    +:+  +:+            +:+               +:+       +:+   
+                   +#++:++             +#+               +#+  +:+  +#+    
+                  +#+  +#+            +#+               +#+ +#+#+ +#+     
+                 #+#   #+#           #+#    #+#         #+#+# #+#+#       
+                ###    ###           ########           ###   ###         
+
+       Koopmans functional implementation based on DFPT; please cite this program as
+
+        N.Colonna, R. De Gennaro, E. Linscott, and N. Marzari, JCTC 18, 5435 (2022) 
+
+                                                                                    
+
+       If you use the non-collinear mode (with/without spin-orbit coupling) please cite
+
+        A. Marrazzo and N. Colonna, Phys. Rev. Research 6, 033085 (2024)  
+     =--------------------------------------------------------------------------------=
+
+     Program KCW v.8.0dev starts on 30Sep2026 at 22: 3:19 
+        Git branch: KCW_model_screening
+        Last git commit: dd1791d9dbb8ae1e1ef013e71bde61d733045c11-dirty
+        Last git commit date: Wed Sep 30 21:36:59 2026 +0200
+        Last git commit subject: KCW: add model dielectric screening for alpha coef
+
+     This program is part of the open-source Quantum ESPRESSO suite
+     for quantum simulation of materials; please cite
+         "P. Giannozzi et al., J. Phys.:Condens. Matter 21 395502 (2009);
+         "P. Giannozzi et al., J. Phys.:Condens. Matter 29 465901 (2017);
+         "P. Giannozzi et al., J. Chem. Phys. 152 154105 (2020);
+          URL http://www.quantum-espresso.org", 
+     in publications or presentations arising from this work. More details at
+     http://www.quantum-espresso.org/quote
+
+     Parallel version (MPI), running on     4 processors
+
+     MPI processes distributed on     1 nodes
+     R & G space division:  proc/nbgrp/npool/nimage =       4
+     338 MiB available memory on the printing compute node when the environment starts
+
+
+     KCW INPUT SUMMARY 
+     ============================================
+
+      CONTROL 
+       # title               =KCW Silicon screen
+       # out_dir             =/home/nicola/CODES
+       # prefix              =                Si
+       # calculation         =            screen
+       # kcw_iverbosity      =                 2
+       # kcw_at_ks           =                 F
+       # MP grid             =     2     2     2
+       # spin_component      =                 1
+       # homo_only           =                 F
+       # read_unitary_matrix =                 T
+       # check_ks            =                 T
+       # l_vcut              =                 F
+       # assume_isolated     =              none
+       # io_sp               =                 F
+       # io_real_space       =                 F
+       # irr_bz              =                 F
+           # use_wct         =                 F
+
+      WANNIER 
+       # seedname            =                Si
+       # num_wann_occ        =                 4
+       # num_wann_emp        =                 4
+       # have_empty          =                 T
+       # has_disentangle     =                 T
+       # l_unique_manifold   =                 F
+
+      SCREEN 
+       # lrpa                =                 F
+       # tr2                 =        0.1000E-13
+       # niter               =               100
+       # nmix                =                 4
+       # eps_inf             =        0.1224E+02
+       # l_model_screen      =                 T
+       # screen_model        =          gaussian
+       # mu_screen           =        0.6600E+00
+       # check_spread        =                 F
+     ============================================
+
+     INFO: Reading pwscf data
+
+     Reading xml data from directory:
+
+     /home/nicola/CODES/q-e-kcw_1/tempdir/Si.save/
+
+     IMPORTANT: XC functional enforced from input :
+     Exchange-correlation= PW
+                           (   1   4   0   0   0   0   0)
+     Any further DFT definition will be discarded
+     Please, verify this is what you really want
+
+
+     Parallelization info
+     --------------------
+     sticks:   dense  smooth     PW     G-vecs:    dense   smooth      PW
+     Min          73      73     22                  821      821     152
+     Max          74      74     23                  823      823     153
+     Sum         295     295     91                 3287     3287     609
+
+     Using Slab Decomposition
+
+     Reading collected, re-writing distributed wavefunctions
+
+     INFO: Buffer for KS wfcs, OPENED
+
+     INFO: Optimal Matrix READ
+
+     INFO: total number of Wannier functions    8
+
+     INFO: Unitary matrix, READ from file
+
+     INFO: Buffer for WF rho, OPENED
+
+     INFO: Coulomb q+G=0 treatment:
+     INFO: Divergence            none    
+     INFO: q-grid dimension         2   2   2
+     INFO: cell volume               270.256360799503
+     INFO: Gamma Extrapolation       F
+     INFO: extrapolation q->0 term not estimated
+     INFO: Bare Coulomb q+G=0            0.00000E+00
+
+     INFO: READING Wannier-orbital Densities ...
+
+        ==============================================================================
+        iq =     1
+        The  Wannier density at  q =    0.0000000   0.0000000   0.0000000  [Cart ]
+        The  Wannier density at  q =    0.0000000   0.0000000   0.0000000  [Cryst]
+        ==============================================================================
+
+
+        ==============================================================================
+        iq =     2
+        The  Wannier density at  q =   -0.5000000   0.5000000  -0.5000000  [Cart ]
+        The  Wannier density at  q =    0.0000000   0.0000000   0.5000000  [Cryst]
+        ==============================================================================
+
+
+        ==============================================================================
+        iq =     3
+        The  Wannier density at  q =    0.5000000   0.5000000   0.5000000  [Cart ]
+        The  Wannier density at  q =    0.0000000   0.5000000   0.0000000  [Cryst]
+        ==============================================================================
+
+
+        ==============================================================================
+        iq =     4
+        The  Wannier density at  q =    0.0000000   1.0000000   0.0000000  [Cart ]
+        The  Wannier density at  q =    0.0000000   0.5000000   0.5000000  [Cryst]
+        ==============================================================================
+
+
+        ==============================================================================
+        iq =     5
+        The  Wannier density at  q =   -0.5000000  -0.5000000   0.5000000  [Cart ]
+        The  Wannier density at  q =    0.5000000   0.0000000   0.0000000  [Cryst]
+        ==============================================================================
+
+
+        ==============================================================================
+        iq =     6
+        The  Wannier density at  q =   -1.0000000   0.0000000   0.0000000  [Cart ]
+        The  Wannier density at  q =    0.5000000   0.0000000   0.5000000  [Cryst]
+        ==============================================================================
+
+
+        ==============================================================================
+        iq =     7
+        The  Wannier density at  q =    0.0000000   0.0000000   1.0000000  [Cart ]
+        The  Wannier density at  q =    0.5000000   0.5000000   0.0000000  [Cryst]
+        ==============================================================================
+
+
+        ==============================================================================
+        iq =     8
+        The  Wannier density at  q =   -0.5000000   0.5000000   0.5000000  [Cart ]
+        The  Wannier density at  q =    0.5000000   0.5000000   0.5000000  [Cryst]
+        ==============================================================================
+
+     INFO: total number of wannier to compute    8 from     1 to     8
+
+     INFO: PREPARING THE KCW CALCULATION ... DONE
+
+
+
+
+     INFO: MODEL SCREENING CALCULATION ...
+     INFO: screen_model = gaussian
+     INFO: eps_inf   =    12.240000
+     INFO: eps^-1_q(G) = 1 - (1 - 1/eps_inf) exp(-|q+G|^2/4mu^2)
+     INFO: mu_screen =     0.660000  [bohr^-1]
+
+        iq =   1   iwann =   1   rPi_q =     0.00947266    -0.00000000   uPi_q =     0.01275977    -0.00000000   SH_q =     0.01448077     0.00000000
+
+        iq =   1   iwann =   2   rPi_q =     0.00947266    -0.00000000   uPi_q =     0.01275977    -0.00000000   SH_q =     0.01448077    -0.00000000
+
+        iq =   1   iwann =   3   rPi_q =     0.00947266    -0.00000000   uPi_q =     0.01275977    -0.00000000   SH_q =     0.01448077    -0.00000000
+
+        iq =   1   iwann =   4   rPi_q =     0.00947266    -0.00000000   uPi_q =     0.01275977    -0.00000000   SH_q =     0.01448077     0.00000000
+
+        iq =   1   iwann =   5   rPi_q =    -0.00040165    -0.00000000   uPi_q =    -0.00510229    -0.00000000   SH_q =     0.00204035    -0.00000000
+
+        iq =   1   iwann =   6   rPi_q =    -0.00040164    -0.00000000   uPi_q =    -0.00510225    -0.00000000   SH_q =     0.00204037    -0.00000000
+
+        iq =   1   iwann =   7   rPi_q =    -0.00040166    -0.00000000   uPi_q =    -0.00510230    -0.00000000   SH_q =     0.00204034     0.00000000
+
+        iq =   1   iwann =   8   rPi_q =    -0.00040165    -0.00000000   uPi_q =    -0.00510227    -0.00000000   SH_q =     0.00204036    -0.00000000
+
+        iq =   2   iwann =   1   rPi_q =     0.01803713    -0.00000000   uPi_q =     0.05952884    -0.00000000   SH_q =     0.03746804     0.00000000
+
+        iq =   2   iwann =   2   rPi_q =     0.01918266    -0.00000000   uPi_q =     0.06482536    -0.00000000   SH_q =     0.04036159    -0.00000000
+
+        iq =   2   iwann =   3   rPi_q =     0.01918266    -0.00000000   uPi_q =     0.06482536    -0.00000000   SH_q =     0.04036159    -0.00000000
+
+        iq =   2   iwann =   4   rPi_q =     0.01918266    -0.00000000   uPi_q =     0.06482536    -0.00000000   SH_q =     0.04036159    -0.00000000
+
+        iq =   2   iwann =   5   rPi_q =     0.00631506    -0.00000000   uPi_q =     0.03112877     0.00000000   SH_q =     0.01955109     0.00000000
+
+        iq =   2   iwann =   6   rPi_q =     0.00631509    -0.00000000   uPi_q =     0.03112893     0.00000000   SH_q =     0.01955118     0.00000000
+
+        iq =   2   iwann =   7   rPi_q =     0.00188210    -0.00000000   uPi_q =     0.00568000    -0.00000000   SH_q =     0.00612286    -0.00000000
+
+        iq =   2   iwann =   8   rPi_q =     0.00631507    -0.00000000   uPi_q =     0.03112882    -0.00000000   SH_q =     0.01955112     0.00000000
+
+        iq =   3   iwann =   1   rPi_q =     0.01918266    -0.00000000   uPi_q =     0.06482536    -0.00000000   SH_q =     0.04036159    -0.00000000
+
+        iq =   3   iwann =   2   rPi_q =     0.01918266    -0.00000000   uPi_q =     0.06482536     0.00000000   SH_q =     0.04036159    -0.00000000
+
+        iq =   3   iwann =   3   rPi_q =     0.01803713    -0.00000000   uPi_q =     0.05952884    -0.00000000   SH_q =     0.03746804    -0.00000000
+
+        iq =   3   iwann =   4   rPi_q =     0.01918266    -0.00000000   uPi_q =     0.06482536    -0.00000000   SH_q =     0.04036159    -0.00000000
+
+        iq =   3   iwann =   5   rPi_q =     0.00188212    -0.00000000   uPi_q =     0.00568005    -0.00000000   SH_q =     0.00612289    -0.00000000
+
+        iq =   3   iwann =   6   rPi_q =     0.00631509    -0.00000000   uPi_q =     0.03112891    -0.00000000   SH_q =     0.01955117    -0.00000000
+
+        iq =   3   iwann =   7   rPi_q =     0.00631505    -0.00000000   uPi_q =     0.03112873    -0.00000000   SH_q =     0.01955107    -0.00000000
+
+        iq =   3   iwann =   8   rPi_q =     0.00631507    -0.00000000   uPi_q =     0.03112882    -0.00000000   SH_q =     0.01955112    -0.00000000
+
+        iq =   4   iwann =   1   rPi_q =     0.01759563     0.00000000   uPi_q =     0.05092909     0.00000000   SH_q =     0.03328195     0.00000000
+
+        iq =   4   iwann =   2   rPi_q =     0.01759563    -0.00000000   uPi_q =     0.05092909    -0.00000000   SH_q =     0.03328195    -0.00000000
+
+        iq =   4   iwann =   3   rPi_q =     0.01759563    -0.00000000   uPi_q =     0.05092909    -0.00000000   SH_q =     0.03328195    -0.00000000
+
+        iq =   4   iwann =   4   rPi_q =     0.01759563    -0.00000000   uPi_q =     0.05092909    -0.00000000   SH_q =     0.03328195    -0.00000000
+
+        iq =   4   iwann =   5   rPi_q =     0.00330149    -0.00000000   uPi_q =     0.01184548    -0.00000000   SH_q =     0.00951636    -0.00000000
+
+        iq =   4   iwann =   6   rPi_q =     0.00330152     0.00000000   uPi_q =     0.01184560    -0.00000000   SH_q =     0.00951643    -0.00000000
+
+        iq =   4   iwann =   7   rPi_q =     0.00330146    -0.00000000   uPi_q =     0.01184541    -0.00000000   SH_q =     0.00951632    -0.00000000
+
+        iq =   4   iwann =   8   rPi_q =     0.00330149     0.00000000   uPi_q =     0.01184552    -0.00000000   SH_q =     0.00951638    -0.00000000
+
+        iq =   5   iwann =   1   rPi_q =     0.01918266    -0.00000000   uPi_q =     0.06482536    -0.00000000   SH_q =     0.04036159    -0.00000000
+
+        iq =   5   iwann =   2   rPi_q =     0.01803713    -0.00000000   uPi_q =     0.05952884    -0.00000000   SH_q =     0.03746804    -0.00000000
+
+        iq =   5   iwann =   3   rPi_q =     0.01918266    -0.00000000   uPi_q =     0.06482536    -0.00000000   SH_q =     0.04036159     0.00000000
+
+        iq =   5   iwann =   4   rPi_q =     0.01918266    -0.00000000   uPi_q =     0.06482536    -0.00000000   SH_q =     0.04036159    -0.00000000
+
+        iq =   5   iwann =   5   rPi_q =     0.00631506    -0.00000000   uPi_q =     0.03112879    -0.00000000   SH_q =     0.01955110    -0.00000000
+
+        iq =   5   iwann =   6   rPi_q =     0.00631508    -0.00000000   uPi_q =     0.03112889    -0.00000000   SH_q =     0.01955116    -0.00000000
+
+        iq =   5   iwann =   7   rPi_q =     0.00631504    -0.00000000   uPi_q =     0.03112872     0.00000000   SH_q =     0.01955107     0.00000000
+
+        iq =   5   iwann =   8   rPi_q =     0.00188213    -0.00000000   uPi_q =     0.00568008    -0.00000000   SH_q =     0.00612291     0.00000000
+
+        iq =   6   iwann =   1   rPi_q =     0.01759563    -0.00000000   uPi_q =     0.05092909    -0.00000000   SH_q =     0.03328195    -0.00000000
+
+        iq =   6   iwann =   2   rPi_q =     0.01759563    -0.00000000   uPi_q =     0.05092909    -0.00000000   SH_q =     0.03328195    -0.00000000
+
+        iq =   6   iwann =   3   rPi_q =     0.01759563    -0.00000000   uPi_q =     0.05092909    -0.00000000   SH_q =     0.03328195     0.00000000
+
+        iq =   6   iwann =   4   rPi_q =     0.01759563     0.00000000   uPi_q =     0.05092909    -0.00000000   SH_q =     0.03328195     0.00000000
+
+        iq =   6   iwann =   5   rPi_q =     0.00330149     0.00000000   uPi_q =     0.01184547    -0.00000000   SH_q =     0.00951635     0.00000000
+
+        iq =   6   iwann =   6   rPi_q =     0.00330152     0.00000000   uPi_q =     0.01184560    -0.00000000   SH_q =     0.00951643    -0.00000000
+
+        iq =   6   iwann =   7   rPi_q =     0.00330146    -0.00000000   uPi_q =     0.01184541    -0.00000000   SH_q =     0.00951632     0.00000000
+
+        iq =   6   iwann =   8   rPi_q =     0.00330150    -0.00000000   uPi_q =     0.01184552    -0.00000000   SH_q =     0.00951638     0.00000000
+
+        iq =   7   iwann =   1   rPi_q =     0.01759563    -0.00000000   uPi_q =     0.05092909    -0.00000000   SH_q =     0.03328195     0.00000000
+
+        iq =   7   iwann =   2   rPi_q =     0.01759563    -0.00000000   uPi_q =     0.05092909    -0.00000000   SH_q =     0.03328195     0.00000000
+
+        iq =   7   iwann =   3   rPi_q =     0.01759563     0.00000000   uPi_q =     0.05092909    -0.00000000   SH_q =     0.03328195    -0.00000000
+
+        iq =   7   iwann =   4   rPi_q =     0.01759563    -0.00000000   uPi_q =     0.05092909    -0.00000000   SH_q =     0.03328195    -0.00000000
+
+        iq =   7   iwann =   5   rPi_q =     0.00330148    -0.00000000   uPi_q =     0.01184548    -0.00000000   SH_q =     0.00951636    -0.00000000
+
+        iq =   7   iwann =   6   rPi_q =     0.00330152     0.00000000   uPi_q =     0.01184559    -0.00000000   SH_q =     0.00951642    -0.00000000
+
+        iq =   7   iwann =   7   rPi_q =     0.00330147     0.00000000   uPi_q =     0.01184543    -0.00000000   SH_q =     0.00951633     0.00000000
+
+        iq =   7   iwann =   8   rPi_q =     0.00330150    -0.00000000   uPi_q =     0.01184551    -0.00000000   SH_q =     0.00951638     0.00000000
+
+        iq =   8   iwann =   1   rPi_q =     0.01918266    -0.00000000   uPi_q =     0.06482536    -0.00000000   SH_q =     0.04036159     0.00000000
+
+        iq =   8   iwann =   2   rPi_q =     0.01918266    -0.00000000   uPi_q =     0.06482536    -0.00000000   SH_q =     0.04036159     0.00000000
+
+        iq =   8   iwann =   3   rPi_q =     0.01918266    -0.00000000   uPi_q =     0.06482536    -0.00000000   SH_q =     0.04036159    -0.00000000
+
+        iq =   8   iwann =   4   rPi_q =     0.01803713    -0.00000000   uPi_q =     0.05952884    -0.00000000   SH_q =     0.03746804    -0.00000000
+
+        iq =   8   iwann =   5   rPi_q =     0.00631505     0.00000000   uPi_q =     0.03112876    -0.00000000   SH_q =     0.01955109     0.00000000
+
+        iq =   8   iwann =   6   rPi_q =     0.00188215     0.00000000   uPi_q =     0.00568014    -0.00000000   SH_q =     0.00612294    -0.00000000
+
+        iq =   8   iwann =   7   rPi_q =     0.00631504     0.00000000   uPi_q =     0.03112870    -0.00000000   SH_q =     0.01955105     0.00000000
+
+        iq =   8   iwann =   8   rPi_q =     0.00631507     0.00000000   uPi_q =     0.03112882     0.00000000   SH_q =     0.01955112     0.00000000
+
+
+     INFO: MODEL SCREENING CALCULATION ... DONE
+
+
+
+        iwann  =     1   relaxed =      0.13784466   unrelaxed =      0.41955196   alpha =  0.32855205   self Hartree =  0.27287943
+
+        iwann  =     2   relaxed =      0.13784466   unrelaxed =      0.41955197   alpha =  0.32855205   self Hartree =  0.27287943
+
+        iwann  =     3   relaxed =      0.13784466   unrelaxed =      0.41955197   alpha =  0.32855205   self Hartree =  0.27287943
+
+        iwann  =     4   relaxed =      0.13784466   unrelaxed =      0.41955196   alpha =  0.32855205   self Hartree =  0.27287943
+
+        iwann  =     5   relaxed =      0.03033010   unrelaxed =      0.12950051   alpha =  0.23420834   self Hartree =  0.09536558
+
+        iwann  =     6   relaxed =      0.03033033   unrelaxed =      0.12950140   alpha =  0.23420854   self Hartree =  0.09536611
+
+        iwann  =     7   relaxed =      0.03032997   unrelaxed =      0.12950008   alpha =  0.23420813   self Hartree =  0.09536535
+
+        iwann  =     8   relaxed =      0.03033018   unrelaxed =      0.12950082   alpha =  0.23420837   self Hartree =  0.09536577
+
+
+
+
+
+
+     Called by init_run:
+
+     Called by electrons:
+     v_of_rho     :      0.00s CPU      0.00s WALL (       1 calls)
+     v_h          :      0.00s CPU      0.00s WALL (       1 calls)
+     v_xc         :      0.00s CPU      0.00s WALL (       1 calls)
+
+     Called by c_bands:
+
+     Called by sum_band:
+
+     Called by *egterg:
+
+     Called by h_psi:
+
+     General routines
+     fft          :      0.11s CPU      0.11s WALL (       5 calls)
+     ffts         :      0.01s CPU      0.02s WALL (     512 calls)
+     davcio       :      0.00s CPU      0.00s WALL (      32 calls)
+
+     Parallel routines
+
+     KCW          :      0.16s CPU      0.17s WALL
+
+     INITIALIZATION: 
+
+     init_vloc    :      0.00s CPU      0.00s WALL (       1 calls)
+     init_us_1    :      0.00s CPU      0.00s WALL (       1 calls)
+
+
+
+
+
+
+
+
+
+      General routines
+     fft          :      0.11s CPU      0.11s WALL (       5 calls)
+     ffts         :      0.01s CPU      0.02s WALL (     512 calls)
+     davcio       :      0.00s CPU      0.00s WALL (      32 calls)
+
+
+     KCW          :      0.16s CPU      0.22s WALL
+
+
+   This run was terminated on:  22: 3:19  30Sep2026            
+
+=------------------------------------------------------------------------------=
+   JOB DONE.
+=------------------------------------------------------------------------------=

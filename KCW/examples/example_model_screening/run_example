@@ -354,7 +354,10 @@ $KCW_COMMAND -in $PREFIX.kcw-wann2kcw.in > $PREFIX.kcw-wann2kcw.out
 $ECHO " done"
 
 
-cat > $PREFIX.kcw-screen.in << EOF
+##################### MODEL 1: GAUSSIAN (PRM 2, 073803 (2018))
+MODEL='gaussian'
+
+cat > $PREFIX.kcw-screen_$MODEL.in << EOF
 KCW Silicon screen
 &control
   prefix='$PREFIX'
@@ -379,17 +382,18 @@ KCW Silicon screen
 /
 &screen
   l_model_screen = .true.
+  screen_model   = '$MODEL'
   eps_inf        = 12.24
   mu_screen      = 0.66
  /
 EOF
 
-$ECHO "  Running the model screening parameters calculation for $PREFIX...\c"
-$KCW_COMMAND -in $PREFIX.kcw-screen.in > $PREFIX.kcw-screen.out
+$ECHO "  Running the $MODEL model screening parameters calculation for $PREFIX...\c"
+$KCW_COMMAND -in $PREFIX.kcw-screen_$MODEL.in > $PREFIX.kcw-screen_$MODEL.out
 $ECHO " done"
 
-cat > $PREFIX.kcw-ham.in << EOF
-KI H2O
+cat > $PREFIX.kcw-ham_$MODEL.in << EOF
+KI Silicon
 &control
   prefix='$PREFIX'
   outdir='$TMP_DIR'
@@ -430,6 +434,52 @@ K_POINTS crystal_b
 0.500     0.000     0.500 1  ! U
 EOF
 
-$ECHO "  Running the KI hamiltonian calculation for $PREFIX...\c"
-$KCW_COMMAND_noPOSTFIX -in $PREFIX.kcw-ham.in > $PREFIX.kcw-ham.out
+$ECHO "  Running the KI hamiltonian calculation ($MODEL model) for $PREFIX...\c"
+$KCW_COMMAND_noPOSTFIX -in $PREFIX.kcw-ham_$MODEL.in > $PREFIX.kcw-ham_$MODEL.out
+mv $PREFIX.kcw_bands.dat $PREFIX.kcw_bands_$MODEL.dat
+$ECHO " done"
+
+##################### MODEL 2: CAPPELLINI (PRB 47, 9892 (1993))
+MODEL='cappellini'
+
+cat > $PREFIX.kcw-screen_$MODEL.in << EOF
+KCW Silicon screen
+&control
+  prefix='$PREFIX'
+  outdir='$TMP_DIR/'
+  kcw_iverbosity = 2
+  kcw_at_ks=.false.
+  read_unitary_matrix = .true.
+  calculation = 'screen'
+  lrpa =.false.
+  l_vcut = .false.
+  mp1 = 2
+  mp2 = 2
+  mp3 = 2
+/
+&wannier
+  seedname = 'Si'
+  check_ks = .true.
+  num_wann_occ = 4
+  num_wann_emp = 4
+  have_empty = .true.
+  has_disentangle = .true.
+/
+&screen
+  l_model_screen = .true.
+  screen_model   = '$MODEL'
+  eps_inf        = 12.24
+ /
+EOF
+
+$ECHO "  Running the $MODEL model screening parameters calculation for $PREFIX...\c"
+$KCW_COMMAND -in $PREFIX.kcw-screen_$MODEL.in > $PREFIX.kcw-screen_$MODEL.out
+$ECHO " done"
+
+# The KI hamiltonian input is the same: the screening coefficients are read from TMP_DIR
+cp $PREFIX.kcw-ham_gaussian.in $PREFIX.kcw-ham_$MODEL.in
+
+$ECHO "  Running the KI hamiltonian calculation ($MODEL model) for $PREFIX...\c"
+$KCW_COMMAND_noPOSTFIX -in $PREFIX.kcw-ham_$MODEL.in > $PREFIX.kcw-ham_$MODEL.out
+mv $PREFIX.kcw_bands.dat $PREFIX.kcw_bands_$MODEL.dat
 $ECHO " done"

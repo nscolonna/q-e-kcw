@@ -62,7 +62,7 @@ SUBROUTINE kcw_readin()
                         seedname, check_ks, l_unique_manifold
   !
   NAMELIST / SCREEN /   fix_orb, niter, nmix, tr2, i_orb, eps_inf, check_spread, alpha_mix, &
-                        l_model_screen, mu_screen
+                        l_model_screen, mu_screen, screen_model
   !
   NAMELIST / HAM /      qp_symm, kipz_corr, i_orb, do_bands, use_ws_distance, & 
                         write_hr, l_alpha_corr, on_site_only
@@ -107,6 +107,8 @@ SUBROUTINE kcw_readin()
   !! l_model_screen  : If TRUE the screening coefficients are computed from a model dielectric function (no LR)
   !!                   eps^-1_q(G) = 1 - (1 - 1/eps_inf) exp(-|q+G|^2/4mu^2) (PRR 2, 032019(R) (2020))
   !! mu_screen       : The parameter mu [bohr^-1] of the model dielectric function (default 0.71, average over 32 solids from PRM 2, 073803 (2018))
+  !! screen_model    : The model dielectric function: 'gaussian' (PRM 2, 073803 (2018), default) or
+  !!                   'cappellini' (PRB 47, 9892 (1993)). Used only if l_model_screen=.true.
   !
   !### HAM
   !! do_bands        : if .true. KC electronic bands are computed along the input path
@@ -183,6 +185,7 @@ SUBROUTINE kcw_readin()
   eps_inf             = 1.D0
   l_model_screen      = .FALSE.
   mu_screen           = 0.71D0
+  screen_model        = 'gaussian'
   l_vcut              = .FALSE.
   x_gamma_extrapolation = .FALSE.
   assume_isolated     = 'none'
@@ -285,6 +288,9 @@ SUBROUTINE kcw_readin()
   !
   IF (niter .LT.1 .OR. niter .GT. maxter) CALL errore ('kcw_readin', &
        'Wrong niter: it must be greater than 0 and less than maxter', maxter)
+  !
+  IF (l_model_screen .AND. TRIM(screen_model) /= 'gaussian' .AND. TRIM(screen_model) /= 'cappellini') &
+     CALL errore ('kcw_readin', 'screen_model not recognized: use "gaussian" or "cappellini"', 1)
   !
   ! read data produced by pwscf
   !

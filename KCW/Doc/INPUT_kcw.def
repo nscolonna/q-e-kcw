@@ -413,20 +413,42 @@ input_description -distribution {Quantum ESPRESSO} -package KCW -program kcw.x {
        default {.FALSE.}
        info {
             If .TRUE. the screening coefficients are computed from a model
-            dielectric function instead of solving the linear-response problem:
-               eps^-1_q(G) = 1 - (1 - 1/eps_inf) exp(-|q+G|^2/4mu^2)
-            (PRR 2, 032019(R) (2020)). The screening coefficient is
+            dielectric function eps_q(G), diagonal in G, instead of solving
+            the linear-response problem (see @ref screen_model).
+            The screening coefficient is
                alpha_n = \sum_q <rho_q|eps^-1_q dV_q> / \sum_q <rho_q|dV_q>
             with dV_q the Hxc potential of the Wannier density.
-            Requires @ref eps_inf and @ref mu_screen.
+            Requires @ref eps_inf.
             }
+       }
+
+       var screen_model -type CHARACTER {
+       default { 'gaussian' }
+       options {
+            info { The model dielectric function. Used only if @ref l_model_screen = .TRUE. }
+            opt -val 'gaussian' {
+               eps^-1_q(G) = 1 - (1 - 1/eps_inf) exp(-|q+G|^2/4mu^2)
+               W. Chen et al., Phys. Rev. Mater. 2, 073803 (2018).
+               Requires @ref eps_inf and @ref mu_screen.
+            }
+            opt -val 'cappellini' {
+               eps_q(G) = 1 + [ 1/(eps_inf-1) + alpha (|q+G|/q_TF)^2 + |q+G|^4/(4 w_p^2) ]^-1
+               with alpha = 1.563, and the Thomas-Fermi wave vector q_TF and the
+               plasma frequency w_p computed from the average valence electron
+               density of the system (number of electrons/cell volume).
+               G. Cappellini et al., Phys. Rev. B 47, 9892 (1993).
+               Requires only @ref eps_inf. NOTA BENE: semicore states in the
+               pseudopotential increase the average density.
+            }
+       }
        }
 
        var mu_screen -type REAL {
        default { 0.71d0 }
        info {
             The screening parameter mu (in bohr^-1) of the model dielectric
-            function. Used only if @ref l_model_screen = .TRUE.
+            function. Used only if @ref l_model_screen = .TRUE. and
+            @ref screen_model = 'gaussian'.
             The default is the average value over the 32 solids in Table IV of
             W. Chen et al., Phys. Rev. Mater. 2, 073803 (2018) (standard
             deviation 0.07 bohr^-1). Material-specific values are listed there,

@@ -1,12 +1,10 @@
 This example shows how to use the KCW code to compute the band structure
 of FCC Silicon using screening coefficients from a model dielectric 
 function instead of the linear-response calculation (see example01).
-The model inverse dielectric function is diagonal in G:
-
-   eps^-1_q(G) = 1 - (1 - 1/eps_inf) exp(-|q+G|^2/4mu^2)
-
-(PRR 2, 032019(R) (2020); PRM 2, 073803 (2018)) and the screening 
-coefficient of the Wannier function n is 
+Two model dielectric functions, both diagonal in G, are used: the
+Gaussian model of PRM 2, 073803 (2018) and the model of Cappellini
+et al., PRB 47, 9892 (1993) (see steps 4 and 6). The screening
+coefficient of the Wannier function n is
 
    alpha_n = \sum_q <rho^n_q | eps^-1_q dV^n_q> / \sum_q <rho^n_q | dV^n_q>
 
@@ -23,18 +21,35 @@ than the one in example01. The steps are:
 3) prepare the KCW calculation 
    input=Si.kcw-wann2kcw.in, output=Si.kcw-wann2kcw.out
 
-4) calculate the screening coefficients from the model dielectric function
-   (l_model_screen = .true.). The parameters of the model are the 
-   macroscopic dielectric constant (eps_inf) and the screening parameter 
-   mu (mu_screen, in bohr^-1). Here eps_inf = 12.24 (RPA at the PBE level)
-   and mu = 0.66 bohr^-1 (PBE) for Si are taken from Table IV of 
-   W. Chen et al., Phys. Rev. Mater. 2, 073803 (2018).
+4) calculate the screening coefficients with the Gaussian model 
+   (l_model_screen = .true., screen_model = 'gaussian'). The parameters 
+   of the model are the macroscopic dielectric constant (eps_inf) and the 
+   screening parameter mu (mu_screen, in bohr^-1). Here eps_inf = 12.24 
+   (RPA at the PBE level) and mu = 0.66 bohr^-1 (PBE) for Si are taken 
+   from Table IV of W. Chen et al., Phys. Rev. Mater. 2, 073803 (2018).
    Here l_vcut = .false., i.e. the q+G=0 term is neglected in both the
    numerator and the denominator. With l_vcut = .true. it is included
    (screened by eps_inf in the numerator) via the Gygi-Baldereschi scheme.
-   input=Si.kcw-screen.in, output=Si.kcw-screen.out
+   input=Si.kcw-screen_gaussian.in, output=Si.kcw-screen_gaussian.out
 
-5) calculate, interpolate and diagonalize the KI Hamiltonian 
-   input=Si.kcw-ham.in, output=Si.kcw-ham.out
+5) calculate, interpolate and diagonalize the KI Hamiltonian with the 
+   Gaussian-model screening coefficients
+   input=Si.kcw-ham_gaussian.in, output=Si.kcw-ham_gaussian.out
+   bands=Si.kcw_bands_gaussian.dat
 
-The Si band structure is in Si.kcw_bands.dat.
+6) calculate the screening coefficients with the Cappellini model
+   dielectric function (screen_model = 'cappellini'):
+      eps_q(G) = 1 + [ 1/(eps_inf-1) + alpha (|q+G|/q_TF)^2 + |q+G|^4/(4 w_p^2) ]^-1
+   with alpha = 1.563 and q_TF, w_p from the average valence density
+   (G. Cappellini et al., Phys. Rev. B 47, 9892 (1993)). Only eps_inf is
+   needed.
+   input=Si.kcw-screen_cappellini.in, output=Si.kcw-screen_cappellini.out
+
+7) calculate, interpolate and diagonalize the KI Hamiltonian with the 
+   Cappellini-model screening coefficients
+   input=Si.kcw-ham_cappellini.in, output=Si.kcw-ham_cappellini.out
+   bands=Si.kcw_bands_cappellini.dat
+
+Each screening calculation overwrites the screening coefficients in the
+temporary directory, so each KI Hamiltonian is run right after the 
+corresponding screening calculation.

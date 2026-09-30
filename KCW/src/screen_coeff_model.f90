@@ -10,9 +10,14 @@ SUBROUTINE screen_coeff_model ()
   !---------------------------------------------------------------------
   !
   !! Screening coefficients from a model dielectric function (no LR calculation).
-  !! The model is diagonal in G (see PRR 2, 032019(R) (2020); PRR 2, 073803 (2018)):
+  !! The model is diagonal in G. Two models are available (screen_model):
   !!
-  !!   eps^{-1}_q(G) = 1 - (1 - 1/eps_inf) * exp(-|q+G|^2/(4 mu^2))
+  !!  'gaussian' (PRM 2, 073803 (2018)):
+  !!     eps^{-1}_q(G) = 1 - (1 - 1/eps_inf) * exp(-|q+G|^2/(4 mu^2))
+  !!
+  !!  'cappellini' (Cappellini et al., PRB 47, 9892 (1993)):
+  !!     eps_q(G) = 1 + [ 1/(eps_inf-1) + alpha (|q+G|/q_TF)^2 + |q+G|^4/(4 w_p^2) ]^{-1}
+  !!     with alpha = 1.563 and q_TF, w_p from the average valence density (Hartree a.u.)
   !!
   !! and the screening coefficient is
   !!
@@ -44,6 +49,9 @@ SUBROUTINE screen_coeff_model ()
                                    dvxc_s, vsgga, segni
   USE coulomb,              ONLY : exxdiv, exxdiv_eps
   USE cell_base,            ONLY : omega, tpiba2
+  USE control_kcw,          ONLY : screen_model
+  USE klist,                ONLY : nelec
+  USE constants,            ONLY : pi, fpi, AUTOEV
   !
   IMPLICIT NONE
   !
@@ -62,19 +70,40 @@ SUBROUTINE screen_coeff_model ()
   COMPLEX(DP) :: pi_q_unrelax, pi_q_model, sh_q
   REAL(DP) :: qg2, weight, alpha
   !
+  REAL(DP) :: n_val, k_F, q_TF, w_p
+  ! average valence density, Fermi and Thomas-Fermi wave vectors, plasma frequency (Hartree a.u.)
+  REAL(DP), PARAMETER :: alpha_capp = 1.563_DP
+  ! empirical parameter of the Cappellini model
+  !
   IF ( ABS(eps_inf - 1.D0) .lt. 1.D-6 ) &
      CALL errore('screen_coeff_model', 'eps_inf = 1: the model screening is trivial (alpha=1). Set eps_inf', 1)
-  IF ( mu_screen .le. 0.D0 ) &
+  IF ( TRIM(screen_model) == 'gaussian' .AND. mu_screen .le. 0.D0 ) &
      CALL errore('screen_coeff_model', 'mu_screen must be > 0', 1)
+  !
+  IF ( TRIM(screen_model) == 'cappellini' ) THEN
+     n_val = nelec/omega
+     k_F   = (3.D0*pi**2*n_val)**(1.D0/3.D0)
+     q_TF  = SQRT(4.D0*k_F/pi)
+     w_p   = SQRT(fpi*n_val)
+  ENDIF
   !
   nqs = nqstot
   weight = 1.D0/nqs
   !
   WRITE(stdout,'(/)')
   WRITE(stdout,'(5X,"INFO: MODEL SCREENING CALCULATION ...")')
-  WRITE(stdout,'(5X,"INFO: eps^-1_q(G) = 1 - (1 - 1/eps_inf) exp(-|q+G|^2/4mu^2)")')
+  WRITE(stdout,'(5X,"INFO: screen_model = ", A)') TRIM(screen_model)
   WRITE(stdout,'(5X,"INFO: eps_inf   = ", F12.6)') eps_inf
-  WRITE(stdout,'(5X,"INFO: mu_screen = ", F12.6, "  [bohr^-1]")') mu_screen
+  IF ( TRIM(screen_model) == 'gaussian' ) THEN
+    WRITE(stdout,'(5X,"INFO: eps^-1_q(G) = 1 - (1 - 1/eps_inf) exp(-|q+G|^2/4mu^2)")')
+    WRITE(stdout,'(5X,"INFO: mu_screen = ", F12.6, "  [bohr^-1]")') mu_screen
+  ELSE
+    WRITE(stdout,'(5X,"INFO: eps_q(G) = 1 + [1/(eps_inf-1) + alpha (|q+G|/q_TF)^2 + |q+G|^4/(4 w_p^2)]^-1")')
+    WRITE(stdout,'(5X,"INFO: alpha     = ", F12.6)') alpha_capp
+    WRITE(stdout,'(5X,"INFO: n_val     = ", F12.6, "  [bohr^-3]  (", F8.3, " electrons)")') n_val, nelec
+    WRITE(stdout,'(5X,"INFO: q_TF      = ", F12.6, "  [bohr^-1]")') q_TF
+    WRITE(stdout,'(5X,"INFO: w_p       = ", F12.6, "  [Ha]  = ", F10.4, " [eV]")') w_p, w_p*AUTOEV
+  ENDIF
   IF (irr_bz) WRITE(stdout,'(5X,"INFO: irr_bz ignored, sum over the full BZ")')
   !
   ALLOCATE ( rhowann(dffts%nnr,num_wann,nrho), rhor(dffts%nnr,nrho) )
@@ -104,7 +133,7 @@ SUBROUTINE screen_coeff_model ()
     ! ... The model inverse dielectric function at this q
     DO ig = 1, ngms
       qg2 = tpiba2 * SUM( (g(:,ig)+x_q(:,iq))**2 )
-      epsm1(ig) = 1.D0 - (1.D0 - 1.D0/eps_inf) * EXP( -qg2/(4.D0*mu_screen**2) )
+      epsm1(ig) = eps_model_inv( qg2 )
     ENDDO
     !
     DO iwann = iorb_start, iorb_end
@@ -211,5 +240,26 @@ SUBROUTINE screen_coeff_model ()
   !
 9011 FORMAT(/, 8x, "iq =", i4, 3x, "iwann =", i4, 3x, "rPi_q =", 2f15.8, 3x, "uPi_q =", &
                2f15.8, 3x, "SH_q =", 2f15.8)
+  !
+  CONTAINS
+  !
+  REAL(DP) FUNCTION eps_model_inv( qq )
+    !
+    !! The model inverse dielectric function at |q+G|^2 = qq [bohr^-2]
+    !
+    REAL(DP), INTENT(IN) :: qq
+    !
+    SELECT CASE ( TRIM(screen_model) )
+    CASE ( 'gaussian' )
+      eps_model_inv = 1.D0 - (1.D0 - 1.D0/eps_inf) * EXP( -qq/(4.D0*mu_screen**2) )
+    CASE ( 'cappellini' )
+      eps_model_inv = 1.D0 / ( 1.D0 + 1.D0 / ( 1.D0/(eps_inf-1.D0) + alpha_capp*qq/q_TF**2 &
+                                               + qq**2/(4.D0*w_p**2) ) )
+    CASE DEFAULT
+      eps_model_inv = 1.D0
+      CALL errore('eps_model_inv', 'screen_model not recognized', 1)
+    END SELECT
+    !
+  END FUNCTION eps_model_inv
   !
 END SUBROUTINE screen_coeff_model
