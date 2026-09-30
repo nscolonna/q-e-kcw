@@ -28,6 +28,7 @@ rotate_ks.o \
 apply_u_matrix.o \
 ks_hamiltonian.o \
 screen_coeff.o \
+screen_coeff_model.o \
 compute_map_ikq_single.o \
 calculate_phase.o \
 structure_factor.o \

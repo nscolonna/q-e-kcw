@@ -65,6 +65,8 @@ subroutine input_summary ( )
       WRITE(stdout, 45)  "# niter               =", niter
       WRITE(stdout, 45)  "# nmix                =", nmix
       WRITE(stdout, 46)  "# eps_inf             =", eps_inf
+      WRITE(stdout, 43)  "# l_model_screen      =", l_model_screen
+      IF (l_model_screen) WRITE(stdout, 46)  "# mu_screen           =", mu_screen
       IF (i_orb /= -1 )   WRITE(stdout, 45)  "# i_orb               =", i_orb
       WRITE(stdout, 43)  "# check_spread        =", check_spread     
     ENDIF

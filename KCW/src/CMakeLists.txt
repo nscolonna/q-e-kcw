@@ -15,6 +15,7 @@ set(src_kcw
     apply_u_matrix.f90
     ks_hamiltonian.f90
     screen_coeff.f90
+    screen_coeff_model.f90
     compute_map_ikq_single.f90
     calculate_phase.f90
     structure_factor.f90

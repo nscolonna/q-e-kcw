@@ -409,6 +409,31 @@ input_description -distribution {Quantum ESPRESSO} -package KCW -program kcw.x {
             }
        }
 
+       var l_model_screen -type LOGICAL {
+       default {.FALSE.}
+       info {
+            If .TRUE. the screening coefficients are computed from a model
+            dielectric function instead of solving the linear-response problem:
+               eps^-1_q(G) = 1 - (1 - 1/eps_inf) exp(-|q+G|^2/4mu^2)
+            (PRR 2, 032019(R) (2020)). The screening coefficient is
+               alpha_n = \sum_q <rho_q|eps^-1_q dV_q> / \sum_q <rho_q|dV_q>
+            with dV_q the Hxc potential of the Wannier density.
+            Requires @ref eps_inf and @ref mu_screen.
+            }
+       }
+
+       var mu_screen -type REAL {
+       default { 0.71d0 }
+       info {
+            The screening parameter mu (in bohr^-1) of the model dielectric
+            function. Used only if @ref l_model_screen = .TRUE.
+            The default is the average value over the 32 solids in Table IV of
+            W. Chen et al., Phys. Rev. Mater. 2, 073803 (2018) (standard
+            deviation 0.07 bohr^-1). Material-specific values are listed there,
+            e.g. 0.66 bohr^-1 for Si at the PBE level.
+            }
+       }
+
        var alpha_mix(niter)  -type REAL {
             dimensionality { dimensionless }
             default { 0.7 }

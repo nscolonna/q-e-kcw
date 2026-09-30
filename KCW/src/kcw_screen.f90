@@ -25,15 +25,19 @@ SUBROUTINE kcw_screen
   !
   USE klist,                 ONLY : nkstot
   USE lsda_mod,              ONLY : nspin
-  USE control_kcw,           ONLY : nkstot_eff
+  USE control_kcw,           ONLY : nkstot_eff, l_model_screen
   !
   IMPLICIT NONE
   !
   ! 3) Set up for the KC calculation. 
   CALL kcw_setup_screen( )
   !
-  ! 4) Compute the screening coefficient via Linear Respoonse
-  CALL screen_coeff ( )
+  ! 4) Compute the screening coefficient via Linear Respoonse or from a model dielectric function
+  IF (l_model_screen) THEN
+    CALL screen_coeff_model ( )
+  ELSE
+    CALL screen_coeff ( )
+  ENDIF
   ! 
   CALL clean_pw( .TRUE. )
   CALL close_kcw ( ) 

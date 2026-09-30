@@ -50,3 +50,9 @@ echo "DONE"
 cd $home
 
 
+echo "Running example_model_screening"
+cd example_model_screening/
+./run_example
+./compare.sh
+echo "DONE"
+cd $home
