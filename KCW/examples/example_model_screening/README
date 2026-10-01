@@ -53,3 +53,17 @@ than the one in example01. The steps are:
 Each screening calculation overwrites the screening coefficients in the
 temporary directory, so each KI Hamiltonian is run right after the 
 corresponding screening calculation.
+
+To compare with the ab-initio linear-response (LR) results of example01, 
+run (after run_example, or directly on the files in reference/):
+
+   ./compare_LR.sh
+
+It prints the screening coefficients from the two models next to the LR
+ones in ../example01/reference, with the relative difference, and the KI
+minimum band gap and band gap at Gamma (from the interpolated band
+structures along the k-path) with their difference wrt LR. It also writes
+the gnuplot script compare_bands.gnu comparing the KI band structures
+(each model vs LR, then all together). To see the plots:
+
+   gnuplot compare_bands.gnu
