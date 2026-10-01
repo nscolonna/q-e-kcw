@@ -2,7 +2,7 @@ This example shows how to use the KCW code to compute the band structure
 of FCC Silicon using screening coefficients from a model dielectric 
 function instead of the linear-response calculation (see example01).
 Two model dielectric functions, both diagonal in G, are used: the
-Gaussian model of PRM 2, 073803 (2018) and the model of Cappellini
+erfc model of PRM 2, 073803 (2018) and the model of Cappellini
 et al., PRB 47, 9892 (1993) (see steps 4 and 6). The screening
 coefficient of the Wannier function n is
 
@@ -21,8 +21,11 @@ than the one in example01. The steps are:
 3) prepare the KCW calculation 
    input=Si.kcw-wann2kcw.in, output=Si.kcw-wann2kcw.out
 
-4) calculate the screening coefficients with the Gaussian model 
-   (l_model_screen = .true., screen_model = 'gaussian'). The parameters 
+4) calculate the screening coefficients with the erfc model
+   (l_model_screen = .true., screen_model = 'erfc'):
+      eps^-1_q(G) = 1 - (1 - 1/eps_inf) exp(-|q+G|^2/4mu^2)
+   i.e. a screened Coulomb interaction erfc(mu r)/r + erf(mu r)/(eps_inf r)
+   in real space. The parameters 
    of the model are the macroscopic dielectric constant (eps_inf) and the 
    screening parameter mu (mu_screen, in bohr^-1). Here eps_inf = 12.24 
    (RPA at the PBE level) and mu = 0.66 bohr^-1 (PBE) for Si are taken 
@@ -30,12 +33,12 @@ than the one in example01. The steps are:
    Here l_vcut = .false., i.e. the q+G=0 term is neglected in both the
    numerator and the denominator. With l_vcut = .true. it is included
    (screened by eps_inf in the numerator) via the Gygi-Baldereschi scheme.
-   input=Si.kcw-screen_gaussian.in, output=Si.kcw-screen_gaussian.out
+   input=Si.kcw-screen_erfc.in, output=Si.kcw-screen_erfc.out
 
 5) calculate, interpolate and diagonalize the KI Hamiltonian with the 
-   Gaussian-model screening coefficients
-   input=Si.kcw-ham_gaussian.in, output=Si.kcw-ham_gaussian.out
-   bands=Si.kcw_bands_gaussian.dat
+   erfc-model screening coefficients
+   input=Si.kcw-ham_erfc.in, output=Si.kcw-ham_erfc.out
+   bands=Si.kcw_bands_erfc.dat
 
 6) calculate the screening coefficients with the Cappellini model
    dielectric function (screen_model = 'cappellini'):

@@ -423,11 +423,14 @@ input_description -distribution {Quantum ESPRESSO} -package KCW -program kcw.x {
        }
 
        var screen_model -type CHARACTER {
-       default { 'gaussian' }
+       default { 'erfc' }
        options {
             info { The model dielectric function. Used only if @ref l_model_screen = .TRUE. }
-            opt -val 'gaussian' {
+            opt -val 'erfc' {
                eps^-1_q(G) = 1 - (1 - 1/eps_inf) exp(-|q+G|^2/4mu^2)
+               i.e. in real space the screened Coulomb interaction is
+               erfc(mu r)/r + erf(mu r)/(eps_inf r): unscreened at short
+               range and screened by eps_inf at long range.
                W. Chen et al., Phys. Rev. Mater. 2, 073803 (2018).
                Requires @ref eps_inf and @ref mu_screen.
             }
@@ -448,7 +451,7 @@ input_description -distribution {Quantum ESPRESSO} -package KCW -program kcw.x {
        info {
             The screening parameter mu (in bohr^-1) of the model dielectric
             function. Used only if @ref l_model_screen = .TRUE. and
-            @ref screen_model = 'gaussian'.
+            @ref screen_model = 'erfc'.
             The default is the average value over the 32 solids in Table IV of
             W. Chen et al., Phys. Rev. Mater. 2, 073803 (2018) (standard
             deviation 0.07 bohr^-1). Material-specific values are listed there,

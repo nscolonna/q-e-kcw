@@ -19,11 +19,11 @@
         A. Marrazzo and N. Colonna, Phys. Rev. Research 6, 033085 (2024)  
      =--------------------------------------------------------------------------------=
 
-     Program KCW v.8.0dev starts on 30Sep2026 at 22: 3:20 
+     Program KCW v.8.0dev starts on  1Oct2026 at  9:43:14 
         Git branch: KCW_model_screening
-        Last git commit: dd1791d9dbb8ae1e1ef013e71bde61d733045c11-dirty
-        Last git commit date: Wed Sep 30 21:36:59 2026 +0200
-        Last git commit subject: KCW: add model dielectric screening for alpha coef
+        Last git commit: 32e6a216240b607a686cfaa634b7479529934844-dirty
+        Last git commit date: Thu Oct 1 09:04:23 2026 +0200
+        Last git commit subject: Add comparison with LR results in example01
 
      This program is part of the open-source Quantum ESPRESSO suite
      for quantum simulation of materials; please cite
@@ -38,7 +38,7 @@
 
      MPI processes distributed on     1 nodes
      R & G space division:  proc/nbgrp/npool/nimage =       4
-     335 MiB available memory on the printing compute node when the environment starts
+     604 MiB available memory on the printing compute node when the environment starts
 
 
      KCW INPUT SUMMARY 
@@ -115,10 +115,10 @@
      iwann =     2   alpha =      0.32855205
      iwann =     3   alpha =      0.32855205
      iwann =     4   alpha =      0.32855205
-     iwann =     5   alpha =      0.23420834
+     iwann =     5   alpha =      0.23420833
      iwann =     6   alpha =      0.23420854
      iwann =     7   alpha =      0.23420813
-     iwann =     8   alpha =      0.23420837
+     iwann =     8   alpha =      0.23420838
 
      INFO: MLWF read from file: Reading collected, re-writing distributed wavefunctions
      Read        8 Wannier functions
@@ -547,7 +547,7 @@
      Writing all to output data dir /home/nicola/CODES/q-e-kcw_1/tempdir/Si_kcw.save/ :
      XML data file, pseudopotentials, collected wavefunctions
 
-     KCW          :      0.19s CPU      0.20s WALL
+     KCW          :      0.18s CPU      0.19s WALL
 
      INITIALIZATION: 
 
@@ -567,16 +567,16 @@
 
       General routines
      calbec       :      0.00s CPU      0.00s WALL (       8 calls)
-     fft          :      0.11s CPU      0.11s WALL (       5 calls)
+     fft          :      0.10s CPU      0.11s WALL (       5 calls)
      ffts         :      0.02s CPU      0.02s WALL (     512 calls)
      fftw         :      0.00s CPU      0.00s WALL (     128 calls)
      davcio       :      0.00s CPU      0.00s WALL (      72 calls)
 
 
-     KCW          :      0.19s CPU      0.24s WALL
+     KCW          :      0.18s CPU      0.24s WALL
 
 
-   This run was terminated on:  22: 3:20  30Sep2026            
+   This run was terminated on:   9:43:14   1Oct2026            
 
 =------------------------------------------------------------------------------=
    JOB DONE.

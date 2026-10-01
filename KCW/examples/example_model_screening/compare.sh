@@ -75,7 +75,7 @@ fi
 done
 if (( $check )); then echo -e "  ${GREEN}WANNIER     OK!${NC}"; fi
 
-for MODEL in gaussian cappellini; do
+for MODEL in erfc cappellini; do
 
 ## CHECK alpha parameters
 check=1

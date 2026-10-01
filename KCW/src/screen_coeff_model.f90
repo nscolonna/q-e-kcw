@@ -12,8 +12,9 @@ SUBROUTINE screen_coeff_model ()
   !! Screening coefficients from a model dielectric function (no LR calculation).
   !! The model is diagonal in G. Two models are available (screen_model):
   !!
-  !!  'gaussian' (PRM 2, 073803 (2018)):
+  !!  'erfc' (PRM 2, 073803 (2018)):
   !!     eps^{-1}_q(G) = 1 - (1 - 1/eps_inf) * exp(-|q+G|^2/(4 mu^2))
+  !!     i.e. in real space eps^{-1}v = erfc(mu r)/r + erf(mu r)/(eps_inf r)
   !!
   !!  'cappellini' (Cappellini et al., PRB 47, 9892 (1993)):
   !!     eps_q(G) = 1 + [ 1/(eps_inf-1) + alpha (|q+G|/q_TF)^2 + |q+G|^4/(4 w_p^2) ]^{-1}
@@ -77,7 +78,7 @@ SUBROUTINE screen_coeff_model ()
   !
   IF ( ABS(eps_inf - 1.D0) .lt. 1.D-6 ) &
      CALL errore('screen_coeff_model', 'eps_inf = 1: the model screening is trivial (alpha=1). Set eps_inf', 1)
-  IF ( TRIM(screen_model) == 'gaussian' .AND. mu_screen .le. 0.D0 ) &
+  IF ( TRIM(screen_model) == 'erfc' .AND. mu_screen .le. 0.D0 ) &
      CALL errore('screen_coeff_model', 'mu_screen must be > 0', 1)
   !
   IF ( TRIM(screen_model) == 'cappellini' ) THEN
@@ -94,7 +95,7 @@ SUBROUTINE screen_coeff_model ()
   WRITE(stdout,'(5X,"INFO: MODEL SCREENING CALCULATION ...")')
   WRITE(stdout,'(5X,"INFO: screen_model = ", A)') TRIM(screen_model)
   WRITE(stdout,'(5X,"INFO: eps_inf   = ", F12.6)') eps_inf
-  IF ( TRIM(screen_model) == 'gaussian' ) THEN
+  IF ( TRIM(screen_model) == 'erfc' ) THEN
     WRITE(stdout,'(5X,"INFO: eps^-1_q(G) = 1 - (1 - 1/eps_inf) exp(-|q+G|^2/4mu^2)")')
     WRITE(stdout,'(5X,"INFO: mu_screen = ", F12.6, "  [bohr^-1]")') mu_screen
   ELSE
@@ -250,7 +251,7 @@ SUBROUTINE screen_coeff_model ()
     REAL(DP), INTENT(IN) :: qq
     !
     SELECT CASE ( TRIM(screen_model) )
-    CASE ( 'gaussian' )
+    CASE ( 'erfc' )
       eps_model_inv = 1.D0 - (1.D0 - 1.D0/eps_inf) * EXP( -qq/(4.D0*mu_screen**2) )
     CASE ( 'cappellini' )
       eps_model_inv = 1.D0 / ( 1.D0 + 1.D0 / ( 1.D0/(eps_inf-1.D0) + alpha_capp*qq/q_TF**2 &

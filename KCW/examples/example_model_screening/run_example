@@ -354,8 +354,8 @@ $KCW_COMMAND -in $PREFIX.kcw-wann2kcw.in > $PREFIX.kcw-wann2kcw.out
 $ECHO " done"
 
 
-##################### MODEL 1: GAUSSIAN (PRM 2, 073803 (2018))
-MODEL='gaussian'
+##################### MODEL 1: ERFC (PRM 2, 073803 (2018))
+MODEL='erfc'
 
 cat > $PREFIX.kcw-screen_$MODEL.in << EOF
 KCW Silicon screen
@@ -477,7 +477,7 @@ $KCW_COMMAND -in $PREFIX.kcw-screen_$MODEL.in > $PREFIX.kcw-screen_$MODEL.out
 $ECHO " done"
 
 # The KI hamiltonian input is the same: the screening coefficients are read from TMP_DIR
-cp $PREFIX.kcw-ham_gaussian.in $PREFIX.kcw-ham_$MODEL.in
+cp $PREFIX.kcw-ham_erfc.in $PREFIX.kcw-ham_$MODEL.in
 
 $ECHO "  Running the KI hamiltonian calculation ($MODEL model) for $PREFIX...\c"
 $KCW_COMMAND_noPOSTFIX -in $PREFIX.kcw-ham_$MODEL.in > $PREFIX.kcw-ham_$MODEL.out

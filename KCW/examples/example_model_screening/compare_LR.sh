@@ -8,7 +8,7 @@
 cd `dirname $0`
 
 LR_FILE=../example01/reference/Si.kcw-screen.out
-MODELS="gaussian cappellini"
+MODELS="erfc cappellini"
 
 if [ ! -r $LR_FILE ]; then
    echo "ERROR: $LR_FILE not found"
@@ -130,7 +130,7 @@ set ylabel "Energy (eV)"
 set key outside top center horizontal
 EOF
 
-COLOR_gaussian="red"
+COLOR_erfc="red"
 COLOR_cappellini="blue"
 for MODEL in $MODELS; do
    BANDS=results/Si.kcw_bands_$MODEL.dat
@@ -150,7 +150,7 @@ cat >> $GNU << EOF
 
 set title "Si KI bands: all models vs LR"
 plot "$LR_BANDS"          w l lc rgb "black" lw 2 t "LR (example01)", \\
-     "$BANDS_gaussian"    w l lc rgb "$COLOR_gaussian" lw 2 dt 2 t "gaussian", \\
+     "$BANDS_erfc"    w l lc rgb "$COLOR_erfc" lw 2 dt 2 t "erfc", \\
      "$BANDS_cappellini"  w l lc rgb "$COLOR_cappellini" lw 2 dt 3 t "cappellini"
 pause -1 "Press Enter to exit"
 EOF
