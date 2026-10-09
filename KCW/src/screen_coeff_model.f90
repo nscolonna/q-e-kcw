@@ -50,7 +50,9 @@ SUBROUTINE screen_coeff_model ()
                                    dvxc_s, vsgga, segni
   USE coulomb,              ONLY : exxdiv, exxdiv_eps
   USE cell_base,            ONLY : omega, tpiba2
-  USE control_kcw,          ONLY : screen_model
+  USE control_kcw,          ONLY : screen_model, print_eps_model
+  USE gvecs,                ONLY : gcutms
+  USE io_global,            ONLY : ionode
   USE klist,                ONLY : nelec
   USE constants,            ONLY : pi, fpi, AUTOEV
   !
@@ -106,6 +108,8 @@ SUBROUTINE screen_coeff_model ()
     WRITE(stdout,'(5X,"INFO: w_p       = ", F12.6, "  [Ha]  = ", F10.4, " [eV]")') w_p, w_p*AUTOEV
   ENDIF
   IF (irr_bz) WRITE(stdout,'(5X,"INFO: irr_bz ignored, sum over the full BZ")')
+  !
+  IF (print_eps_model) CALL write_eps_model()
   !
   ALLOCATE ( rhowann(dffts%nnr,num_wann,nrho), rhor(dffts%nnr,nrho) )
   ALLOCATE ( delta_vr(dffts%nnr,nspin_mag), delta_vr_(dffts%nnr,nspin_mag) )
@@ -243,6 +247,45 @@ SUBROUTINE screen_coeff_model ()
                2f15.8, 3x, "SH_q =", 2f15.8)
   !
   CONTAINS
+  !
+  SUBROUTINE write_eps_model()
+    !
+    !! Write the model eps^{-1} and eps as a function of |q+G| on a uniform grid
+    !! from 0 to the largest |q+G| of the calculation (smooth-grid cutoff + max |q|)
+    !
+    INTEGER, PARAMETER :: npt = 1001
+    INTEGER :: i, iun
+    REAL(DP) :: qmax, qq, em1
+    CHARACTER(LEN=256) :: filename
+    !
+    qmax = 0.D0
+    DO i = 1, nqs
+      qmax = MAX( qmax, SQRT( tpiba2 * SUM( x_q(:,i)**2 ) ) )
+    ENDDO
+    qmax = qmax + SQRT( tpiba2 * gcutms )
+    !
+    filename = TRIM(prefix)//'.eps_'//TRIM(screen_model)//'.dat'
+    IF (ionode) THEN
+      OPEN( NEWUNIT=iun, FILE=TRIM(filename), STATUS='replace', FORM='formatted' )
+      WRITE(iun,'("# Model dielectric function: ", A)') TRIM(screen_model)
+      WRITE(iun,'("# eps_inf = ", F12.6)') eps_inf
+      IF ( TRIM(screen_model) == 'erfc' ) THEN
+        WRITE(iun,'("# mu_screen = ", F12.6, " bohr^-1")') mu_screen
+      ELSE
+        WRITE(iun,'("# alpha = ", F8.4, "   q_TF = ", F12.6, " bohr^-1   w_p = ", F12.6, " Ha")') &
+              alpha_capp, q_TF, w_p
+      ENDIF
+      WRITE(iun,'("#", 5X, "|q+G| [bohr^-1]", 8X, "eps^-1", 12X, "eps")')
+      DO i = 1, npt
+        qq  = qmax * DBLE(i-1) / DBLE(npt-1)
+        em1 = eps_model_inv( qq**2 )
+        WRITE(iun,'(3F18.10)') qq, em1, 1.D0/em1
+      ENDDO
+      CLOSE(iun)
+    ENDIF
+    WRITE(stdout,'(5X,"INFO: model dielectric function written to ", A)') TRIM(filename)
+    !
+  END SUBROUTINE write_eps_model
   !
   REAL(DP) FUNCTION eps_model_inv( qq )
     !

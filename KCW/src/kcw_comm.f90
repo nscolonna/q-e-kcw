@@ -78,6 +78,7 @@ MODULE control_kcw
   LOGICAL :: l_model_screen ! IF true alpha from a model dielectric function (no LR, see screen_coeff_model)
   REAL (DP) :: mu_screen  ! The screening parameter mu of the model dielectric function [bohr^-1]
   CHARACTER(LEN=32) :: screen_model ! The model dielectric function: 'erfc' or 'cappellini'
+  LOGICAL :: print_eps_model   ! IF true the model dielectric function vs |q+G| is written to file
   LOGICAL :: l_vcut       ! IF true use a regularization for the coulomb potential. set (q+G)0=0 otherwise
   LOGICAL :: l_alpha_corr ! add a correction to the second order approximation of the energy based 
                           ! on the un-relaxed energy at N \pm 1

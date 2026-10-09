@@ -459,6 +459,17 @@ input_description -distribution {Quantum ESPRESSO} -package KCW -program kcw.x {
             }
        }
 
+       var print_eps_model -type LOGICAL {
+       default {.FALSE.}
+       info {
+            If .TRUE. the model dielectric function is written to the file
+            prefix.eps_<screen_model>.dat in the working directory, as a
+            function of |q+G| (in bohr^-1) on a uniform grid from 0 to the
+            largest |q+G| of the calculation. Columns: |q+G|, eps^-1, eps.
+            Used only if @ref l_model_screen = .TRUE.
+            }
+       }
+
        var alpha_mix(niter)  -type REAL {
             dimensionality { dimensionless }
             default { 0.7 }

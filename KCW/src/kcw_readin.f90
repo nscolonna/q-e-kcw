@@ -62,7 +62,7 @@ SUBROUTINE kcw_readin()
                         seedname, check_ks, l_unique_manifold
   !
   NAMELIST / SCREEN /   fix_orb, niter, nmix, tr2, i_orb, eps_inf, check_spread, alpha_mix, &
-                        l_model_screen, mu_screen, screen_model
+                        l_model_screen, mu_screen, screen_model, print_eps_model
   !
   NAMELIST / HAM /      qp_symm, kipz_corr, i_orb, do_bands, use_ws_distance, & 
                         write_hr, l_alpha_corr, on_site_only
@@ -109,6 +109,7 @@ SUBROUTINE kcw_readin()
   !! mu_screen       : The parameter mu [bohr^-1] of the model dielectric function (default 0.71, average over 32 solids from PRM 2, 073803 (2018))
   !! screen_model    : The model dielectric function: 'erfc' (PRM 2, 073803 (2018), default) or
   !!                   'cappellini' (PRB 47, 9892 (1993)). Used only if l_model_screen=.true.
+  !! print_eps_model : If TRUE the model dielectric function vs |q+G| is written to <prefix>.eps_<screen_model>.dat
   !
   !### HAM
   !! do_bands        : if .true. KC electronic bands are computed along the input path
@@ -186,6 +187,7 @@ SUBROUTINE kcw_readin()
   l_model_screen      = .FALSE.
   mu_screen           = 0.71D0
   screen_model        = 'erfc'
+  print_eps_model     = .FALSE.
   l_vcut              = .FALSE.
   x_gamma_extrapolation = .FALSE.
   assume_isolated     = 'none'

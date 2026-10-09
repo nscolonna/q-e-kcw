@@ -69,6 +69,7 @@ subroutine input_summary ( )
       IF (l_model_screen) WRITE(stdout, 41)  "# screen_model        =", TRIM(screen_model)
       IF (l_model_screen .AND. TRIM(screen_model) == 'erfc') &
          WRITE(stdout, 46)  "# mu_screen           =", mu_screen
+      IF (l_model_screen) WRITE(stdout, 43)  "# print_eps_model     =", print_eps_model
       IF (i_orb /= -1 )   WRITE(stdout, 45)  "# i_orb               =", i_orb
       WRITE(stdout, 43)  "# check_spread        =", check_spread     
     ENDIF
