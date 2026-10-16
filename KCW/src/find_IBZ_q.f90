@@ -254,6 +254,7 @@ SUBROUTINE find_IBZ_q()
                 rhowann_aux(:) = rho_rotated(:,ip) - phase(:)*eiRqR*rhowann(:,iRq,iwann,ip)
                 delta_rho_R = delta_rho_R + SUM( ABS(rhowann_aux(:)) )/(nrho*dffts%nr1*dffts%nr2*dffts%nr3)
               ENDDO
+              CALL mp_sum (delta_rho_R, intra_bgrp_comm)
               !delta_rho_R = delta_rho + (CMPLX(1.D0,0.D0, kind=DP) - eiRqR)*int_rho_Rq
               !WRITE (stdout, *) "          ir  =", ir,  "Rvect  =", Rvect(1:3,ir)
               !WRITE (stdout, *) "          iRq =", iRq, "x(iRq) =", x_q(1:3,iRq)
