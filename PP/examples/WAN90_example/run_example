@@ -18,8 +18,6 @@ $ECHO "Wannier90 (http://www.wannier.org) to obtain maximally-localised"
 $ECHO "Wannier functions (MLWFs) for the valence bands of diamond."
 $ECHO "Wannier90 may be run in two modes, 'library' and 'standalone',"
 $ECHO "and both of these are demonstrated."
-$ECHO "for library mode pw2wannier90 has to be compile with -D__WANLIB flag,"
-$ECHO "libwannier.a has to be linked. Uncomment related lines below."
 
 # set the needed environment variables
 . ../../../environment_variables
@@ -358,9 +356,9 @@ $ECHO " done"
 #########################################################
 # LIBRARY MODE
 ########################################################
-#$ECHO
-#$ECHO "  <== Library Mode ==> \c"
-#$ECHO
+$ECHO
+$ECHO "  <== Library Mode ==> \c"
+$ECHO
 
 cp diamond.sa.win diamond.lib.win
 
@@ -377,9 +375,9 @@ cat > diamond.pw2wan.lib.in << EOF
    wan_mode = 'library'
 /
 EOF
-#$ECHO "  running pw2wannier90 in library mode for diamond...\c"
-#$PW2WAN_COMMAND < diamond.pw2wan.lib.in > diamond.pw2wan.lib.out
-#$ECHO " done"
+$ECHO "  running pw2wannier90 in library mode for diamond...\c"
+$PW2WAN_COMMAND < diamond.pw2wan.lib.in > diamond.pw2wan.lib.out
+$ECHO " done"
 
 ############################################################
 

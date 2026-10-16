@@ -336,7 +336,7 @@ CONTAINS
   !
   !-----------------------------------------------------------------------
   SUBROUTINE qexsd_copy_dft ( dft_obj, nsp, atm, &
-       dft_name, nq1, nq2, nq3, ecutfock, exx_fraction, screening_parameter, &
+       dft_name, nq1, nq2, nq3, ecutfock, exx_fraction, exx_lr_fraction, screening_parameter, &
        exxdiv_treatment, x_gamma_extrapolation, ecutvcut, local_thr, use_ace, nbndproj, &
        lda_plus_U, apply_u, lda_plus_U_kind, U_projection, Hubbard_n, Hubbard_l, Hubbard_lmax, Hubbard_occ, &
        Hubbard_n2, Hubbard_l2, Hubbard_n3, Hubbard_l3, backall, Hubbard_lmax_back, Hubbard_alpha_back, &
@@ -356,7 +356,7 @@ CONTAINS
     ! Variables that may or may not be present should be intent(inout)
     ! so that they do not forget their default value (if any)
     CHARACTER(LEN=*), INTENT(inout) :: exxdiv_treatment
-    REAL(dp), INTENT(inout) :: ecutfock, exx_fraction, screening_parameter, &
+    REAL(dp), INTENT(inout) :: ecutfock, exx_fraction, exx_lr_fraction, screening_parameter, &
          ecutvcut, local_thr
     INTEGER, INTENT(inout) :: nq1, nq2, nq3
     LOGICAL, INTENT(inout) :: x_gamma_extrapolation
@@ -390,8 +390,12 @@ CONTAINS
        nq2 = dft_obj%hybrid%qpoint_grid%nqx2
        nq3 = dft_obj%hybrid%qpoint_grid%nqx3
        ecutfock = dft_obj%hybrid%ecutfock
-       exx_fraction = dft_obj%hybrid%exx_fraction
-       screening_parameter = dft_obj%hybrid%screening_parameter
+       IF (dft_obj%hybrid%exx_fraction_ispresent) &
+          exx_fraction = dft_obj%hybrid%exx_fraction
+       IF (dft_obj%hybrid%exx_lr_fraction_ispresent) &
+          exx_lr_fraction = dft_obj%hybrid%exx_lr_fraction
+       IF (dft_obj%hybrid%screening_parameter_ispresent) &
+          screening_parameter = dft_obj%hybrid%screening_parameter
        exxdiv_treatment = dft_obj%hybrid%exxdiv_treatment
        x_gamma_extrapolation = dft_obj%hybrid%x_gamma_extrapolation
        ecutvcut = dft_obj%hybrid%ecutvcut
@@ -664,23 +668,26 @@ CONTAINS
          ef, ef_up, ef_dw, et )
       !------------------------------------------------------------------------
       !
-      ! IMPORTANT NOTICE: IN LSDA CASE CONVERTS TO "PWSCF" LOGIC for k-points
+      ! IMPORTANT: In LSDA case, converts to PWSCF logic for k-points
+      ! ALSO NOTE: "wg" and "et" are allocated here if not allocated on input;
+      !            if allocated on input, "et" must be an ACC variable
       !
       USE qes_types_module, ONLY : band_structure_type
       !
       IMPLICIT NONE
       TYPE ( band_structure_type)         :: band_struct_obj
       LOGICAL, INTENT(out) :: lsda
-      INTEGER, INTENT(out) :: nkstot, nbnd, nbnd_up, nbnd_dw, &
-              isk(:)
+      INTEGER, INTENT(out) :: nkstot, nbnd, nbnd_up, nbnd_dw, isk(:)
       REAL(dp), INTENT(out):: nelec, ef, ef_up, ef_dw, xk(:,:), wk(:)
       REAL(dp), INTENT(inout), ALLOCATABLE ::  wg(:,:), et(:,:)
       !
       LOGICAL :: two_fermi_energies
-      INTEGER :: ik
+      INTEGER :: nbnd_, ik
       ! 
       lsda = band_struct_obj%lsda
       nkstot = band_struct_obj%nks  
+      nbnd_up = 0
+      nbnd_dw = 0
       !
       IF ( lsda) THEN
          !
@@ -688,6 +695,9 @@ CONTAINS
             nbnd  = band_struct_obj%nbnd / 2
          ELSE IF ( band_struct_obj%nbnd_up_ispresent .AND. band_struct_obj%nbnd_dw_ispresent ) THEN 
             nbnd = (band_struct_obj%nbnd_up + band_struct_obj%nbnd_dw)/2 
+            ! I think that a better choice in this case should be
+            ! nbnd = MAX(band_struct_obj%nbnd_up,band_struct_obj%nbnd_dw)
+            ! instead of the trick below with auxiliary variable nbnd_
          ELSE 
             CALL errore ('qexsd_copy_band_structure: ','both nbnd and nbnd_up+nbnd_dw missing', 1)  
          END IF
@@ -727,10 +737,13 @@ CONTAINS
       !
       CALL qexsd_copy_efermi ( band_struct_obj, &
            nelec, ef, two_fermi_energies, ef_up, ef_dw )
-      !
-      IF ( .NOT. ALLOCATED(et) ) ALLOCATE( et(nbnd,nkstot) )
-      !$acc enter data create(et)
-      IF ( .NOT. ALLOCATED(wg) ) ALLOCATE( wg(nbnd,nkstot) )
+      ! Next line prevents out-of-bounds error in CP with LSDA
+      nbnd_ = MAX(nbnd,nbnd_up,nbnd_dw)
+      IF ( .NOT. ALLOCATED(et) ) THEN
+         ALLOCATE( et(nbnd_,nkstot) )
+         !$acc enter data create (et)
+      ENDIF
+      IF ( .NOT. ALLOCATED(wg) ) ALLOCATE( wg(nbnd_,nkstot) )
       !
       DO ik =1, band_struct_obj%ndim_ks_energies
          IF ( band_struct_obj%lsda) THEN

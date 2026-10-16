@@ -23,8 +23,6 @@
   !! running mode
   CHARACTER(LEN = 256) :: seedname2
   !! prepended to file names in wannier90. For implementation of wannier_lib
-  CHARACTER(LEN = 3), ALLOCATABLE :: atsym(:)
-  !! atomic symbols. atsym(nat)
   LOGICAL :: logwann
   !!
   LOGICAL :: write_unk
@@ -33,8 +31,6 @@
   !! Set to .TRUE. to write formatted wavefunctions. Default is .FALSE. (only relevant if write_unk=.TRUE.)
   LOGICAL :: write_amn
   !! write A_mn(k) matrices to file (not used in library mode)
-  LOGICAL :: write_mmn
-  !! write M_mn(k,b) matrices to file
   LOGICAL :: write_spn
   !! write S matrices between Bloch states (non-collinear spin calculation only)
   LOGICAL, ALLOCATABLE :: zerophase(:, :)
@@ -78,8 +74,6 @@
   !! number of k-points, iknum = nkstot/2 for spin-polarized case, iknum = nkstot for unpolarized and non-collinear
   INTEGER :: num_bands
   !! number of bands left after exclusions
-  INTEGER :: num_nnmax = 12
-  !!
   INTEGER, ALLOCATABLE :: kpb(:, :)
   !! list of nearest neighbours for eack k-point k+b(ik,ib)
   INTEGER, ALLOCATABLE :: g_kpb(:, :, :)
@@ -101,12 +95,6 @@
   !!! angular part l and mr of wannier (n_wannier) as from table 3.1,3.2 of spec.
   INTEGER, ALLOCATABLE :: r_w(:)
   !! radial part of wannier (n_wannier) as from table 3.3 of spec.
-  REAL(KIND = DP) :: rlatt(3, 3)
-  !! real lattices (Cartesian coords., units of Angstrom)
-  REAL(KIND = DP) :: glatt(3, 3)
-  !! recip. lattices (Cartesian coords., units of reciproval Angstrom)
-  REAL(KIND = DP) :: spreads(3)
-  !! values of \Omega, \Omega_I, and \tilde{\Omega}
   REAL(KIND = DP), ALLOCATABLE :: center_w(:, :)
   !! projection function center (crystal coords.) center_w(3,n_wannier)
   REAL(KIND = DP), ALLOCATABLE :: spin_qaxis(:, :)
@@ -121,29 +109,29 @@
   !! expansion coefficients of gf on QE ylm function (16,n_wannier)
   REAL(KIND = DP), ALLOCATABLE :: kpt_latt(:, :)
   !! k-points in crystal coords. kpt_latt(3,iknum)
-  REAL(KIND = DP), ALLOCATABLE :: atcart(:, :)
-  !! atom centres (Cartesian coords., units of Angstrom). atcart(3,nat)
   REAL(KIND = DP), ALLOCATABLE :: wann_centers(:, :)
   !! centers of WFs (Cartesian coords., units of Angstrom) wann_centers(3,n_wannier)
   REAL(KIND = DP), ALLOCATABLE :: wann_spreads(:)
   !! spread of WFs in Angstrom^2. wann_spreads(n_wannier)
-  REAL(KIND = DP), ALLOCATABLE :: eigval(:, :)
-  !! eigenvalues \epsilon_nk corresponding to the \psi_nk eigenstates
+  REAL(KIND = DP), ALLOCATABLE, TARGET :: eigval(:, :)
+  !! eigenvalues \epsilon_nk corresponding to the \psi_nk eigenstates.
+  !! TARGET, like the other arrays below, because the Wannier90 v4 setters keep
+  !! pointers to them
   COMPLEX(KIND = DP), ALLOCATABLE :: gf(:, :)
   !! guding_function(npwx,n_proj)
   COMPLEX(KIND = DP), ALLOCATABLE :: gf_spinor(:, :)
   !!
   COMPLEX(KIND = DP), ALLOCATABLE :: sgf_spinor(:, :)
   !!
-  COMPLEX(KIND = DP), ALLOCATABLE :: m_mat(:, :, :, :)
+  COMPLEX(KIND = DP), ALLOCATABLE, TARGET :: m_mat(:, :, :, :)
   !! overlap matrices between neighbouring periodic parts of Bloch eigenstates at each k-point M_mn(k,b)=<u_mk|u_nk+b>
-  !! m_mat(num_bands,num_bands,nnb,iknum)
+  !! m_mat(num_bands,num_bands,nnb,nk_loc): this pool's k-points only, as Wannier90 takes it through w90_set_m_local
   COMPLEX(KIND = DP), ALLOCATABLE :: a_mat(:, :, :)
   !! matrices describing the projection of n_wannier trial orbitals
   !! on num_bands Bloch states at each k-point A_mn(k)=<psi_mk|g_n> a_mat(num_bands,n_wannier,iknum)
-  COMPLEX(KIND = DP), ALLOCATABLE :: u_mat(:, :, :)
+  COMPLEX(KIND = DP), ALLOCATABLE, TARGET :: u_mat(:, :, :)
   !! unitary matrix at each k-point u_mat(n_wannier,n_wannier,iknum)
-  COMPLEX(KIND = DP), ALLOCATABLE :: u_mat_opt(:, :, :)
+  COMPLEX(KIND = DP), ALLOCATABLE, TARGET :: u_mat_opt(:, :, :)
   !! unitary matrix for the optimal sub-space at each k-point u_mat_opt(num_bands,n_wannier,iknum)
   !-----------------------------------------------------------------------------------------
   END MODULE wann_common

@@ -479,6 +479,8 @@ MODULE input_parameters
         !
         REAL(DP) :: exx_fraction = -1.0_DP
         !! exact exchange fraction. If negative, use defaults
+        REAL(DP) :: exx_lr_fraction = -1.0E6_DP
+        !! additional long-range exact exchange coefficient. If unset, use defaults.
         REAL(DP) :: screening_parameter = -1.0_DP
         INTEGER  :: nqx1 = 0
         !! use the same values as \(\text{nk1, nk2, nk3}\)
@@ -697,7 +699,8 @@ MODULE input_parameters
              nqx1, nqx2, nqx3, ecutfock, localization_thr, scdm, ace,         &
              scdmden, scdmgrd, nscdm, n_proj,                                 &
              exxdiv_treatment, x_gamma_extrapolation, yukawa, ecutvcut,       &
-             exx_fraction, exx_type, screening_parameter, ref_alat,      &
+             exx_fraction, exx_type, exx_lr_fraction, screening_parameter,    &
+             ref_alat,                                                        &
              noncolin, lspinorb, starting_spin_angle, lambda, angle1, angle2, &
              report, lforcet,                                                 &
              constrained_magnetization, B_field, fixed_magnetization,         &
@@ -915,6 +918,21 @@ MODULE input_parameters
         INTEGER :: mixing_ndim = 0
         !! dimension of mixing subspace. Used in PWscf only.
 
+        LOGICAL :: simple_magn_mix = .FALSE.
+        !! if .TRUE., mix the magnetization with plain mixing for the first
+        !! maxlinmix iterations instead of Broyden, independent of
+        !! mixing_mode (TF/local-TF preconditioning of the charge channel
+        !! keeps working as usual). Used in PWscf only.
+
+        INTEGER :: maxlinmix = 7
+        !! simple_magn_mix only: number of iterations for which the
+        !! magnetization is mixed with plain mixing instead of Broyden.
+        !! Used in PWscf only.
+
+        REAL(DP) :: simplemix = 1.5_DP
+        !! simple_magn_mix only: plain mixing coefficient for the
+        !! magnetization density. Used in PWscf only.
+
         CHARACTER(len=80) :: diagonalization = 'david'
         !! diagonalization = 'david', 'cg', 'paro' or 'rmm'
         !! algorithm used by PWscf for iterative diagonalization
@@ -1078,6 +1096,7 @@ MODULE input_parameters
           diis_temp, diis_achmix, diis_g0chmix, diis_g1chmix,          &
           diis_nchmix, diis_nrot, diis_rothr, diis_ethr, diis_chguess, &
           mixing_mode, mixing_beta, mixing_ndim, mixing_fixed_ns,      &
+          simple_magn_mix, maxlinmix, simplemix,                       &
           tqr, tq_smoothing, tbeta_smoothing,                          &
           diago_cg_maxiter, diago_david_ndim, diago_rmm_ndim,          &
           diago_rmm_conv, diago_gs_nblock, diagonalization,            &

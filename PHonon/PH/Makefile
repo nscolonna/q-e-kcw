@@ -261,4 +261,11 @@ clean :
 	../../bin/q2r.x ../../bin/q2trans.x ../../bin/q2trans_fd.x ../../bin/lambda.x ../../bin/fqha.x \
 	../../bin/alpha2f.x ../../disp_width.x
 
+ifneq ($(TOLERATE_MISSING_DEPEND),)
+-include make.depend
+else
+ifeq ($(wildcard make.depend),)
+$(error make.depend not found in $(CURDIR) -- run "make depend" first, or "make veryclean"/"make distclean" to clean without it)
+endif
 include make.depend
+endif

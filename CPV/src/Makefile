@@ -151,6 +151,13 @@ clean :
 	-/bin/rm -rf ../../bin/manycp.x ../../bin/cppp.x ../../bin/cp.x ../../bin/wfdd.x
 
 
+ifneq ($(TOLERATE_MISSING_DEPEND),)
+-include make.depend
+else
+ifeq ($(wildcard make.depend),)
+$(error make.depend not found in $(CURDIR) -- run "make depend" first, or "make veryclean"/"make distclean" to clean without it)
+endif
 include make.depend
+endif
 
 

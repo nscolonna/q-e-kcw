@@ -58,6 +58,13 @@ clean :
 	- /bin/rm -f *.x *.o *.d *.i *~ *_tmp.f90 *.mod *.L *.a
 	- /bin/rm -f ../../bin/phcg.x
 
+ifneq ($(TOLERATE_MISSING_DEPEND),)
+-include make.depend
+else
+ifeq ($(wildcard make.depend),)
+$(error make.depend not found in $(CURDIR) -- run "make depend" first, or "make veryclean"/"make distclean" to clean without it)
+endif
 include make.depend
+endif
 
 

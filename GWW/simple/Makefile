@@ -47,4 +47,11 @@ libsimple.a : $(SIMPLEOBJS)
 clean :
 	- /bin/rm -f *.x *.o *~ *.F90 *.d *.mod *.i *.L libsimple.a
 
+ifneq ($(TOLERATE_MISSING_DEPEND),)
+-include make.depend
+else
+ifeq ($(wildcard make.depend),)
+$(error make.depend not found in $(CURDIR) -- run "make depend" first, or "make veryclean"/"make distclean" to clean without it)
+endif
 include make.depend
+endif

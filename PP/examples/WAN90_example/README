@@ -45,9 +45,6 @@ variables see the bottom of this file)
 
 4) LIBRARY MODE 
 
-!! pw2wannier90.x has to be compiled with the -D__WANLIB and
-!! libwannier.a has to be linked
-
    (4a) run pw2wannier90 in library mode to obtain the MLWF centres 
         and spreads (input=diamond.lib.win, diamond.pw2wan.lib.in, 
         output=diamond.lib.wout, diamond.pw2wan.lib.out). 
@@ -57,24 +54,19 @@ N.B.
   (i) The WAN_DIR variable in the run_example script must be set to the 
       directory of the wannier90 executable. 
 
- (ii) Multiple CPUs: distribution of k-points (the -npool command line option)
-      is not yet supported, only G-vectors.
+ (ii) Multiple CPUs: both G-vector and k-point (the -npool command line option)
+      distribution are supported. In library mode the A and M matrices are
+      computed pool-by-pool and gathered before Wannier90 runs, which it does
+      serially on one process.
 
- (iii) To run in library mode, pw2wannier90 must be linked to the wannier
-       library. To do so, compile the Wannier90 library, libwannier.a, 
-       following the instructions in the Wannier90 documentation (for the 
-       impatient, type 'make lib' in the Wannier90 root directory). Then make 
-       the following changes to the espresso make.sys file, and recompile 
-       pw2wannier90:
+ (iii) Library mode needs no special build: QE links pw2wannier90.x against
+       the Wannier90 library and its modules in both build systems.
 
-         + Add -D__WANLIB to the DFLAGS variable
-           DFLAGS = -D__WANLIB ...
-
-         + Add a new variable WANLIB to specify location of Wannier library
-           WANLIB = -L/path/of/wannier/library -lwannier
-
-         + Add $(WANLIB) to the LIBS variable
-           LIBS   = $(WANLIB) $(LAPACK_LIBS) $(BLAS_LIBS) ...
+ (iv) In library mode wannier90 reads its own input from seedname.win; no
+      "wannier90.x -pp" prerun and no .nnkp/.amn/.mmn files. The k-point list,
+      unit cell and number of k-points in the .win must match the nscf run;
+      they are checked and a mismatch stops the run. The number of projections
+      must equal num_wann, so wannier90's select_projections is not available.
 
 Input variables for pw2wannier90:
 

@@ -91,7 +91,7 @@ tddfpt : lrmods
 	if test -d TDDFPT; then \
 	( cd TDDFPT; $(MAKE) all || exit 1) ; fi
 
-pp : pwlibs
+pp : pwlibs libw90
 	if test -d PP ; then \
 	( cd PP ; $(MAKE) all || exit 1 ) ; fi
 
@@ -130,7 +130,7 @@ epw: pw ph pp ld1 libw90
 	( cd EPW ; $(MAKE) all || exit 1; \
 		cd ../bin; ln -fs ../EPW/bin/epw.x . ); fi
 
-all_currents:
+all_currents: phlibs
 	if test -d QEHeat ; then \
 	( cd QEHeat ; $(MAKE) all || exit 1; ) ; fi
 
@@ -303,8 +303,8 @@ install :
 #########################################################
 
 # remove object files and executables
-clean : 
-	touch make.inc 
+clean :
+	touch make.inc
 	for dir in \
 		LAXlib FFTXlib XClib UtilXlib upflib Modules KS_Solvers \
 		dft-d3 LR_Modules PW CPV PP PHonon HP EPW NEB TDDFPT GWW \
@@ -313,7 +313,7 @@ clean :
 	; do \
 	    if test -d $$dir ; then \
 		( cd $$dir ; \
-		$(MAKE) clean ) \
+		$(MAKE) clean TOLERATE_MISSING_DEPEND=$(TOLERATE_MISSING_DEPEND) ) \
 	    fi \
 	done
 	- @(cd install ; $(MAKE) -f plugins_makefile clean)
@@ -321,18 +321,28 @@ clean :
 	- /bin/rm -rf bin/*.x tempdir
 
 # remove files produced by "configure" as well
+# the submodule-checkout stamp files (git_devx, git_mbd, git_w90) are removed
+# unconditionally: they live under install/ in whichever tree make was run
+# from (TOPDIR for in-source, BUILDDIR for out-of-source), so this is safe
+# and meaningful in both cases, unlike the rest of this target.
+# TOLERATE_MISSING_DEPEND is a target-specific variable: it is in effect for
+# this recipe AND for the recipes of its prerequisites (clean, and anything
+# clean depends on), which is how it reaches the per-subdirectory "make
+# clean" calls above without weakening a plain "make clean".
+veryclean : TOLERATE_MISSING_DEPEND := 1
 veryclean : clean
+	- @(cd install ; $(MAKE) -f extlibs_makefile distclean_devx distclean_mbd distclean_w90)
 	-@if test ! $(TOPDIR) -ef $(BUILDDIR) ; then \
 	   echo "make $@ not supported in out-of-source builds" ; \
 	   echo "just re-create $(BUILDDIR) and re-run configure" ; \
 	else \
-	- @(cd install ; $(MAKE) -f plugins_makefile veryclean) ; \
-	- (cd install ; rm -rf config.log configure.msg config.status \
+	   (cd install ; $(MAKE) -f plugins_makefile veryclean) ; \
+	   (cd install ; rm -rf config.log configure.msg config.status \
 		make_wannier90.inc autom4te.cache ) ; \
-	- rm -f espresso.tar.gz ; \
-	- rm -rf make.inc ; \
-	- rm -rf MBD wannier90 devxlib ;\
-	- rm -rf FoX lapack ; \
+	   rm -f espresso.tar.gz ; \
+	   rm -rf make.inc ; \
+	   rm -rf MBD wannier90 devxlib ; \
+	   rm -rf FoX lapack ; \
 	fi
 # remove everything not in the original distribution
 # place deinit at the very end such that makefiles clean up as much as possible.

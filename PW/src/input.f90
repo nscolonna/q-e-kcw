@@ -300,6 +300,9 @@ SUBROUTINE control_iosys()
                             tolp_             => tolp, &
                             upscale_          => upscale, &
                             mixing_beta_      => mixing_beta, &
+                            simple_magn_mix_  => simple_magn_mix, &
+                            maxlinmix_        => maxlinmix, &
+                            simplemix_        => simplemix, &
                             nstep_            => nstep, &
                             iprint_           => iprint, &
                             noinv_            => noinv, &
@@ -393,6 +396,7 @@ SUBROUTINE control_iosys()
   !
   USE input_parameters, ONLY : exx_maxstep, electron_maxstep, mixing_mode, mixing_beta, &
                                mixing_ndim, mixing_fixed_ns, conv_thr,     &
+                               simple_magn_mix, maxlinmix, simplemix,      &
                                tqr, tq_smoothing, tbeta_smoothing,         &
                                diago_thr_init,                             &
                                diago_cg_maxiter,                           &
@@ -450,6 +454,8 @@ SUBROUTINE control_iosys()
   INTEGER  :: ia, nt, i, j
   LOGICAL  :: domag, sm_wasnt_set
   REAL(DP) :: theta, phi, V
+  !
+  INTEGER :: igcx
   !
   ! MAIN CONTROL VARIABLES, MD AND RELAX
   !
@@ -1203,6 +1209,9 @@ SUBROUTINE control_iosys()
   starting_scf_threshold = tr2
   nmix                   = mixing_ndim
   mixing_beta_           = mixing_beta
+  simple_magn_mix_       = simple_magn_mix
+  maxlinmix_             = maxlinmix
+  simplemix_             = simplemix
   niter_with_fixed_ns    = mixing_fixed_ns
   scf_must_converge_     = scf_must_converge
   !
@@ -2131,12 +2140,14 @@ SUBROUTINE exx_iosys ( ecutwfc, ecutrho )
                               exxdiv_treatment, yukawa, ecutvcut,          &
                               gau_parameter, localization_thr, scdm, ace,  &
                               scdmden, scdmgrd, nscdm, n_proj,             & 
-                              exx_fraction, exx_type, screening_parameter, ecutfock 
+                              exx_fraction, exx_lr_fraction, exx_type,     &
+                              screening_parameter, ecutfock
   USE io_global,     ONLY : stdout
   USE klist,         ONLY : tot_charge
   USE ions_base,     ONLY : nat, ityp, zv
   USE xc_lib,        ONLY:  xclib_dft_is
-  USE xc_lib,        ONLY : xclib_set_exx_fraction, set_screening_parameter
+  USE xc_lib,        ONLY : xclib_set_exx_fraction, xclib_set_exx_lr_fraction, &
+                            set_screening_parameter
   USE exx_base,      ONLY : x_gamma_extrapolation_ => x_gamma_extrapolation, &
                             nq1, nq2, nq3, exx_bgrp_type, EXX_BGRP_BANDS, EXX_BGRP_PAIRS, &
                             exxdiv_treatment_ => exxdiv_treatment, &
@@ -2188,6 +2199,8 @@ SUBROUTINE exx_iosys ( ecutwfc, ecutrho )
   END IF
   !
   IF (exx_fraction >= 0.0_DP) CALL xclib_set_exx_fraction (exx_fraction)
+  !
+  IF (exx_lr_fraction > -1.0E5_DP) CALL xclib_set_exx_lr_fraction (exx_lr_fraction)
   !
   IF (screening_parameter >= 0.0_DP) &
         & CALL set_screening_parameter(screening_parameter)

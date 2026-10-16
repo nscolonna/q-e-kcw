@@ -173,7 +173,7 @@ CONTAINS
                    energy_thr, grad_thr, cell_thr, fcp_thr, &
                    energy_error, grad_error, cell_error, fcp_error, &
                    lmovecell, lfcp, fcp_cap, fcp_hess, step_accepted, &
-                   stop_bfgs, failed, istep )
+                   stop_bfgs, failed, istep, isotropic )
       !------------------------------------------------------------------------
       !! BFGS algorithm.
       !
@@ -231,11 +231,16 @@ CONTAINS
       LOGICAL,          INTENT(OUT)   :: failed
       !! .TRUE. if BFGS failed
       INTEGER,          INTENT(OUT)   :: istep
+      LOGICAL, OPTIONAL, INTENT(IN)   :: isotropic
+      !! .TRUE. if the cell is constrained to isotropic scaling (h -> s*h)
       !
       ! ... local variables
       !
       INTEGER  :: n, i, j, k, nat
       LOGICAL  :: lwolfe
+      LOGICAL  :: line_search
+      !! .TRUE. if the previous step was rejected and the line search goes on
+      !! along the same direction with a reduced trust radius
       REAL(DP) :: dE0s, den
       REAL(DP), ALLOCATABLE :: step_tmp(:)
       ! ... for scaled coordinates
@@ -251,6 +256,7 @@ CONTAINS
       !
       IF ( bfgs_file == " ") bfgs_file = TRIM(filebfgs)
       lwolfe=.false.
+      line_search = .FALSE.
       n = SIZE( pos_in ) + NADD
       nat = size (pos_in) / 3
       if (nat*3 /= size (pos_in)) call errore('bfgs',' strange dimension',1)
@@ -339,8 +345,7 @@ CONTAINS
           ALLOCATE (step_tmp( n ) )
           !
           step_tmp(:) = inv_metric(:,:) .times. grad(:)
-          if (lmovecell) FORALL( i=1:3, j=1:3) step_tmp( n-NADD+j+3*(i-1) ) = &
-              step_tmp( n-NADD+j+3*(i-1) )*iforceh(i,j)
+          CALL constrain_cell_step( step_tmp )
           !
           energy_error = abs(grad(:) .dot. step_tmp(:) + &
               0.5_DP * (step_tmp(:) .dot. (metric(:, :) .times. step_tmp(:))))
@@ -423,6 +428,7 @@ CONTAINS
          ! ... Note that for the FCP case, the Wolfe condition is ignored
          !
          step_accepted = .FALSE.
+         line_search   = .TRUE.
          !
          WRITE( UNIT = stdout, &
               & FMT = '(5X,"CASE: ",A,"_new > ",A,"_old",/)' ) fname,fname
@@ -478,8 +484,11 @@ CONTAINS
             !
             CALL reset_bfgs( n, lfcp, fcp_hess )
             !
+            ! ... a new search direction: not a line search anymore
+            line_search = .FALSE.
+            !
             step(:) = - ( inv_hess(:,:) .times. grad(:) )
-            if (lmovecell) FORALL( i=1:3, j=1:3) step( n-NADD+j+3*(i-1) ) = step( n-NADD+j+3*(i-1) )*iforceh(i,j)
+            CALL constrain_cell_step( step )
             ! normalize step but remember its length
             nr_step_length = scnorm(step)
             step(:) = step(:) / nr_step_length
@@ -534,7 +543,7 @@ CONTAINS
             ! ... standard Newton-Raphson step
             !
             step(:) = - ( inv_hess(:,:) .times. grad(:) )
-            if (lmovecell) FORALL( i=1:3, j=1:3) step( n-NADD+j+3*(i-1) ) = step( n-NADD+j+3*(i-1) )*iforceh(i,j)
+            CALL constrain_cell_step( step )
             !
          END IF
          IF ( ( grad(:) .dot. step(:) ) > 0.0_DP ) THEN
@@ -544,7 +553,7 @@ CONTAINS
             !
             CALL reset_bfgs( n, lfcp, fcp_hess )
             step(:) = - ( inv_hess(:,:) .times. grad(:) )
-            if (lmovecell) FORALL( i=1:3, j=1:3) step( n-NADD+j+3*(i-1) ) = step( n-NADD+j+3*(i-1) )*iforceh(i,j)
+            CALL constrain_cell_step( step )
             !
          END IF
          !
@@ -583,7 +592,12 @@ CONTAINS
       !
       ! ... positions and cell are updated
       !
-      IF (use_gdiis_step .and. bfgs_ndim .gt. 1 ) THEN 
+      ! ... the full G-DIIS step is used only for a new step: during the
+      ! ... line search that follows a rejected step the trust radius
+      ! ... obtained by interpolation must be used, otherwise the rejected
+      ! ... position (pos_p + nr_step_length*step_old) is proposed again
+      !
+      IF (use_gdiis_step .and. bfgs_ndim .gt. 1 .and. .NOT. line_search ) THEN 
          pos(:) = pos + nr_step_length * step(:)
       ELSE 
          pos(:) = pos(:) + trust_radius * step(:)
@@ -706,7 +720,7 @@ CONTAINS
             ! ... last gradient and reset gdiis history
             !
             step(:) = - ( inv_hess(:,:) .times. grad(:) )
-            if (lmovecell) FORALL( i=1:3, j=1:3) step( n-NADD+j+3*(i-1) ) = step( n-NADD+j+3*(i-1) )*iforceh(i,j)
+            CALL constrain_cell_step( step )
             !
             gdiis_iter = 0
             !
@@ -715,6 +729,29 @@ CONTAINS
          DEALLOCATE( res, overlap, work, iwork )
          !
       END SUBROUTINE gdiis_step
+      !
+      !--------------------------------------------------------------------
+      SUBROUTINE constrain_cell_step( v )
+        !--------------------------------------------------------------------
+        !! Apply the cell constraints to the cell part of a step: mask
+        !! the frozen components with iforceh and, for isotropic scaling,
+        !! project the step onto the current cell, dh -> (dh:h)/(h:h) h,
+        !! so that the step used by bfgs is the one actually taken.
+        !
+        REAL(DP), INTENT(INOUT) :: v(:)
+        REAL(DP) :: hc(3,3), dh(3,3)
+        !
+        IF ( .NOT. lmovecell ) RETURN
+        FORALL( i=1:3, j=1:3 ) dh(i,j) = v( n-NADD+j+3*(i-1) )*iforceh(i,j)
+        IF ( PRESENT( isotropic ) ) THEN
+           IF ( isotropic ) THEN
+              FORALL( i=1:3, j=1:3 ) hc(i,j) = pos( n-NADD+j+3*(i-1) )
+              dh = SUM( dh*hc ) / SUM( hc*hc ) * hc
+           END IF
+        END IF
+        FORALL( i=1:3, j=1:3 ) v( n-NADD+j+3*(i-1) ) = dh(i,j)
+        !
+      END SUBROUTINE constrain_cell_step
       !
    END SUBROUTINE bfgs
    !
@@ -932,6 +969,10 @@ CONTAINS
                 WRITE( stdout, '(/,5X,"WARNING: bfgs curvature condition ", &
                 &     "failed, Theta=",F6.3)' ) theta
                 y = Theta*y + (1.D0 - Theta)*yH
+!               s.y must be recomputed with the damped y (it is now
+!               0.2*sBs > 0): using the undamped, possibly negative, value
+!               in the update below destroys the positive definiteness
+                sdoty = ( s(:) .dot. y(:) )
         endif
       END IF
       !

@@ -97,8 +97,6 @@ option(QE_ENABLE_MPI_INPLACE
     "enable inplace MPI calls (ignored when QE_ENABLE_MPI=OFF)" OFF)
 option(QE_ENABLE_BARRIER
     "enable global synchronization between execution units" OFF)
-option(QE_LAPACK_INTERNAL
-    "enable internal reference LAPACK" OFF)
 option(QE_ENABLE_SCALAPACK
     "enable SCALAPACK execution units" OFF)
 cmake_dependent_option(QE_ENABLE_SCALAPACK_QRCP
@@ -223,10 +221,10 @@ endif()
 if(QE_ENABLE_SCALAPACK AND NOT QE_ENABLE_MPI)
     message(FATAL_ERROR "SCALAPACK requires MPI support, enable it with '-DQE_ENABLE_MPI=ON' or disable SCALAPACK with '-DQE_ENABLE_SCALAPACK=OFF'")
 endif()
-if(QE_ENABLE_CUDA AND NOT (CMAKE_Fortran_COMPILER_ID MATCHES "PGI" OR CMAKE_Fortran_COMPILER_ID MATCHES "NVHPC"))
+if(QE_ENABLE_CUDA AND NOT CMAKE_Fortran_COMPILER_ID MATCHES "NVHPC")
     message(FATAL_ERROR "NVHPC compiler is mandatory when CUDA is enabled due QE is based on CUDA Fortran language")
 endif()
-if(QE_ENABLE_OPENACC AND NOT (CMAKE_Fortran_COMPILER_ID MATCHES "PGI" OR CMAKE_Fortran_COMPILER_ID MATCHES "NVHPC"))
+if(QE_ENABLE_OPENACC AND NOT CMAKE_Fortran_COMPILER_ID MATCHES "NVHPC")
     message(FATAL_ERROR "NVHPC compiler is mandatory when OpenACC is enabled")
 endif()
 if(QE_ENABLE_OFFLOAD AND NOT QE_ENABLE_OPENMP)
@@ -288,7 +286,7 @@ endif()
 # language standard requirements
 ###########################################################
 # TODO need to require all compilers using the same one
-if(CMAKE_Fortran_COMPILER_ID MATCHES "PGI" OR CMAKE_Fortran_COMPILER_ID MATCHES "NVHPC")
+if(CMAKE_Fortran_COMPILER_ID MATCHES "NVHPC")
     set(CMAKE_C_STANDARD 11)
     set(CMAKE_C_STANDARD_REQUIRED ON)
     set(CMAKE_C_EXTENSIONS OFF)
@@ -338,7 +336,7 @@ if(CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
     include(GNUFortranCompiler)
 elseif(CMAKE_Fortran_COMPILER_ID MATCHES "LLVMFlang")
     include(LLVMFlangCompiler)
-elseif(CMAKE_Fortran_COMPILER_ID MATCHES "PGI" OR CMAKE_Fortran_COMPILER_ID MATCHES "NVHPC")
+elseif(CMAKE_Fortran_COMPILER_ID MATCHES "NVHPC")
     include(NVFortranCompiler)
 elseif(CMAKE_Fortran_COMPILER_ID MATCHES "Cray")
     include(CrayFortranCompiler)
@@ -359,7 +357,7 @@ endif()
 # CUDA
 ###########################################################
 if(QE_ENABLE_CUDA OR QE_ENABLE_PROFILE_NVTX)
-    if(CMAKE_Fortran_COMPILER_ID MATCHES "PGI" OR CMAKE_Fortran_COMPILER_ID MATCHES "NVHPC")
+    if(CMAKE_Fortran_COMPILER_ID MATCHES "NVHPC")
         add_library(CUDA::cufft INTERFACE IMPORTED)
         set_target_properties(CUDA::cufft PROPERTIES INTERFACE_LINK_LIBRARIES "${CUDA_FLAG}lib=cufft")
         add_library(CUDA::cublas INTERFACE IMPORTED)
@@ -506,7 +504,9 @@ endif()
 add_library(qe_lapack INTERFACE)
 qe_install_targets(qe_lapack)
 ###########################################################
-if(NOT QE_LAPACK_INTERNAL)
+if(QE_LAPACK_INTERNAL)
+    message(FATAL_ERROR "Building Netlib LAPACK inside QE via CMake is no longer supported!")
+else()
     if(NOT BLA_VENDOR)
         if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64.*")
             message(STATUS "Trying to find LAPACK from Intel MKL")
@@ -573,23 +573,8 @@ if(NOT QE_LAPACK_INTERNAL)
         endif()
     else()
         message(FATAL_ERROR "Failed to find a complete set of external BLAS/LAPACK library by FindLAPACK. "
-                            "Variables controlling FindLAPACK can be found at CMake online documentation. "
-                            "Alternatively, '-DQE_LAPACK_INTERNAL=ON' may be used to enable reference LAPACK "
-                            "at a performance loss compared to optimized libraries.")
+                            "Variables controlling FindLAPACK can be found at CMake online documentation.")
     endif()
-else()
-    message(WARNING "Internal reference LAPACK is enabled! It is less performant than vendor optimized libraries.")
-    if(CMAKE_Fortran_COMPILER_ID MATCHES "XL")
-        message(FATAL_ERROR "IBM XL compilers cannot build internal LAPACK with QE "
-                            "due to the conflict in flags for free vs fixed format. "
-                            "Please use an optimized LAPACK or build internal reference LAPACK separately.")
-    endif()
-    message(STATUS "Installing LAPACK via submodule")
-    qe_git_submodule_update(external/lapack)
-    add_subdirectory(external/lapack)
-    target_link_libraries(qe_lapack INTERFACE lapack)
-    # make lapack ready for other external libraries like mbd
-    set(LAPACK_LIBRARIES lapack)
 endif()
 
 ###########################################################

@@ -425,7 +425,10 @@
       WRITE(stdout, '(/5x,a)') 'Calculating kgmap'
       FLUSH(stdout)
       !
-      OPEN(iukgmap, FILE = TRIM(prefix)// TRIM(fnm) // '.kgmap', FORM = 'formatted')
+      ! Every image root builds gmap in memory, but .kgmap is shared and identical in
+      ! every image, so only meta_ionode writes it
+      !
+      IF (meta_ionode) OPEN(iukgmap, FILE = TRIM(prefix)// TRIM(fnm) // '.kgmap', FORM = 'formatted')
       !
       ! the 5^3 possible G_0 translations
       ng0vec = 0
@@ -491,7 +494,7 @@
       ENDDO
       !
       ngxxf = MAXVAL(gmap(:))
-      WRITE(iukgmap, *) ngxxf
+      IF (meta_ionode) WRITE(iukgmap, *) ngxxf
       !
       ALLOCATE(shift(nkpts), STAT = ierr)
       IF (ierr /= 0) CALL errore('createkmap_pw2', 'Error allocating shift', 1)
@@ -509,27 +512,32 @@
         ENDIF
         !
         shift(ik) = ig0
-        WRITE(iukgmap,'(3i6)') ik, shift(ik)
+        IF (meta_ionode) WRITE(iukgmap,'(3i6)') ik, shift(ik)
         !
       ENDDO
       DEALLOCATE(shift, STAT = ierr)
       IF (ierr /= 0) CALL errore('createkmap_pw2', 'Error deallocating shift', 1)
       !
-      WRITE(iukgmap,'(i5)') ng0vec
-      DO ig0 = 1, ng0vec
-        WRITE(iukgmap, '(3f20.15)') g0vec_all_r(:, ig0)
-      ENDDO
-      !
-      DO ig1 = 1, ngxx
-        WRITE(iukgmap, '(9i10)') (gmap(ng0vec * (ig1 - 1) + ig0), ig0 = 1, ng0vec)
-      ENDDO
-      !
-      CLOSE(iukgmap)
+      IF (meta_ionode) THEN
+        WRITE(iukgmap,'(i5)') ng0vec
+        DO ig0 = 1, ng0vec
+          WRITE(iukgmap, '(3f20.15)') g0vec_all_r(:, ig0)
+        ENDDO
+        DO ig1 = 1, ngxx
+          WRITE(iukgmap, '(9i10)') (gmap(ng0vec * (ig1 - 1) + ig0), ig0 = 1, ng0vec)
+        ENDDO
+        CLOSE(iukgmap)
+      ENDIF
       !
       DEALLOCATE(mapg, STAT = ierr)
       IF (ierr /= 0) CALL errore('createkmap_pw2', 'Error deallocating mapg', 1)
       !
     ENDIF
+    !
+    ! FIXME: ionode is rank 0 of inter_pool_comm only when nproc_pool == 1. With more
+    ! than one process per pool, the groups with me_pool > 0 are rooted on a rank that
+    ! never ran the block above and receive zeros. readgmap, which reproduces these
+    ! same quantities from file, uses meta_ionode over world_comm instead.
     !
     CALL mp_bcast(ngxxf, ionode_id, inter_pool_comm)
     CALL mp_bcast(ng0vec, ionode_id, inter_pool_comm)

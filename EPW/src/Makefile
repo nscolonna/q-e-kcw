@@ -100,7 +100,7 @@ onemkl_wrappers.f90 \
 #default : epw
 
 PHOBJS = ../../PHonon/PH/libph.a
-W90LIB = ../../wannier90/lib/libwannier.a
+W90LIB = ../../wannier90/lib/libwannier90.a
 LRMODS = ../../LR_Modules/liblrmod.a
 PWOBJS = ../../PW/src/libpw.a ../../KS_Solvers/libks_solvers.a ../../dft-d3/libdftd3qe.a
 QEMODS = $(BASEMODS)

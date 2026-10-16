@@ -9,6 +9,10 @@ inputs_args = ('atom.in', ''), ('atom-lsda.in',''), ('atom-occ1.in',''), ('atom-
 program = PW
 inputs_args = ('b3lyp-O.in', ''), ('b3lyp-O_std.in', ''), ('b3lyp-h2o.in',''), ('b3lyp-h2o_std.in',''), ('x3lyp-O.in', ''), ('x3lyp-h2o.in','')
 
+[pw_cam/]
+program = PW
+inputs_args = ('cam-si111.in', ''), ('cam-si222.in', ''), ('cam-si222-noxg.in', ''), ('cam-si222_std.in', ''), ('camb3-si222.in', ''), ('cam-si-gamma.in', ''), ('cam-si222-lsda.in', ''), ('cam-pbe0-limit.in', ''), ('cam-hse-limit.in', '')
+
 [pw_berry/]
 program = PW
 inputs_args = ('berry.in', ''), ('berry-1.in', ''), ('berry-2.in','')
@@ -347,6 +351,18 @@ inputs_args = ('Si_nc.scf.in', '1'), ('Si_nc.win', '2'), ('Si_nc.pw2wann.in', '3
 [pp_acf/]
 program = PP
 inputs_args = ('scf_vdw.in', '1'), ('ppacf_fock.in', '2')
+
+[pp_w90_library/]
+program = PP
+inputs_args = ('si.scf.in', '1'), ('si.pw2wan.in', '3')
+
+[pp_w90_library_radial/]
+program = PP
+inputs_args = ('si.scf.in', '1'), ('si.pw2wan.in', '3')
+
+[pp_w90_library_nc/]
+program = PP
+inputs_args = ('pb_nc.scf.in', '1'), ('pb_nc.pw2wan.in', '3')
 
 [image_para/]
 program = IMAGE

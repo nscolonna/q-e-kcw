@@ -24,15 +24,17 @@
   !!
   USE kinds,            ONLY : DP
   USE io_global,        ONLY : stdout, meta_ionode
-  USE mp_world,         ONLY : mpime
-  USE mp_global,        ONLY : mp_startup, ionode_id, nimage
+  USE mp_world,         ONLY : mpime, world_comm
+  USE mp_global,        ONLY : mp_startup, ionode_id, nimage, my_image_id, root_image
+  USE mp_images,        ONLY : inter_image_comm
+  USE mp,               ONLY : mp_barrier, mp_bcast
   USE control_flags,    ONLY : gamma_only, use_gpu, iverbosity
   USE input,            ONLY : wannierize, nqc1, nqc2, nqc3
   USE global_version,   ONLY : version_number
   USE input,            ONLY : filukk, eliashberg, ep_coupling, epwread, epbread, &
                                lcumulant, nbndsub, do_tdbe, interpolate, specfun_el_scgd0
   USE environment,      ONLY : environment_start
-  USE global_var,       ONLY : elph
+  USE global_var,       ONLY : elph, nbndep, nbndskip, ibndkept
   USE close,            ONLY : close_final, deallocate_epw, remove_out_files
   USE cumulant,         ONLY : spectral_cumulant
   USE wannierization,   ONLY : wann_run
@@ -194,8 +196,21 @@
     !
     IF (wannierize) THEN
       !
-      ! Create U(k, k') localization matrix
-      CALL wann_run()
+      ! Create U(k, k') localization matrix.
+      ! The Wannierisation is identical in every image, so only the root image runs it
+      IF (my_image_id == root_image) CALL wann_run()
+      !
+      ! Wait until Wannierization is finished in the root image
+      CALL mp_barrier(world_comm)
+      !
+      ! Broadcast the output from Wannier library run from root image to the rest
+      CALL mp_bcast(nbndep, root_image, inter_image_comm)
+      IF (my_image_id /= root_image) THEN
+        ALLOCATE(ibndkept(nbndep), STAT = ierr)
+        IF (ierr /= 0) CALL errore('epw', 'Error allocating ibndkept', 1)
+      ENDIF
+      CALL mp_bcast(nbndskip, root_image, inter_image_comm)
+      CALL mp_bcast(ibndkept, root_image, inter_image_comm)
     ELSE
       !
       ! Read Wannier matrix from a previous run
