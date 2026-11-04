@@ -78,6 +78,10 @@ INTEGER              ::    spin_index
 
 !
 !
+  ! Vcoulomb/Wcoulomb(is,...) are stored by spin_index (coulomb_me): is = 1 same
+  ! spin as spin_component, is = 2 opposite spin. Write is itself as the label:
+  ! spin_index(is) swapped the two labels when spin_component = 2.
+  !
   filename = 'barecoulomb.txt'
   iun_coulomb = 237 
   OPEN (iun_coulomb, file = filename)
@@ -87,7 +91,7 @@ INTEGER              ::    spin_index
     DO iwann=1, num_wann
       DO jwann=1, num_wann
         DO is = 1, nspin_mag !one for spin component, other for non spin component
-          WRITE(iun_coulomb, '(3I5, 3X, 2ES24.16)') iwann, jwann, spin_index(is), &
+          WRITE(iun_coulomb, '(3I5, 3X, 2ES24.16)') iwann, jwann, is, &
           real(Vcoulomb(is, ir, jwann, iwann)), aimag(Vcoulomb(is, ir, jwann, iwann)) 
         END DO!is
       END DO!jwann
@@ -105,7 +109,7 @@ INTEGER              ::    spin_index
     DO iwann=1, num_wann
       DO jwann=1, num_wann
         DO is = 1, nspin_mag !one for spin component, other for non spin component
-          WRITE(iun_coulomb, '(3I5, 3X, 2ES24.16)') iwann, jwann, spin_index(is), &
+          WRITE(iun_coulomb, '(3I5, 3X, 2ES24.16)') iwann, jwann, is, &
                real(Wcoulomb(is, ir, jwann, iwann)), aimag(Wcoulomb(is, ir, jwann, iwann)) 
         END DO!is
       END DO!jwann
@@ -171,8 +175,11 @@ COMPLEX(DP), ALLOCATABLE     :: delta_vr_(:,:)
 COMPLEX(DP), ALLOCATABLE     :: rhor(:,:)
 ! ... periodic part of wannier density in r-space
 INTEGER                      :: lrrho
-INTEGER                      :: is, is_, is1
+INTEGER                      :: is, is_, is1, js, spin_save
 INTEGER                      :: spin_index
+COMPLEX(DP), ALLOCATABLE     :: delta_vg_js(:,:,:), delta_vg_js_(:,:,:)
+! ... perturbing potential of rho_jwann placed in spin channel js (last index),
+!     with and without the q+G=0 component
 !
 ! we are already inside loops over iq and iwann
 !
@@ -188,6 +195,8 @@ ALLOCATE(vh_rhog(ngms))
 ALLOCATE(delta_vr(dffts%nnr,nspin_mag))
 ALLOCATE(delta_vr_(dffts%nnr,nspin_mag))
 ALLOCATE(rhor(dffts%nnr,nrho))
+ALLOCATE(delta_vg_js(ngms,nspin_mag,nspin_mag))
+ALLOCATE(delta_vg_js_(ngms,nspin_mag,nspin_mag))
 !
 IF (nrho==4) THEN
     CALL errore('output_coulomb', 'non-collinear not implemented &
@@ -212,28 +221,50 @@ DO jwann = 1, num_wann
       x_q_cryst(:) = x_q(:,iq)
       CALL cryst_to_cart(1,x_q_cryst,at,-1)
       rhor(:, ip) = rhor(:, ip) * EXP( -IMAG*tpi*DOT_PRODUCT(x_q_cryst(:),irvect_shifted(:,ir)) )
-      CALL bare_pot ( rhor, rhog, vh_rhog, delta_vr, delta_vg, iq, delta_vr_, delta_vg_) 
       !
-      ! for now we only work with the density, i.e. ip = 1
-      ! we evaluate 
-      !   <jwann, R| Vxc | iwann, 0> = <deltaVg | rhog(iwann)>
-      DO is = 1, nspin_mag !one for spin component, other for non spin component
-          pi_q_unrelax (spin_index(is)) = weight_q * omega * SUM( CONJG(delta_vg (:,is)) * rhog_iwann(:,1) )  
-          pi_q_unrelax_(spin_index(is)) = weight_q * omega * SUM( CONJG(delta_vg_(:,is)) * rhog_iwann(:,1) )  
-      END DO  
+      ! Perturbing potential of rho_m(R) (m = jwann) placed in each spin channel js:
+      !   delta_vg_js(:,s1,js) = [ v + f_xc^{s1,js} ] rho_m(R)       (G-space)
+      ! bare_pot puts the density in the channel spin_component: switch it
+      ! temporarily (it is restored before spin_index is used below).
+      !
+      spin_save = spin_component
+      DO js = 1, nspin_mag
+        spin_component = js
+        CALL bare_pot ( rhor, rhog, vh_rhog, delta_vr, delta_vg_js(:,:,js), iq, &
+                        delta_vr_, delta_vg_js_(:,:,js) )
+      END DO
+      spin_component = spin_save
+      !
+      ! for now we only work with the density, i.e. ip = 1.
+      ! Component spin_index(js) is the element between rho_n (n = iwann) in the
+      ! channel spin_component (the one of the LR perturbation, drhog_scf) and
+      ! rho_m(R) in the channel js:
+      !   bare:      <rho_n,sc | v + f_xc^{sc,js} | rho_m,js(R)>
+      !   screened:  bare (without q+G=0) + sum_s1 <drho_s1[rho_n,sc] | v + f_xc^{s1,js} | rho_m,js(R)>
+      ! Before, the induced (screened) part used rho_m in the channel spin_component
+      ! for both components, so component 2 of W was V_opposite + (W - V)_same instead
+      ! of W_opposite. The bare part is unchanged, since f_xc^{sc,js} = f_xc^{js,sc}.
+      !
+      pi_q_unrelax (:) = (0.D0, 0.D0)
+      pi_q_unrelax_(:) = (0.D0, 0.D0)
+      pi_q_relax   (:) = (0.D0, 0.D0)
+      DO js = 1, nspin_mag
+          pi_q_unrelax (spin_index(js)) = weight_q * omega * &
+                                          SUM( CONJG(delta_vg_js (:,spin_save,js)) * rhog_iwann(:,1) )
+          pi_q_unrelax_(spin_index(js)) = weight_q * omega * &
+                                          SUM( CONJG(delta_vg_js_(:,spin_save,js)) * rhog_iwann(:,1) )
+          !
+          ! screened potential
+          ! < jwann, R, js | W | 0, iwann, spin_component >
+          DO is1 = 1, nspin_mag
+            pi_q_relax(spin_index(js)) = pi_q_relax(spin_index(js)) + &
+                 SUM( CONJG(drhog_scf(:,is1)) * delta_vg_js(:,is1,js) ) * weight_q * omega
+          END DO
+      END DO
       CALL mp_sum (pi_q_unrelax,  intra_bgrp_comm)
       CALL mp_sum (pi_q_unrelax_, intra_bgrp_comm)
       Vcoulomb(:, ir, jwann, iwann) = Vcoulomb(:, ir, jwann, iwann) + pi_q_unrelax(:)
       !
-      ! screened potential
-      ! < jwann, R| W | 0, iwann>
-      pi_q_relax(:) = (0.D0, 0.D0)
-      DO is =1, nspin_mag
-        DO is1 = 1, nspin_mag
-          pi_q_relax(spin_index(is)) = pi_q_relax(spin_index(is)) + &
-                                       sum (CONJG(drhog_scf (:,is1)) * delta_vg(:,is1))*weight_q*omega
-        END DO 
-      END DO! is
       CALL mp_sum (pi_q_relax, intra_bgrp_comm)
       pi_q_relax(:) = pi_q_relax(:) + pi_q_unrelax_(:)
       Wcoulomb(:, ir, jwann, iwann) = Wcoulomb(:, ir, jwann, iwann) + pi_q_relax(:)
@@ -252,6 +283,7 @@ DEALLOCATE(vh_rhog)
 DEALLOCATE(delta_vr)
 DEALLOCATE(delta_vr_)
 DEALLOCATE(rhor)
+DEALLOCATE(delta_vg_js, delta_vg_js_)
 
 
 END SUBROUTINE
