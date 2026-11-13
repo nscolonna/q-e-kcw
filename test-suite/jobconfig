@@ -1,17 +1,21 @@
 # Note: unless a specific oreder of execution is desired,
 # there is no need to have for each set of tests a field below
 
+[pw_hse/]
+program = PW
+inputs_args = ('hse-si444_std.in',''), ('hse-si444.in', ''), ('hse-si222.in', ''), ('hse-si111.in','') 
+
 [pw_atom/]
 program = PW
 inputs_args = ('atom.in', ''), ('atom-lsda.in',''), ('atom-occ1.in',''), ('atom-occ2.in',''), ('atom-pbe.in',''), ('atom-sigmapbe.in', '')
 
 [pw_b3lyp/]
 program = PW
-inputs_args = ('b3lyp-O.in', ''), ('b3lyp-O_std.in', ''), ('b3lyp-h2o.in',''), ('b3lyp-h2o_std.in',''), ('x3lyp-O.in', ''), ('x3lyp-h2o.in','')
+inputs_args = ('b3lyp-h2o_std.in',''), ('b3lyp-O_std.in', ''), ('b3lyp-O.in', ''), ('b3lyp-h2o.in',''), ('x3lyp-O.in', ''), ('x3lyp-h2o.in','')
 
 [pw_cam/]
 program = PW
-inputs_args = ('cam-si111.in', ''), ('cam-si222.in', ''), ('cam-si222-noxg.in', ''), ('cam-si222_std.in', ''), ('camb3-si222.in', ''), ('cam-si-gamma.in', ''), ('cam-si222-lsda.in', ''), ('cam-pbe0-limit.in', ''), ('cam-hse-limit.in', '')
+inputs_args = ('cam-si111.in', ''), ('cam-si222.in', ''), ('cam-si222-noxg.in', ''), ('cam-si222_std.in', ''), ('camb3-si222.in', ''), ('cam-si-gamma.in', ''), ('cam-O-lsda.in', ''), ('cam-pbe0-limit.in', ''), ('cam-hse-limit.in', '')
 
 [pw_berry/]
 program = PW
@@ -31,7 +35,8 @@ inputs_args = ('lsda.in', ''), ('lsda-2.in', ''), ('lsda-cg.in', ''), ('lsda-mix
 
 [pw_libxc/]
 program = PW
-inputs_args = ('lda_pol_atom-lsda.in', ''), ('gga_unpol_atom-pbe.in', ''), ('hyb_gga_unpol_hse-si111.in', ''), ('mgga_unpol_metaGGA.in', '')
+inputs_args = ('lda_pol_atom-lsda.in', ''), ('gga_unpol_atom-pbe.in', ''), ('hyb_gga_unpol_hse-si111.in', ''), ('mgga_unpol_metaGGA.in', ''), ('mgga_unpol_TB09.in', ''), ('mgga_unpol_CTB09.in', ''), ('mgga_unpol_CTB09-nscf.in', '')
+
 
 [pw_metal/]
 program = PW
@@ -39,7 +44,7 @@ inputs_args = ('metal.in' ,''), ('metal-2.in' ,''), ('metal-fermi_dirac.in' ,'')
 
 [pw_noncolin/]
 program = PW
-inputs_args = ('noncolin.in' ,''), ('noncolin-1.in' ,''), ('noncolin-2.in' ,''), ('noncolin-cg.in' ,''), ('noncolin-rmm.in',''), ('noncolin-constrain_angle.in' ,''), ('noncolin-constrain_atomic.in' ,''), ('noncolin-constrain_total.in' ,''), ('noncolin-hyb.in' ,''), ('noncolin-hyb_std.in' ,''), ('noncolin-pbe.in','')
+inputs_args = ('noncolin-hyb_std.in' ,''), ('noncolin.in' ,''), ('noncolin-1.in' ,''), ('noncolin-2.in' ,''), ('noncolin-cg.in' ,''), ('noncolin-rmm.in',''), ('noncolin-constrain_angle.in' ,''), ('noncolin-constrain_atomic.in' ,''), ('noncolin-constrain_total.in' ,''), ('noncolin-hyb.in' ,''), ('noncolin-pbe.in','')
 
 [pw_electric/]
 program = PW
@@ -67,7 +72,7 @@ inputs_args = ('scf_twochem.in', ''), ('nscf_twochem.in','2'), ('relax_twochem.i
 
 [pw_uspp/]
 program = PW
-inputs_args = ('uspp.in' ,''), ('uspp-2.in' ,''), ('uspp-cg.in' ,''), ('uspp-cg-gamma.in' ,''), ('uspp-hyb-g.in' ,''), ('uspp-hyb-g_std.in' ,''), ('uspp-hyb-k.in',''), ('uspp-hyb-k_std.in',''), ('uspp-mixing_TF.in' ,''), ('uspp-mixing_localTF.in' ,''), ('uspp-mixing_ndim.in' ,''), ('uspp-singlegrid.in' ,''), ('uspp1-coulomb.in' ,''), ('uspp1.in' ,''), ('uspp2.in' ,''), ('uspp-paro-gamma.in',''), ('uspp-paro-k.in','')
+inputs_args = ('uspp-hyb-k_std.in',''), ('uspp-hyb-g_std.in' ,''), ('uspp.in' ,''), ('uspp-2.in' ,''), ('uspp-cg.in' ,''), ('uspp-cg-gamma.in' ,''), ('uspp-hyb-g.in' ,''), ('uspp-hyb-k.in',''), ('uspp-mixing_TF.in' ,''), ('uspp-mixing_localTF.in' ,''), ('uspp-mixing_ndim.in' ,''), ('uspp-singlegrid.in' ,''), ('uspp1-coulomb.in' ,''), ('uspp1.in' ,''), ('uspp2.in' ,''), ('uspp-paro-gamma.in',''), ('uspp-paro-k.in','')
 
 [pw_md/]
 program = PW
@@ -328,6 +333,10 @@ inputs_args = ('au.scf.in', '1'), ('au.hp.in', '3'), ('au.scf.in', '2'), ('au.hp
 program = HP
 inputs_args = ('bn.scf.in', '1'), ('bn.hp.in', '3'), ('bn.scf.in', '2'), ('bn.hp.in', '4')
 
+[hp_soc_U_us_magn_gamma/]
+program = HP
+inputs_args = ('bn.scf.in', '1'), ('bn.hp.in', '3')
+
 [hp_soc_UV_paw_magn/]
 program = HP
 inputs_args = ('bn.scf.in', '1'), ('bn.hp.in', '3'), ('bn.scf.in', '2'), ('bn.hp.in', '4')
@@ -354,7 +363,11 @@ inputs_args = ('scf_vdw.in', '1'), ('ppacf_fock.in', '2')
 
 [pp_w90_library/]
 program = PP
-inputs_args = ('si.scf.in', '1'), ('si.pw2wan.in', '3')
+inputs_args = ('si.scf.in', '1'), ('si.pw2wan.in', '3'), ('si.pw2wan.in', '4'), ('si.pw2wan.in', '5'), ('si.pw2wan_low_io.in', '5')
+
+[pp_w90_decompose/]
+program = PP
+inputs_args = ('si.scf.in', '1'), ('si.win', '7'), ('si.pw2wan.in', '9'), ('si.win', '8'), ('si.decompose.in', '6'), ('si.decompose_low_io.in', '6')
 
 [pp_w90_library_radial/]
 program = PP
@@ -362,7 +375,7 @@ inputs_args = ('si.scf.in', '1'), ('si.pw2wan.in', '3')
 
 [pp_w90_library_nc/]
 program = PP
-inputs_args = ('pb_nc.scf.in', '1'), ('pb_nc.pw2wan.in', '3')
+inputs_args = ('pb_nc.scf.in', '1'), ('pb_nc.pw2wan.in', '3'), ('pb_nc.pw2wan.in', '4'), ('pb_nc.pw2wan.in', '5')
 
 [image_para/]
 program = IMAGE

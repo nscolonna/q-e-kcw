@@ -1,5 +1,5 @@
 
-     Program turboTDDFT v.7.5 starts on 23Mar2026 at 18: 1:55 
+     Program turboTDDFT v.8.0dev starts on 10Nov2026 at 14:51:27 
 
      This program is part of the open-source Quantum ESPRESSO suite
      for quantum simulation of materials; please cite
@@ -10,18 +10,17 @@
      in publications or presentations arising from this work. More details at
      http://www.quantum-espresso.org/quote
 
-     Parallel version (MPI), running on     8 processors
+     Parallel version (MPI), running on     1 processors
 
      MPI processes distributed on     1 nodes
-     R & G space division:  proc/nbgrp/npool/nimage =       8
-     4307 MiB available memory on the printing compute node when the environment starts
-
+     3685 MiB available memory on the printing compute node when the environment starts
+ 
 
      Reading xml data from directory:
 
      ./out/pwscf.save/
      EXX fraction changed:   0.25
-     EXX Screening parameter changed:    0.0000000
+     file H.pz-vbc.UPF: wavefunction(s)  1S renormalized
 
      IMPORTANT: XC functional enforced from input :
      Exchange-correlation= PBE0
@@ -30,23 +29,119 @@
      Any further DFT definition will be discarded
      Please, verify this is what you really want
 
-
-     Parallelization info
+ 
+     G-vector sticks info
      --------------------
      sticks:   dense  smooth     PW     G-vecs:    dense   smooth      PW
-     Min         635     635    159                34176    34176    4280
-     Max         638     638    162                34182    34182    4287
      Sum        5097    5097   1281               273425   273425   34265
-
+ 
      Using Slab Decomposition
-
+ 
      Reading collected, re-writing distributed wavefunctions
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
+     read_rhog:  17133 G-components read,  32765 not found (set to 0)
+     Zero-padding will be used
      Not using ACE in TDDFPT calculation. 
  Symmetries are disabled for the gamma_only case
      Subspace diagonalization in iterative solution of the eigenvalue problem:
      a serial algorithm will be used
 
-     Allocating     6 extra bands for projection
+     Allocating    44 extra bands for projection
 
      =-----------------------------------------------------------------=
 
@@ -73,8 +168,8 @@
      Allocating parameters for davidson ...
 
      Estimating the RAM requirements:
-          For the basis sets:         376.88     M
-          For the eigenvectors:          31.41     M
+          For the basis sets:         376.46     M
+          For the eigenvectors:          31.37     M
           Num_eign =    5     Num_basis_max =   80
           Reference =  0.00  Ry
      Do make sure that you have enough RAM.
@@ -85,332 +180,269 @@
 
      p_nbnd_occ is larger than the total number of occupied states!
      Reset: p_nbnd_occ = number of all occupied states!
-     p_nbnd_virt is larger than the total number of computed empty states!
-     Reset: p_nbnd_virt = all computed empty states!
      Finished allocating parameters.
      Initiating variables for davidson ...
      Lowest energy electron-hole pairs are used as initial vectors ...
      Calculating the electron-hole pairs for initiating trial vectors ...
 
-              1         6         1           0.469011376652
-              2         6         2           0.545312959807
-              3         6         3           0.624991864939
-              4         6         4           0.635965651387
-              5         6         5           0.647076194036
-              6         6         6           0.649735842037
-              7         5         1           0.742131590698
-              8         5         2           0.818433173853
-              9         4         1           0.851316922208
-             10         5         3           0.898112078986
-             11         5         4           0.909085865434
-             12         5         5           0.920196408083
-             13         5         6           0.922856056084
-             14         3         1           0.925183624578
-             15         4         2           0.927618505363
-             16         3         2           1.001485207733
-             17         4         3           1.007297410496
-             18         4         4           1.018271196944
-             19         4         5           1.029381739593
-             20         4         6           1.032041387593
-             21         3         3           1.081164112866
-             22         3         4           1.092137899314
-             23         3         5           1.103248441963
-             24         3         6           1.105908089963
-             25         2         1           1.222286948757
-             26         2         2           1.298588531913
-             27         2         3           1.378267437045
-             28         2         4           1.389241223493
-             29         2         5           1.400351766142
-             30         2         6           1.403011414143
-             31         1         1           2.131016702833
-             32         1         2           2.207318285988
-             33         1         3           2.286997191121
-             34         1         4           2.297970977569
-             35         1         5           2.309081520218
-             36         1         6           2.311741168218
+              1         6         1           0.466281750581
+              2         6         2           0.533736122645
+              3         6         3           0.614004255750
+              4         6         4           0.624128871764
+              5         6         5           0.634680394241
+              6         6         6           0.637128835439
+              7         6         7           0.639333074843
+              8         6         8           0.643941772054
+              9         6         9           0.707995041763
+             10         6        10           0.714018711557
+             11         5         1           0.753069149907
+             12         5         2           0.820523521970
+             13         4         1           0.861935954502
+             14         5         3           0.900791655075
+             15         5         4           0.910916271089
+             16         5         5           0.921467793566
+             17         5         6           0.923916234764
+             18         5         7           0.926120474169
+             19         4         2           0.929390326566
+             20         5         8           0.930729171380
+             21         3         1           0.936511425519
+             22         5         9           0.994782441088
+             23         5        10           1.000806110882
+             24         3         2           1.003965797582
+             25         4         3           1.009658459671
+             26         4         4           1.019783075685
+             27         4         5           1.030334598162
+             28         4         6           1.032783039360
+             29         4         7           1.034987278764
+             30         4         8           1.039595975975
+             31         3         3           1.084233930687
+             32         3         4           1.094358546701
+             33         4         9           1.103649245684
+             34         3         5           1.104910069178
+             35         3         6           1.107358510376
+             36         3         7           1.109562749781
+             37         4        10           1.109672915478
+             38         3         8           1.114171446992
+             39         3         9           1.178224716700
+             40         3        10           1.184248386495
+             41         2         1           1.220941200748
+             42         2         2           1.288395572812
+             43         2         3           1.368663705917
+             44         2         4           1.378788321931
+             45         2         5           1.389339844408
+             46         2         6           1.391788285606
+             47         2         7           1.393992525011
+             48         2         8           1.398601222221
+             49         2         9           1.462654491930
+             50         2        10           1.468678161724
+             51         1         1           2.145952049741
+             52         1         2           2.213406421805
+             53         1         3           2.293674554910
+             54         1         4           2.303799170924
+             55         1         5           2.314350693401
+             56         1         6           2.316799134599
+             57         1         7           2.319003374003
+             58         1         8           2.323612071214
+             59         1         9           2.387665340923
+             60         1        10           2.393689010717
      Finished calculating the cv couples.
      Finished initiating.
 
      Precondition is used in the algorithm,
 
-     total cpu time spent up to now is        0.5 secs
+     total cpu time spent up to now is        2.2 secs
 
        ==============================
 
        Davidson iteration:        1
        num of basis:   20   total built basis:   20
-        20     Transition energy    1  :                  0.2994714501
-        20     Transition energy    2  :                  0.4745074533
-        20     Transition energy    3  :                  0.5553451976
-        20     Transition energy    4  :                  0.5674852939
-        20     Transition energy    5  :                  0.5811359888
-     Residue(Squared modulus):    1        0.0336037      0.0058661
-     Residue(Squared modulus):    2        0.0032184      0.0008063
-     Residue(Squared modulus):    3        0.0066478      0.0011152
-     Residue(Squared modulus):    4        0.0095927      0.0008453
-     Residue(Squared modulus):    5        0.0009369      0.0006490
-       Largest residue:           0.033603733384
+        20     Transition energy    1  :                  0.2993063431
+        20     Transition energy    2  :                  0.4623975022
+        20     Transition energy    3  :                  0.5409542334
+        20     Transition energy    4  :                  0.5537401725
+        20     Transition energy    5  :                  0.5684490947
+     Residue(Squared modulus):    1        0.0331024      0.0056271
+     Residue(Squared modulus):    2        0.0031058      0.0007375
+     Residue(Squared modulus):    3        0.0082910      0.0010461
+     Residue(Squared modulus):    4        0.0102829      0.0007558
+     Residue(Squared modulus):    5        0.0034946      0.0009456
+       Largest residue:           0.033102406032
 
-     total cpu time spent up to now is        9.3 secs
+     total cpu time spent up to now is        8.3 secs
 
        ==============================
 
        Davidson iteration:        2
        num of basis:   30   total built basis:   30
-        30     Transition energy    1  :                  0.2938305824
-        30     Transition energy    2  :                  0.4720707396
-        30     Transition energy    3  :                  0.5511325657
-        30     Transition energy    4  :                  0.5632170277
-        30     Transition energy    5  :                  0.5776637034
-     Residue(Squared modulus):    1        0.0015326      0.0014407
-     Residue(Squared modulus):    2        0.0005749      0.0005744
-     Residue(Squared modulus):    3        0.0017091      0.0023628
-     Residue(Squared modulus):    4        0.0026538      0.0013402
-     Residue(Squared modulus):    5        0.0010388      0.0009649
-       Largest residue:           0.002653803463
+        30     Transition energy    1  :                  0.2936364700
+        30     Transition energy    2  :                  0.4606395955
+        30     Transition energy    3  :                  0.5384704411
+        30     Transition energy    4  :                  0.5503724339
+        30     Transition energy    5  :                  0.5645742791
+     Residue(Squared modulus):    1        0.0019779      0.0017378
+     Residue(Squared modulus):    2        0.0003539      0.0002966
+     Residue(Squared modulus):    3        0.0007269      0.0005794
+     Residue(Squared modulus):    4        0.0014945      0.0008001
+     Residue(Squared modulus):    5        0.0009899      0.0011443
+       Largest residue:           0.001977930271
 
-     total cpu time spent up to now is       13.8 secs
+     total cpu time spent up to now is       11.9 secs
 
        ==============================
 
        Davidson iteration:        3
        num of basis:   40   total built basis:   40
-        40     Transition energy    1  :                  0.2935044609
-        40     Transition energy    2  :                  0.4717056306
-        40     Transition energy    3  :                  0.5498516879
-        40     Transition energy    4  :                  0.5618954137
-        40     Transition energy    5  :                  0.5769379841
-     Residue(Squared modulus):    1        0.0001900      0.0000958
-     Residue(Squared modulus):    2        0.0002080      0.0002349
-     Residue(Squared modulus):    3        0.0020685      0.0022393
-     Residue(Squared modulus):    4        0.0011199      0.0010391
-     Residue(Squared modulus):    5        0.0001354      0.0001314
-       Largest residue:           0.002239273556
+        40     Transition energy    1  :                  0.2931755816
+        40     Transition energy    2  :                  0.4605087809
+        40     Transition energy    3  :                  0.5382243275
+        40     Transition energy    4  :                  0.5496817263
+        40     Transition energy    5  :                  0.5636848265
+     Residue(Squared modulus):    1        0.0004568      0.0003226
+     Residue(Squared modulus):    2        0.0000504      0.0000518
+     Residue(Squared modulus):    3        0.0002223      0.0002741
+     Residue(Squared modulus):    4        0.0003218      0.0003742
+     Residue(Squared modulus):    5        0.0003661      0.0003983
+       Largest residue:           0.000456789357
 
-     total cpu time spent up to now is       18.3 secs
+     total cpu time spent up to now is       15.7 secs
 
        ==============================
 
        Davidson iteration:        4
        num of basis:   50   total built basis:   50
-        50     Transition energy    1  :                  0.2934806525
-        50     Transition energy    2  :                  0.4716463591
-        50     Transition energy    3  :                  0.5494682864
-        50     Transition energy    4  :                  0.5616169162
-        50     Transition energy    5  :                  0.5768531644
-     Residue(Squared modulus):    1        0.0000132      0.0000115
-     Residue(Squared modulus):    2        0.0000818      0.0000799
-     Residue(Squared modulus):    3        0.0004837      0.0005623
-     Residue(Squared modulus):    4        0.0004677      0.0004536
-     Residue(Squared modulus):    5        0.0000251      0.0000265
-       Largest residue:           0.000562261893
+        50     Transition energy    1  :                  0.2930587803
+        50     Transition energy    2  :                  0.4604953569
+        50     Transition energy    3  :                  0.5381759681
+        50     Transition energy    4  :                  0.5495423873
+        50     Transition energy    5  :                  0.5634908125
+     Residue(Squared modulus):    1        0.0002209      0.0002412
+     Residue(Squared modulus):    2        0.0000086      0.0000093
+     Residue(Squared modulus):    3        0.0000654      0.0000933
+     Residue(Squared modulus):    4        0.0000951      0.0000962
+     Residue(Squared modulus):    5        0.0001454      0.0001645
+       Largest residue:           0.000241191746
 
-     total cpu time spent up to now is       22.9 secs
+     total cpu time spent up to now is       19.6 secs
 
        ==============================
 
        Davidson iteration:        5
-       num of basis:   60   total built basis:   60
-        60     Transition energy    1  :                  0.2934786529
-        60     Transition energy    2  :                  0.4716332539
-        60     Transition energy    3  :                  0.5493539458
-        60     Transition energy    4  :                  0.5615271935
-        60     Transition energy    5  :                  0.5767787746
-     Residue(Squared modulus):    1        0.0000013      0.0000008
-     Residue(Squared modulus):    2        0.0000161      0.0000179
-     Residue(Squared modulus):    3        0.0001284      0.0001378
-     Residue(Squared modulus):    4        0.0001033      0.0000904
-     Residue(Squared modulus):    5        0.0011227      0.0007451
-       Largest residue:           0.001122741736
+       num of basis:   58   total built basis:   58
+        58     Transition energy    1  :                  0.2929966930
+        58     Transition energy    2  :                  0.4604942689
+        58     Transition energy    3  :                  0.5381645147
+        58     Transition energy    4  :                  0.5495197713
+        58     Transition energy    5  :                  0.5634482446
+     Residue(Squared modulus):    1        0.0000836      0.0000804
+     Residue(Squared modulus):    2        0.0000039      0.0000050
+     Residue(Squared modulus):    3        0.0000123      0.0000158
+     Residue(Squared modulus):    4        0.0000202      0.0000206
+     Residue(Squared modulus):    5        0.0000326      0.0000364
+       Largest residue:           0.000083573324
 
-     total cpu time spent up to now is       27.5 secs
+     total cpu time spent up to now is       23.0 secs
 
        ==============================
 
        Davidson iteration:        6
-       num of basis:   68   total built basis:   68
-        68     Transition energy    1  :                  0.2934786529
-        68     Transition energy    2  :                  0.4716306046
-        68     Transition energy    3  :                  0.5493230269
-        68     Transition energy    4  :                  0.5615007561
-        68     Transition energy    5  :                  0.5759882305
-     Residue(Squared modulus):    1        0.0000013      0.0000008
-     Residue(Squared modulus):    2        0.0000011      0.0000013
-     Residue(Squared modulus):    3        0.0000201      0.0000219
-     Residue(Squared modulus):    4        0.0000295      0.0000259
-     Residue(Squared modulus):    5        0.0004872      0.0004646
-       Largest residue:           0.000487197868
-
-     total cpu time spent up to now is       31.2 secs
-
-       ==============================
-
-       Davidson iteration:        7
-       num of basis:   74   total built basis:   74
-        74     Transition energy    1  :                  0.2934786528
-        74     Transition energy    2  :                  0.4716304984
-        74     Transition energy    3  :                  0.5493142720
-        74     Transition energy    4  :                  0.5614923202
-        74     Transition energy    5  :                  0.5757523258
-     Residue(Squared modulus):    1        0.0000013      0.0000008
-     Residue(Squared modulus):    2        0.0000009      0.0000009
-     Residue(Squared modulus):    3        0.0000056      0.0000058
-     Residue(Squared modulus):    4        0.0000179      0.0000183
-     Residue(Squared modulus):    5        0.0003277      0.0003333
-       Largest residue:           0.000333299194
-
-     total cpu time spent up to now is       34.0 secs
-
-       ==============================
-
-       Davidson iteration:        8
-       num of basis:   78   total built basis:   78
-        78     Transition energy    1  :                  0.2934786528
-        78     Transition energy    2  :                  0.4716304895
-        78     Transition energy    3  :                  0.5493139152
-        78     Transition energy    4  :                  0.5614892668
-        78     Transition energy    5  :                  0.5756641325
-     Residue(Squared modulus):    1        0.0000013      0.0000008
-     Residue(Squared modulus):    2        0.0000008      0.0000009
-     Residue(Squared modulus):    3        0.0000065      0.0000066
-     Residue(Squared modulus):    4        0.0000033      0.0000033
-     Residue(Squared modulus):    5        0.0001299      0.0001316
-       Largest residue:           0.000131571902
-
-     total cpu time spent up to now is       35.9 secs
-
-       ==============================
-
-       Davidson iteration:        9
-       num of basis:   80   total built basis:   80
-        80     Transition energy    1  :                  0.2934786528
-        80     Transition energy    2  :                  0.4716304887
-        80     Transition energy    3  :                  0.5493138505
-        80     Transition energy    4  :                  0.5614889648
-        80     Transition energy    5  :                  0.5756350885
-     Residue(Squared modulus):    1        0.0000013      0.0000008
-     Residue(Squared modulus):    2        0.0000008      0.0000009
-     Residue(Squared modulus):    3        0.0000066      0.0000066
-     Residue(Squared modulus):    4        0.0000030      0.0000030
-     Residue(Squared modulus):    5        0.0000506      0.0000508
-       Largest residue:           0.000050762139
-
-     !!!! The basis set is close to its maximum size, now discharge it
-     to make space for the following calculation.
-
-       -------------------
-
-       After the discharging ...
-       num of basis:   10   total built basis:   80
-        10     Transition energy    1  :                  0.2934786528
-        10     Transition energy    2  :                  0.4716304887
-        10     Transition energy    3  :                  0.5493138505
-        10     Transition energy    4  :                  0.5614889648
-        10     Transition energy    5  :                  0.5756350885
-     Residue(Squared modulus):    1        0.0000013      0.0000008
-     Residue(Squared modulus):    2        0.0000008      0.0000009
-     Residue(Squared modulus):    3        0.0000066      0.0000066
-     Residue(Squared modulus):    4        0.0000030      0.0000030
-     Residue(Squared modulus):    5        0.0000506      0.0000508
-       Largest residue:           0.000050762139
-
-     total cpu time spent up to now is       36.9 secs
-
-       ==============================
-
-       Davidson iteration:       10
-       num of basis:   12   total built basis:   82
-        12     Transition energy    1  :                  0.2934786528
-        12     Transition energy    2  :                  0.4716304886
-        12     Transition energy    3  :                  0.5493137362
-        12     Transition energy    4  :                  0.5614888370
-        12     Transition energy    5  :                  0.5756280230
-     Residue(Squared modulus):    1        0.0000013      0.0000008
-     Residue(Squared modulus):    2        0.0000008      0.0000009
-     Residue(Squared modulus):    3        0.0000046      0.0000047
-     Residue(Squared modulus):    4        0.0000014      0.0000015
-     Residue(Squared modulus):    5        0.0000173      0.0000182
-       Largest residue:           0.000018167924
-
-     total cpu time spent up to now is       37.8 secs
-
-       ==============================
-
-       Davidson iteration:       11
-       num of basis:   14   total built basis:   84
-        14     Transition energy    1  :                  0.2934786528
-        14     Transition energy    2  :                  0.4716304881
-        14     Transition energy    3  :                  0.5493137263
-        14     Transition energy    4  :                  0.5614888144
-        14     Transition energy    5  :                  0.5756239078
-     Residue(Squared modulus):    1        0.0000013      0.0000008
-     Residue(Squared modulus):    2        0.0000008      0.0000009
-     Residue(Squared modulus):    3        0.0000045      0.0000046
-     Residue(Squared modulus):    4        0.0000015      0.0000014
-     Residue(Squared modulus):    5        0.0000045      0.0000044
-       Largest residue:           0.000004611140
+       num of basis:   66   total built basis:   66
+        66     Transition energy    1  :                  0.2929887345
+        66     Transition energy    2  :                  0.4604938523
+        66     Transition energy    3  :                  0.5381624215
+        66     Transition energy    4  :                  0.5495165812
+        66     Transition energy    5  :                  0.5634409610
+     Residue(Squared modulus):    1        0.0000049      0.0000046
+     Residue(Squared modulus):    2        0.0000047      0.0000052
+     Residue(Squared modulus):    3        0.0000016      0.0000015
+     Residue(Squared modulus):    4        0.0000028      0.0000026
+     Residue(Squared modulus):    5        0.0000076      0.0000077
+       Largest residue:           0.000007660056
 
        ================================================================
 
-       Davidson diagonalization has finished in   11 steps.
-          the number of current basis is   14
-          the number of total basis built is   84
+       Davidson diagonalization has finished in    6 steps.
+          the number of current basis is   66
+          the number of total basis built is   66
 
        Now print out information of eigenstates
 
 
      K-S Oscillator strengths
      occ con        R-x              R-y              R-z
-       1   1     0.19697338E-05    0.57587486E-01   -0.54098551E-05
-       1   2     0.62330166E-03    0.48951178E-05   -0.39141964E-03
-       1   3     0.11798207E-01    0.62572932E-05   -0.67329443E-02
-       1   4     0.52638563E-02   -0.68578720E-06    0.10263371E-01
-       1   5     0.76261086E-02    0.67894978E-06   -0.36439020E-02
-       1   6     0.12151243E-05    0.48679488E-02   -0.83520188E-06
-       2   1     0.23540704E-04    0.75623709E+00    0.11882443E-05
-       2   2    -0.49098040E-01    0.17036724E-04    0.25878734E-01
-       2   3     0.14481351E+00   -0.50815994E-05   -0.74643266E-01
-       2   4    -0.38901307E-01    0.47703822E-05   -0.53257284E-01
-       2   5     0.60787765E-01    0.85950220E-06   -0.42301031E-01
-       2   6     0.13704182E-05    0.60899076E-01    0.30008283E-06
-       3   1     0.59852279E-05   -0.28863495E-03   -0.16410497E-04
-       3   2     0.12621117E+00   -0.18375765E-05    0.24033417E+00
-       3   3    -0.87657059E-01   -0.15729840E-05   -0.17076362E+00
-       3   4    -0.17445776E-02   -0.60726870E-05   -0.44403209E-01
-       3   5     0.13873440E+00   -0.31746041E-05    0.28522287E+00
-       3   6    -0.22222225E-05    0.12704365E-03   -0.11243733E-04
-       4   1    -0.22304909E-05    0.30465333E-01   -0.10280122E-04
-       4   2     0.73750530E-01   -0.11030182E-04   -0.40004521E-01
-       4   3    -0.28922971E+00   -0.51155315E-05    0.15467690E+00
-       4   4     0.74453444E-01   -0.82610640E-05    0.15603066E+00
-       4   5    -0.81231545E-01    0.14537845E-05    0.90865463E-01
-       4   6     0.21744836E-04    0.13282696E+00   -0.99311347E-05
-       5   1    -0.97231172E+00    0.10625774E-04    0.51147716E+00
-       5   2    -0.74655194E-05    0.15975511E+00    0.12432643E-04
-       5   3    -0.14448773E-05    0.87036977E-01   -0.33729243E-05
-       5   4     0.31978860E-05   -0.11194317E-01    0.50076041E-05
-       5   5     0.15106270E-05    0.17019469E+00    0.12216366E-04
-       5   6    -0.15692630E+00    0.10041262E-03    0.82502707E-01
-       6   1    -0.39060947E-04    0.16666741E-03   -0.69196118E-05
-       6   2     0.87893773E-01    0.29362839E-05    0.17485120E+00
-       6   3    -0.15606745E+00    0.18879955E-05   -0.32467254E+00
-       6   4     0.28031707E+00   -0.15372861E-04   -0.14949371E+00
-       6   5     0.62138174E-01    0.91996553E-05    0.45979994E-01
-       6   6     0.48664069E-05   -0.50595249E-03   -0.50598041E-05
+       1   1     0.18222525E-04    0.75064698E-01   -0.13892490E-04
+       1   2    -0.23178647E-02   -0.12113626E-04    0.12989024E-02
+       1   3     0.10949788E-01    0.10437047E-04   -0.62978456E-02
+       1   4    -0.55659199E-02   -0.21298950E-06   -0.10870452E-01
+       1   5    -0.80607767E-02   -0.50128761E-05    0.50405359E-02
+       1   6    -0.17664359E-06    0.63900484E-02    0.30273089E-06
+       1   7     0.31810003E-02    0.23030285E-04   -0.87083482E-03
+       1   8     0.68571950E-02   -0.10875711E-05   -0.17026402E-02
+       1   9    -0.17112741E-01    0.68805452E-05    0.66964614E-02
+       1  10    -0.27898529E-02    0.98158581E-05   -0.99972397E-02
+       2   1    -0.40644657E-04   -0.76032457E+00    0.18493965E-04
+       2   2    -0.43593190E-01    0.11689169E-04    0.22974770E-01
+       2   3    -0.13862708E+00    0.34184693E-05    0.71478874E-01
+       2   4    -0.38785408E-01    0.48892073E-05   -0.52472640E-01
+       2   5     0.58276968E-01    0.22432559E-04   -0.40931485E-01
+       2   6     0.23666136E-04   -0.60332086E-01   -0.20165430E-04
+       2   7    -0.66005332E-02    0.22203444E-04    0.30297448E-02
+       2   8    -0.79192991E-02    0.94730812E-05   -0.18828953E-02
+       2   9     0.15337752E+00   -0.82287441E-05   -0.88035666E-01
+       2  10    -0.11693864E-01   -0.17610832E-05   -0.65350102E-01
+       3   1    -0.67267765E-05    0.35838379E-03   -0.49357274E-06
+       3   2     0.12250655E+00    0.53409652E-06    0.23312136E+00
+       3   3     0.84192340E-01   -0.63614951E-06    0.16465951E+00
+       3   4    -0.41689342E-02   -0.65763105E-05   -0.40744332E-01
+       3   5     0.13921983E+00    0.85461751E-06    0.28328938E+00
+       3   6     0.59088777E-04   -0.17780902E-03    0.12698782E-03
+       3   7    -0.80963637E-02   -0.80794677E-07   -0.55150690E-02
+       3   8    -0.84193441E-01   -0.21579192E-05   -0.11414431E+00
+       3   9     0.51213834E-02    0.48169273E-05    0.15677602E-01
+       3  10     0.11462997E+00    0.20273162E-05    0.13772629E+00
+       4   1     0.12296772E-03   -0.34451265E-01   -0.59069461E-04
+       4   2     0.64348888E-01    0.91294083E-05   -0.34944089E-01
+       4   3     0.29059444E+00   -0.80608947E-05   -0.15615038E+00
+       4   4     0.76291191E-01   -0.17017871E-06    0.16053909E+00
+       4   5    -0.80524743E-01    0.86448847E-04    0.90774340E-01
+       4   6    -0.38076374E-04   -0.13743113E+00    0.52721936E-04
+       4   7    -0.18226502E-01    0.76513431E-04    0.17408868E-01
+       4   8     0.94551438E-01   -0.95795304E-05   -0.17029238E-01
+       4   9    -0.27928280E+00    0.14422246E-04    0.14397645E+00
+       4  10     0.12701825E+00   -0.10121040E-04    0.11661459E+00
+       5   1    -0.98186020E+00    0.29467401E-04    0.51649136E+00
+       5   2     0.17920709E-04   -0.16446112E+00   -0.12104419E-04
+       5   3     0.52114955E-04    0.88647755E-01   -0.25654472E-04
+       5   4     0.16809374E-04    0.11733670E-01    0.15697905E-04
+       5   5     0.53951597E-04   -0.17261106E+00   -0.29923414E-04
+       5   6    -0.15699065E+00    0.38945303E-04    0.82566725E-01
+       5   7     0.97345843E-04    0.20454331E+00   -0.49604976E-04
+       5   8     0.21340520E-04    0.11382551E+00   -0.75575195E-05
+       5   9    -0.55102053E-04   -0.17681834E+00    0.21348691E-04
+       5  10     0.16423235E-04    0.46244336E-01    0.20841857E-04
+       6   1     0.32733663E-04   -0.15030065E-03    0.10333755E-04
+       6   2     0.82033773E-01    0.32082326E-05    0.16311153E+00
+       6   3     0.15696920E+00   -0.10857557E-05    0.33209903E+00
+       6   4     0.28943940E+00   -0.16392910E-04   -0.15004885E+00
+       6   5     0.59112843E-01    0.93743501E-05    0.37943611E-01
+       6   6     0.32536790E-04    0.44297424E-03    0.14299407E-04
+       6   7    -0.13765000E-02   -0.99331314E-06    0.55588561E-02
+       6   8    -0.10781638E-01    0.10301909E-04    0.44744515E-01
+       6   9    -0.14033483E+00   -0.22865452E-05   -0.23544050E+00
+       6  10     0.35559698E+00    0.10729302E-04   -0.51614780E-01
 
-       ! The    1 -th eigen state. The transition energy is:        0.29347865 Ry (3.9930 eV, 310.51 nm)
+       ! The    1 -th eigen state. The transition energy is:        0.29298873 Ry (3.9863 eV, 311.02 nm)
 
      The two digitals below indicate the importance of doing beyong TDA: 
 
-     Components: X       1.00197;    Y      -0.00197
+     Components: X       1.00187;    Y      -0.00187
 
      In the occ-virt project subspace the total Fxy is:
 
-     X       0.99575;    Y      -0.00143    total       0.99433  /      1.00000
+     X       0.99543;    Y      -0.00133    total       0.99410  /      1.00000
 
      The Chi_i_i is     Total          1               2               3
 
-                     0.26982414E-08    0.22203339E-11    0.26879177E-08    0.81033409E-11
+                     0.22603258E-08    0.48587947E-10    0.21746821E-08    0.37055688E-10
 
      Now is the components analysis of this transition.
 
@@ -418,65 +450,89 @@
 
      occ     virt       FX              FY
 
-       6    1       -0.99578        0.03750
+       6    1        0.99566       -0.03613
 
      Now for all the calculated particle and hole pairs : 
 
      occ     virt       FX              FY
 
-       1    1     -0.55229929E-05     -0.57892676E-05
-       1    2      0.24428394E-06      0.21106303E-06
-       1    3     -0.18568854E-06     -0.11389379E-06
-       1    4     -0.44150274E-07     -0.28842438E-07
-       1    5      0.11615836E-06      0.13143945E-06
-       1    6     -0.34502184E-05     -0.14584714E-05
-       2    1     -0.11795630E-05      0.63072720E-05
-       2    2      0.91600530E-06      0.56278107E-06
-       2    3     -0.57054082E-06     -0.36417208E-06
-       2    4      0.61766589E-06      0.64810343E-06
-       2    5      0.81706111E-06      0.54537501E-06
-       2    6     -0.15351122E-05      0.44669347E-05
-       3    1      0.28486069E-01     -0.12081144E-02
-       3    2     -0.86676446E-06     -0.61602201E-06
-       3    3      0.11097731E-05      0.39430658E-06
-       3    4     -0.10812475E-05     -0.74358735E-06
-       3    5     -0.11209457E-05      0.12241836E-06
-       3    6      0.38446548E-02      0.81168857E-03
-       4    1      0.93008662E-04     -0.62823728E-05
-       4    2     -0.99495294E-06     -0.45566548E-06
-       4    3      0.22277425E-05      0.11129375E-05
-       4    4     -0.97931216E-07     -0.48959156E-07
-       4    5     -0.13057514E-06     -0.61451580E-07
-       4    6      0.90956338E-05     -0.15522712E-06
-       5    1      0.13171889E-04      0.28492674E-05
-       5    2      0.20720166E-04     -0.93182647E-05
-       5    3      0.45900460E-04      0.21061333E-04
-       5    4      0.25006365E-03      0.16255423E-02
-       5    5      0.13345195E-02     -0.57028777E-03
-       5    6      0.10088520E-05      0.45941103E-06
-       6    1     -0.99578226E+00      0.37504339E-01
-       6    2     -0.70186848E-05      0.52019412E-06
-       6    3      0.19850905E-05     -0.31717976E-06
-       6    4     -0.16003315E-06     -0.33555523E-06
-       6    5     -0.16922839E-05     -0.33902622E-06
-       6    6     -0.57813796E-01      0.36742008E-02
+       1    1     -0.64391463E-05     -0.49338233E-05
+       1    2     -0.10556484E-06     -0.63482625E-07
+       1    3     -0.14440712E-06     -0.11000175E-06
+       1    4      0.17274467E-06      0.93937278E-07
+       1    5     -0.20471962E-06     -0.17791052E-06
+       1    6     -0.38854396E-05     -0.14880804E-05
+       1    7      0.61173906E-07      0.58399334E-07
+       1    8     -0.30601926E-06     -0.26110923E-06
+       1    9      0.85172460E-07      0.75690531E-07
+       1   10      0.56449434E-07      0.99472360E-07
+       2    1      0.15227891E-05     -0.88299527E-05
+       2    2     -0.55897329E-06     -0.10834334E-06
+       2    3     -0.22699108E-06      0.42285374E-07
+       2    4      0.11343009E-06      0.89776108E-08
+       2    5     -0.18359201E-06     -0.96263269E-07
+       2    6      0.25482282E-05     -0.47462519E-05
+       2    7     -0.15656734E-06     -0.60462760E-07
+       2    8      0.37758419E-06      0.18763924E-06
+       2    9     -0.44520910E-07     -0.12320529E-06
+       2   10      0.10464682E-06      0.16299383E-07
+       3    1     -0.27329481E-01      0.68998094E-03
+       3    2      0.30115768E-06     -0.33496550E-06
+       3    3     -0.87110332E-06     -0.79114458E-06
+       3    4     -0.49014087E-06     -0.99048811E-07
+       3    5      0.11114562E-05      0.23728841E-06
+       3    6     -0.38536491E-02     -0.87410798E-03
+       3    7      0.24441320E-05      0.45501268E-06
+       3    8      0.47843294E-06     -0.56085001E-08
+       3    9      0.12441070E-05      0.77343714E-06
+       3   10     -0.10581406E-05     -0.46148341E-06
+       4    1     -0.10420685E-03      0.56699038E-05
+       4    2     -0.16026841E-05     -0.78560104E-06
+       4    3     -0.68892354E-06     -0.24011354E-06
+       4    4      0.52786826E-06     -0.89810996E-07
+       4    5     -0.87073426E-06     -0.73695942E-06
+       4    6     -0.11065722E-04     -0.22179639E-06
+       4    7      0.14360182E-05      0.71311059E-06
+       4    8     -0.39767502E-06     -0.19850711E-06
+       4    9     -0.82826970E-06     -0.32145192E-06
+       4   10      0.25890247E-06      0.14057524E-06
+       5    1      0.13233112E-04      0.34602354E-05
+       5    2     -0.14286563E-04      0.88194351E-05
+       5    3      0.46658887E-04      0.37091159E-04
+       5    4     -0.47412170E-03     -0.15767580E-02
+       5    5     -0.13100896E-02      0.53216580E-03
+       5    6      0.18276878E-05      0.14862984E-05
+       5    7     -0.40002524E-03      0.23697318E-03
+       5    8     -0.16526933E-02      0.11210893E-02
+       5    9      0.30268486E-03     -0.70835629E-04
+       5   10      0.17541819E-03     -0.24131156E-02
+       6    1      0.99565849E+00     -0.36125231E-01
+       6    2     -0.47908556E-05      0.35453706E-06
+       6    3      0.18761095E-05      0.15497750E-05
+       6    4      0.16910933E-05      0.10798163E-05
+       6    5     -0.28963889E-04      0.77911958E-06
+       6    6      0.57703580E-01     -0.34783383E-02
+       6    7     -0.32839134E-04      0.29653255E-05
+       6    8     -0.44484653E-06      0.99541147E-06
+       6    9     -0.32922909E-05     -0.13867521E-05
+       6   10      0.14260547E-05      0.52890075E-06
 
        **************
 
 
-       ! The    2 -th eigen state. The transition energy is:        0.47163049 Ry (6.4169 eV, 193.22 nm)
+       ! The    2 -th eigen state. The transition energy is:        0.46049385 Ry (6.2653 eV, 197.89 nm)
 
      The two digitals below indicate the importance of doing beyong TDA: 
 
-     Components: X       1.00012;    Y      -0.00012
+     Components: X       1.00011;    Y      -0.00011
 
      In the occ-virt project subspace the total Fxy is:
 
-     X       0.98507;    Y      -0.00001    total       0.98507  /      1.00000
+     X       0.99449;    Y      -0.00001    total       0.99448  /      1.00000
 
      The Chi_i_i is     Total          1               2               3
 
-                     0.10401143E-01    0.21519408E-02    0.16670693E-11    0.82492026E-02
+                     0.89973432E-02    0.18632824E-02    0.19775868E-10    0.71340607E-02
 
      Now is the components analysis of this transition.
 
@@ -484,55 +540,79 @@
 
      occ     virt       FX              FY
 
-       6    2        0.97669        0.00092
-       6    3       -0.11727        0.00101
-       6    5        0.13028       -0.00045
+       6    2       -0.97644       -0.00111
+       6    3       -0.10965        0.00090
+       6    5       -0.13515        0.00032
 
      Now for all the calculated particle and hole pairs : 
 
      occ     virt       FX              FY
 
-       1    1      0.38085113E-06      0.27883783E-06
-       1    2      0.16164242E-04      0.47393712E-05
-       1    3      0.34755669E-04      0.44009726E-06
-       1    4     -0.12734174E-02     -0.19852990E-03
-       1    5     -0.41329276E-03     -0.28712405E-04
-       1    6      0.12275663E-06      0.55061387E-07
-       2    1     -0.24799443E-05     -0.11658378E-05
-       2    2      0.65598733E-05     -0.14964502E-04
-       2    3      0.62579628E-04      0.19482903E-04
-       2    4     -0.56194594E-02      0.94141090E-04
-       2    5     -0.83606964E-03      0.10118970E-03
-       2    6     -0.36794794E-06     -0.12494332E-06
-       3    1      0.30438212E-05      0.75920590E-06
-       3    2      0.56780218E-02     -0.96151427E-03
-       3    3     -0.11147303E-01      0.12088181E-02
-       3    4      0.41975806E-03      0.22195313E-03
-       3    5     -0.39180011E-02     -0.96812487E-03
-       3    6      0.26777016E-05      0.47124625E-06
-       4    1      0.12753669E-05      0.17359230E-06
-       4    2      0.39977174E-04      0.15778753E-04
-       4    3     -0.96940006E-04     -0.49041532E-04
-       4    4      0.23664229E-02      0.45443766E-03
-       4    5     -0.89669000E-03     -0.29740444E-03
-       4    6      0.96438719E-06      0.26925151E-06
-       5    1     -0.86818924E-03     -0.86189169E-04
-       5    2      0.10125721E-05      0.14367694E-06
-       5    3     -0.14329772E-05     -0.30611364E-06
-       5    4      0.50080810E-06      0.15675423E-06
-       5    5      0.14057844E-06      0.31099274E-07
-       5    6     -0.12505018E-04      0.57480118E-05
-       6    1     -0.83842220E-05     -0.32802375E-06
-       6    2      0.97668715E+00      0.92038108E-03
-       6    3     -0.11726796E+00      0.10127007E-02
-       6    4     -0.14702259E-01      0.61487806E-04
-       6    5      0.13027854E+00     -0.44769778E-03
-       6    6      0.32480319E-04      0.73350792E-06
+       1    1     -0.38505514E-07     -0.69442602E-07
+       1    2      0.30417118E-05      0.28327003E-05
+       1    3     -0.24627955E-04     -0.15536671E-05
+       1    4     -0.12769202E-02     -0.18731562E-03
+       1    5     -0.41419165E-03     -0.25780151E-04
+       1    6      0.13434514E-06      0.21536928E-06
+       1    7     -0.85510755E-04     -0.44212728E-05
+       1    8     -0.44705587E-03     -0.20470417E-04
+       1    9     -0.83483287E-05     -0.70509193E-05
+       1   10     -0.79502146E-03     -0.18856493E-03
+       2    1     -0.14378360E-06     -0.33832346E-06
+       2    2     -0.21000520E-04      0.12749235E-04
+       2    3     -0.38230504E-06      0.19876526E-04
+       2    4      0.52969097E-02     -0.14373916E-03
+       2    5      0.77288071E-03     -0.11061371E-03
+       2    6     -0.21654063E-05     -0.11950357E-05
+       2    7      0.71802996E-06     -0.40832080E-04
+       2    8      0.27387670E-03     -0.15317744E-03
+       2    9      0.27958856E-03      0.64320224E-05
+       2   10      0.27301623E-02     -0.36294019E-03
+       3    1      0.31115900E-05      0.82099455E-06
+       3    2     -0.48730636E-02      0.94987690E-03
+       3    3     -0.11055747E-01      0.11342884E-02
+       3    4     -0.33935203E-03     -0.20580735E-03
+       3    5      0.35836892E-02      0.88494715E-03
+       3    6      0.40980900E-05      0.77862593E-06
+       3    7      0.12275666E-02     -0.77291694E-04
+       3    8     -0.28916151E-02     -0.44581912E-03
+       3    9      0.54836512E-02     -0.74051358E-03
+       3   10     -0.27008630E-03      0.77301620E-03
+       4    1      0.27258050E-05      0.51906911E-06
+       4    2     -0.34251781E-04     -0.14926924E-04
+       4    3     -0.39010121E-04     -0.48523508E-04
+       4    4     -0.23728214E-02     -0.40011614E-03
+       4    5      0.96000853E-03      0.33089736E-03
+       4    6     -0.11622242E-06     -0.89930690E-07
+       4    7      0.43133167E-03      0.13636923E-03
+       4    8      0.16386658E-02      0.48869806E-03
+       4    9     -0.50857785E-03     -0.12513961E-03
+       4   10     -0.13065192E-02     -0.27918965E-03
+       5    1      0.64226534E-03      0.80585771E-04
+       5    2      0.12136848E-05      0.26257603E-06
+       5    3      0.27546064E-05      0.70738530E-06
+       5    4      0.26129626E-05      0.92361446E-06
+       5    5     -0.11614625E-05     -0.30953286E-06
+       5    6      0.10909083E-05     -0.68709655E-05
+       5    7     -0.55164992E-05     -0.16515518E-05
+       5    8      0.24579555E-05      0.73892944E-06
+       5    9     -0.39967162E-05     -0.12619466E-05
+       5   10     -0.28951364E-05     -0.10195024E-05
+       6    1     -0.65696152E-05     -0.15789945E-06
+       6    2     -0.97644286E+00     -0.11092309E-02
+       6    3     -0.10964775E+00      0.89701808E-03
+       6    4      0.14153380E-01     -0.39474672E-04
+       6    5     -0.13514655E+00      0.32130646E-03
+       6    6     -0.20724317E-04      0.56082176E-08
+       6    7      0.51504397E-01     -0.42634728E-03
+       6    8      0.86596684E-01     -0.10664843E-03
+       6    9     -0.41613601E-02     -0.11618248E-02
+       6   10     -0.11894307E-01      0.65699721E-03
 
        **************
 
 
-       ! The    3 -th eigen state. The transition energy is:        0.54931373 Ry (7.4738 eV, 165.89 nm)
+       ! The    3 -th eigen state. The transition energy is:        0.53816242 Ry (7.3221 eV, 169.33 nm)
 
      The two digitals below indicate the importance of doing beyong TDA: 
 
@@ -540,11 +620,11 @@
 
      In the occ-virt project subspace the total Fxy is:
 
-     X       0.93729;    Y      -0.00001    total       0.93728  /      1.00000
+     X       0.99300;    Y      -0.00002    total       0.99298  /      1.00000
 
      The Chi_i_i is     Total          1               2               3
 
-                     0.25538132E-01    0.44133366E-02    0.25296355E-10    0.21124795E-01
+                     0.27842165E-01    0.47054483E-02    0.61810908E-12    0.23136716E-01
 
      Now is the components analysis of this transition.
 
@@ -552,66 +632,92 @@
 
      occ     virt       FX              FY
 
-       6    3        0.92643       -0.00133
-       6    5        0.27451        0.00104
+       6    3       -0.92756        0.00115
+       6    5        0.27204        0.00112
+       6    8       -0.15489       -0.00014
+       6    9        0.17765       -0.00180
 
      Now for all the calculated particle and hole pairs : 
 
      occ     virt       FX              FY
 
-       1    1      0.64846340E-06      0.24446889E-06
-       1    2      0.18372840E-04      0.68319732E-06
-       1    3     -0.72393414E-04      0.17773970E-04
-       1    4      0.12679243E-04      0.21333383E-03
-       1    5     -0.59674019E-05      0.13488797E-03
-       1    6      0.10759251E-06      0.24743638E-07
-       2    1      0.25701394E-05      0.71870565E-06
-       2    2     -0.24144764E-03     -0.19712739E-05
-       2    3      0.17800248E-03     -0.21090744E-04
-       2    4      0.10919828E-02     -0.76739358E-04
-       2    5     -0.12097080E-02     -0.17674689E-03
-       2    6      0.62863444E-07     -0.25406364E-07
-       3    1     -0.12754987E-05     -0.47302789E-06
-       3    2     -0.14072677E-01      0.12008390E-02
-       3    3      0.59645775E-02     -0.12513836E-02
-       3    4     -0.14251963E-02     -0.21908439E-03
-       3    5      0.20044068E-02      0.18323933E-02
-       3    6     -0.64615168E-05     -0.66442015E-06
-       4    1     -0.75468830E-05     -0.50073020E-06
-       4    2      0.70992789E-04     -0.13945357E-04
-       4    3     -0.83293564E-03     -0.32054275E-04
-       4    4     -0.40292432E-02     -0.57549514E-03
-       4    5     -0.98156706E-03     -0.28150447E-04
-       4    6      0.47860643E-06      0.11780671E-06
-       5    1      0.79500049E-03      0.47994819E-04
-       5    2     -0.41134489E-06     -0.13815468E-07
-       5    3     -0.65152909E-06     -0.30293713E-06
-       5    4     -0.19798985E-05     -0.43516730E-06
-       5    5     -0.84755539E-06     -0.17949792E-06
-       5    6      0.99474336E-04      0.13836299E-04
-       6    1      0.57235706E-05      0.62066728E-06
-       6    2      0.58333844E-01      0.73257185E-03
-       6    3      0.92642563E+00     -0.13316598E-02
-       6    4     -0.16873791E-02     -0.24684689E-03
-       6    5      0.27450730E+00      0.10413229E-02
-       6    6     -0.45715220E-04     -0.12082329E-05
+       1    1     -0.65559617E-06     -0.40227085E-06
+       1    2      0.10487382E-04     -0.91986956E-06
+       1    3     -0.85793692E-04      0.20729293E-04
+       1    4     -0.69035363E-04     -0.22950495E-03
+       1    5      0.68659347E-04     -0.13420230E-03
+       1    6     -0.80862913E-06     -0.60258456E-06
+       1    7      0.53010734E-04     -0.29195829E-04
+       1    8     -0.22082634E-04     -0.13292451E-03
+       1    9     -0.68216328E-04     -0.10540265E-04
+       1   10     -0.14015985E-03     -0.19181491E-03
+       2    1     -0.89124441E-06     -0.24266402E-06
+       2    2     -0.18145385E-03      0.32455849E-05
+       2    3     -0.12928912E-03      0.31647749E-04
+       2    4      0.91353970E-03     -0.10528417E-03
+       2    5     -0.13070491E-02     -0.20239593E-03
+       2    6     -0.14210665E-06      0.16804605E-06
+       2    7     -0.58698108E-03     -0.86318674E-04
+       2    8     -0.21717467E-02     -0.29328518E-03
+       2    9      0.69648743E-04     -0.27584290E-04
+       2   10      0.16169373E-02     -0.23412280E-03
+       3    1      0.50058884E-06      0.58822431E-06
+       3    2     -0.13614402E-01      0.11693008E-02
+       3    3     -0.61129860E-02      0.12528821E-02
+       3    4     -0.13290991E-02     -0.21446532E-03
+       3    5      0.17626286E-02      0.18187232E-02
+       3    6      0.25917663E-05      0.10386066E-05
+       3    7      0.66192706E-03     -0.20584795E-03
+       3    8      0.57700103E-02     -0.72006915E-03
+       3    9      0.51402666E-02     -0.22690107E-03
+       3   10      0.54678907E-02      0.11720265E-02
+       4    1     -0.18865432E-05     -0.18732174E-06
+       4    2      0.39066304E-05     -0.22081015E-04
+       4    3      0.81475333E-03      0.24812106E-04
+       4    4     -0.38030003E-02     -0.52274607E-03
+       4    5     -0.87984645E-03     -0.23684139E-04
+       4    6     -0.18969354E-06      0.11839859E-06
+       4    7     -0.25553843E-03      0.77365398E-05
+       4    8      0.45656095E-03      0.16515747E-03
+       4    9      0.48641905E-03      0.13293018E-03
+       4   10     -0.31094484E-02     -0.49087100E-03
+       5    1      0.13423544E-02      0.75247148E-04
+       5    2      0.71920899E-05      0.10703623E-05
+       5    3      0.34190977E-05      0.65652633E-06
+       5    4      0.37524751E-06      0.15200361E-06
+       5    5      0.25541222E-05      0.49315851E-06
+       5    6      0.12556660E-03      0.18009120E-04
+       5    7     -0.17601886E-05     -0.33526094E-06
+       5    8     -0.23664859E-05     -0.46042835E-06
+       5    9      0.22928000E-05      0.59929773E-06
+       5   10      0.26337047E-05      0.87103522E-06
+       6    1     -0.65550709E-05     -0.28154054E-05
+       6    2      0.49541301E-01      0.66661972E-03
+       6    3     -0.92755864E+00      0.11531041E-02
+       6    4      0.15205464E-02     -0.24000171E-03
+       6    5      0.27204356E+00      0.11166544E-02
+       6    6      0.27930700E-03      0.46355957E-05
+       6    7     -0.52742074E-02      0.40825087E-03
+       6    8     -0.15489273E+00     -0.13702999E-03
+       6    9      0.17765410E+00     -0.17969485E-02
+       6   10     -0.15329658E-01      0.15180823E-02
 
        **************
 
 
-       ! The    4 -th eigen state. The transition energy is:        0.56148881 Ry (7.6394 eV, 162.29 nm)
+       ! The    4 -th eigen state. The transition energy is:        0.54951658 Ry (7.4766 eV, 165.83 nm)
 
      The two digitals below indicate the importance of doing beyong TDA: 
 
-     Components: X       1.00024;    Y      -0.00024
+     Components: X       1.00023;    Y      -0.00023
 
      In the occ-virt project subspace the total Fxy is:
 
-     X       0.94905;    Y      -0.00003    total       0.94902  /      1.00000
+     X       0.98107;    Y      -0.00004    total       0.98102  /      1.00000
 
      The Chi_i_i is     Total          1               2               3
 
-                     0.23800303E-01    0.19560637E-01    0.16611910E-10    0.42396660E-02
+                     0.25793032E-01    0.21358518E-01    0.82057767E-13    0.44345141E-02
 
      Now is the components analysis of this transition.
 
@@ -619,54 +725,80 @@
 
      occ     virt       FX              FY
 
-       6    4       -0.95941       -0.00042
-       6    5       -0.16496       -0.00047
+       6    4        0.95848        0.00054
+       6    5        0.16517        0.00054
+       6    8        0.12371        0.00082
+       6   10        0.13155       -0.00124
 
      Now for all the calculated particle and hole pairs : 
 
      occ     virt       FX              FY
 
-       1    1      0.49472807E-06      0.14286551E-06
-       1    2      0.17859969E-02      0.40297294E-03
-       1    3     -0.72361624E-03     -0.36305150E-03
-       1    4     -0.37404069E-03     -0.21606109E-04
-       1    5      0.13156242E-02      0.23849572E-03
-       1    6      0.13513842E-06      0.45065146E-07
-       2    1      0.21754367E-05      0.98972942E-06
-       2    2      0.21146121E-02     -0.21054348E-02
-       2    3      0.38885408E-02      0.31609777E-02
-       2    4     -0.25672766E-03      0.15923123E-03
-       2    5      0.29141679E-02     -0.75999614E-03
-       2    6     -0.53235993E-06     -0.75595102E-07
-       3    1     -0.45617429E-05     -0.42764743E-06
-       3    2     -0.17180072E-03      0.61889931E-05
-       3    3      0.56040182E-03     -0.21485584E-04
-       3    4     -0.40975619E-03      0.17346241E-02
-       3    5      0.42577963E-02      0.72326898E-03
-       3    6     -0.12550630E-05     -0.15983702E-06
-       4    1     -0.32006775E-05     -0.16819967E-06
-       4    2      0.67850272E-02      0.20056653E-02
-       4    3     -0.32652511E-02     -0.16875272E-02
-       4    4     -0.11319845E-02     -0.13934597E-03
-       4    5      0.38016230E-02      0.10913413E-02
-       4    6     -0.56742327E-06     -0.12521134E-06
-       5    1     -0.22751020E-01     -0.61796136E-03
-       5    2     -0.96184646E-06     -0.14943737E-06
-       5    3      0.29358474E-05      0.48339024E-06
-       5    4     -0.73895116E-06     -0.87526728E-07
-       5    5      0.52498087E-06      0.53784632E-07
-       5    6      0.66321717E-02      0.13780049E-02
-       6    1     -0.17013495E-05     -0.50575047E-06
-       6    2     -0.16150604E-02     -0.18632497E-04
-       6    3      0.26147851E-01      0.50293813E-04
-       6    4     -0.95940710E+00     -0.41712934E-03
-       6    5     -0.16495577E+00     -0.47076394E-03
-       6    6      0.40567351E-04      0.37094011E-06
+       1    1     -0.42837680E-06     -0.17463888E-06
+       1    2      0.17711903E-02      0.37294047E-03
+       1    3      0.67942380E-03      0.34015057E-03
+       1    4     -0.35285441E-03     -0.16430230E-04
+       1    5      0.13462117E-02      0.21974368E-03
+       1    6     -0.11198847E-05     -0.91357090E-06
+       1    7     -0.22594369E-03     -0.99960198E-04
+       1    8     -0.83598040E-03     -0.18416122E-03
+       1    9      0.18065988E-03     -0.21152134E-03
+       1   10      0.44198936E-03      0.76437220E-04
+       2    1      0.15706175E-05      0.74328984E-06
+       2    2     -0.26107310E-02      0.19227087E-02
+       2    3      0.33940802E-02      0.30334000E-02
+       2    4      0.27983278E-03     -0.14712676E-03
+       2    5     -0.31081827E-02      0.71914163E-03
+       2    6      0.96797680E-08      0.89739049E-06
+       2    7     -0.18116509E-02     -0.67500521E-03
+       2    8      0.82133430E-03     -0.45716061E-03
+       2    9     -0.44545736E-02     -0.21299386E-02
+       2   10     -0.62259363E-03      0.71100108E-03
+       3    1      0.10274875E-04      0.80113053E-06
+       3    2      0.18473397E-03     -0.14070855E-04
+       3    3      0.61487048E-03     -0.24512228E-04
+       3    4      0.22222999E-03     -0.16382892E-02
+       3    5     -0.41789953E-02     -0.72274347E-03
+       3    6     -0.39421917E-05     -0.73966921E-06
+       3    7     -0.10907439E-02     -0.95910042E-04
+       3    8     -0.46967441E-02     -0.59082063E-03
+       3    9      0.89009818E-03      0.63504429E-04
+       3   10      0.23664411E-03     -0.15492804E-02
+       4    1     -0.91637937E-05     -0.97769871E-06
+       4    2     -0.61098547E-02     -0.19480189E-02
+       4    3     -0.30833052E-02     -0.17038657E-02
+       4    4      0.10687859E-02      0.13800516E-03
+       4    5     -0.35505487E-02     -0.10812532E-02
+       4    6      0.36436619E-05      0.91415259E-06
+       4    7      0.19986843E-02      0.50265487E-03
+       4    8      0.44982766E-02      0.10891783E-02
+       4    9      0.96802216E-03      0.97574567E-03
+       4   10     -0.21051799E-03     -0.26496164E-03
+       5    1      0.17875605E-01      0.91251139E-03
+       5    2     -0.70669305E-05     -0.12282685E-05
+       5    3      0.25195605E-05      0.41019126E-06
+       5    4      0.28241005E-05      0.42392535E-06
+       5    5      0.45964045E-05      0.90611895E-06
+       5    6     -0.60735985E-02     -0.12708757E-02
+       5    7      0.89363819E-05      0.19207216E-05
+       5    8      0.86564906E-05      0.18698139E-05
+       5    9     -0.11123305E-05     -0.16471582E-06
+       5   10     -0.87187031E-06     -0.46652164E-06
+       6    1      0.28690644E-04      0.26723272E-05
+       6    2      0.90404230E-03      0.14046068E-04
+       6    3      0.28456795E-01      0.51511675E-04
+       6    4      0.95847567E+00      0.54065237E-03
+       6    5      0.16517478E+00      0.54120536E-03
+       6    6     -0.39241926E-03     -0.74963985E-05
+       6    7      0.33772347E-01      0.20523363E-03
+       6    8      0.12371417E+00      0.81600022E-03
+       6    9      0.16863292E-02     -0.14749578E-03
+       6   10      0.13154964E+00     -0.12371013E-02
 
        **************
 
 
-       ! The    5 -th eigen state. The transition energy is:        0.57562391 Ry (7.8318 eV, 158.31 nm)
+       ! The    5 -th eigen state. The transition energy is:        0.56344096 Ry (7.6660 eV, 161.73 nm)
 
      The two digitals below indicate the importance of doing beyong TDA: 
 
@@ -674,11 +806,11 @@
 
      In the occ-virt project subspace the total Fxy is:
 
-     X       0.88954;    Y      -0.00001    total       0.88953  /      1.00000
+     X       0.96338;    Y      -0.00001    total       0.96337  /      1.00000
 
      The Chi_i_i is     Total          1               2               3
 
-                     0.25987924E-02    0.82585677E-03    0.64231970E-11    0.17729356E-02
+                     0.23364639E-02    0.69918387E-03    0.47594167E-10    0.16372800E-02
 
      Now is the components analysis of this transition.
 
@@ -686,114 +818,134 @@
 
      occ     virt       FX              FY
 
-       6    2       -0.19174       -0.00109
-       6    3       -0.30647        0.00134
-       6    4       -0.12479        0.00004
-       6    5        0.86198        0.00028
+       6    2       -0.19482       -0.00099
+       6    3        0.30294       -0.00134
+       6    4       -0.12560        0.00006
+       6    5        0.86267        0.00038
+       6    7       -0.12483        0.00006
+       6    8       -0.21248        0.00034
 
      Now for all the calculated particle and hole pairs : 
 
      occ     virt       FX              FY
 
-       1    1      0.97073964E-06      0.48672526E-06
-       1    2     -0.16265546E-05      0.46683022E-04
-       1    3      0.27396376E-05      0.34966695E-04
-       1    4     -0.82969258E-03      0.34517348E-04
-       1    5     -0.78846360E-04      0.78121353E-04
-       1    6     -0.36244715E-07      0.86855234E-07
-       2    1     -0.88347649E-06     -0.74387172E-06
-       2    2     -0.88897243E-03     -0.24190133E-03
-       2    3      0.73220496E-03      0.36950014E-03
-       2    4     -0.37553874E-02     -0.12361758E-04
-       2    5     -0.15657948E-02     -0.45696699E-04
-       2    6     -0.54587032E-06     -0.24771300E-06
-       3    1      0.26663520E-04      0.10060157E-05
-       3    2     -0.18627981E-02     -0.67058740E-03
-       3    3     -0.30133869E-03      0.11398220E-02
-       3    4      0.44901721E-04      0.48047058E-03
-       3    5     -0.71883080E-03     -0.64195173E-03
-       3    6     -0.30855682E-06      0.25794947E-06
-       4    1      0.29485920E-05     -0.30420341E-07
-       4    2      0.48288615E-03      0.20688629E-03
-       4    3     -0.64641526E-03     -0.13898224E-03
-       4    4     -0.31788483E-03     -0.84092811E-04
-       4    5      0.77529571E-03      0.83202907E-04
-       4    6      0.73547043E-06      0.25804110E-06
-       5    1     -0.15442831E-01     -0.15197007E-03
-       5    2     -0.55318403E-06      0.20894491E-06
-       5    3     -0.22083064E-05     -0.20133099E-06
-       5    4     -0.26689543E-07     -0.16966989E-06
-       5    5     -0.43440761E-06      0.22288535E-06
-       5    6      0.69250965E-03      0.28852957E-03
-       6    1      0.38936666E-04      0.17865528E-05
-       6    2     -0.19173631E+00     -0.10885314E-02
-       6    3     -0.30647191E+00      0.13419089E-02
-       6    4     -0.12479267E+00      0.38723394E-04
-       6    5      0.86198406E+00      0.28432448E-03
-       6    6     -0.53301911E-03     -0.14050595E-05
+       1    1      0.42546924E-06      0.22744545E-06
+       1    2      0.27927727E-04     -0.53350164E-04
+       1    3     -0.61483498E-06      0.41683827E-04
+       1    4      0.83600523E-03     -0.29562550E-04
+       1    5      0.85641433E-04     -0.77372471E-04
+       1    6     -0.45073558E-06     -0.30203894E-06
+       1    7      0.17800939E-03      0.47789236E-04
+       1    8      0.17021480E-03      0.85842826E-04
+       1    9      0.20473946E-04     -0.10257442E-03
+       1   10      0.74006947E-03     -0.32175975E-04
+       2    1     -0.53307476E-06      0.21204510E-06
+       2    2     -0.72300066E-03     -0.25773250E-03
+       2    3     -0.71338022E-03     -0.41792540E-03
+       2    4     -0.37169842E-02      0.29694872E-04
+       2    5     -0.14816956E-02     -0.39875677E-04
+       2    6      0.27211019E-05      0.12314162E-05
+       2    7      0.42812298E-04      0.10283855E-03
+       2    8     -0.88452889E-03      0.36802642E-04
+       2    9     -0.40155451E-03      0.18221637E-03
+       2   10     -0.33187178E-02      0.11757845E-03
+       3    1      0.19617883E-04      0.26915202E-05
+       3    2     -0.13409190E-02     -0.61022371E-03
+       3    3      0.51544822E-03     -0.10924642E-02
+       3    4      0.23016777E-03      0.51195519E-03
+       3    5     -0.64964707E-03     -0.64497790E-03
+       3    6     -0.78984340E-05     -0.82596023E-06
+       3    7      0.43116757E-04      0.29084945E-04
+       3    8      0.10994066E-02      0.42267814E-03
+       3    9     -0.34397286E-02      0.65219251E-03
+       3   10      0.12677301E-02     -0.21842256E-03
+       4    1     -0.44751462E-05     -0.39371127E-06
+       4    2      0.63774932E-03      0.24475072E-03
+       4    3      0.68793143E-03      0.16084416E-03
+       4    4     -0.49698455E-04     -0.55471205E-04
+       4    5      0.92418604E-03      0.10030989E-03
+       4    6      0.53141813E-06      0.14027850E-06
+       4    7     -0.51229488E-03     -0.10138889E-03
+       4    8     -0.14836849E-03     -0.25147067E-03
+       4    9      0.49867385E-04      0.25133347E-04
+       4   10     -0.91247548E-04     -0.19063834E-03
+       5    1     -0.14676756E-01     -0.36373563E-03
+       5    2      0.51251214E-06      0.10317363E-06
+       5    3     -0.29955957E-05     -0.54443927E-06
+       5    4     -0.41111145E-05     -0.30022329E-05
+       5    5      0.62799342E-05      0.12305083E-05
+       5    6      0.69780016E-03      0.29446454E-03
+       5    7      0.69491779E-05      0.14605917E-05
+       5    8      0.40450827E-05      0.11226988E-05
+       5    9      0.31135169E-05      0.40580582E-06
+       5   10     -0.14472688E-05     -0.17921297E-05
+       6    1      0.26731490E-03      0.54682577E-05
+       6    2     -0.19482432E+00     -0.99073068E-03
+       6    3      0.30293910E+00     -0.13425468E-02
+       6    4     -0.12559879E+00      0.55928720E-04
+       6    5      0.86266629E+00      0.38271968E-03
+       6    6     -0.36871581E-02     -0.82946264E-05
+       6    7     -0.12482854E+00      0.57749761E-04
+       6    8     -0.21247862E+00      0.34372137E-03
+       6    9      0.92145722E-01      0.12216412E-02
+       6   10      0.64667083E-01     -0.12963425E-03
 
        **************
 
      Now generate the eigenvalues list...
      Now generate the spectrum plot file...
      Finished linear response calculation...
-
-     lr_dav_main  :     34.25s CPU     38.65s WALL (       1 calls)
-     read_wf      :      0.07s CPU      0.08s WALL (       1 calls)
-     lr_solve_e   :      0.01s CPU      0.01s WALL (       1 calls)
-     calc_residue :      0.26s CPU      0.28s WALL (      12 calls)
-     expan_basis  :      0.57s CPU      0.60s WALL (      10 calls)
-     matrix       :      0.01s CPU      0.01s WALL (      12 calls)
-     mGS_orth     :      0.53s CPU      0.55s WALL (      30 calls)
-     mGS_orth_pp  :      0.01s CPU      0.01s WALL (      30 calls)
-     one_step     :     33.02s CPU     37.25s WALL (      11 calls)
-
-     lr_apply     :     32.49s CPU     36.67s WALL (     168 calls)
-                                        0.00s GPU  (     168 calls)
-     lr_apply_int :     18.08s CPU     20.31s WALL (      84 calls)
-                                        0.00s GPU  (      84 calls)
-     lr_apply_no  :     14.41s CPU     16.36s WALL (      84 calls)
-                                        0.00s GPU  (      84 calls)
-
-     h_psi        :     10.76s CPU     12.15s WALL (     168 calls)
-     lr_calc_dens :      9.53s CPU     10.79s WALL (      84 calls)
-                                        0.00s GPU  (      84 calls)
-     lr_dv_setup  :      0.03s CPU      0.06s WALL (       1 calls)
-     dv_of_drho   :      2.12s CPU      2.32s WALL (      84 calls)
-     interaction  :      0.91s CPU      1.00s WALL (      84 calls)
-                                        0.00s GPU  (      84 calls)
-     lr_dot       :      0.75s CPU      0.80s WALL (   25693 calls)
-     ortho        :      0.05s CPU      0.05s WALL (     335 calls)
-
-     lr_exx_int   :      8.85s CPU     10.08s WALL (     252 calls)
-     lr_exx_noint :      9.03s CPU     10.24s WALL (      84 calls)
-
+ 
+     lr_dav_main  :     20.18s CPU     26.17s WALL (       1 calls)
+     read_wf      :      0.39s CPU      0.74s WALL (       1 calls)
+     lr_solve_e   :      0.33s CPU      0.52s WALL (       1 calls)
+     calc_residue :      0.42s CPU      0.58s WALL (       6 calls)
+     expan_basis  :      2.11s CPU      2.19s WALL (       5 calls)
+     matrix       :      0.00s CPU      0.01s WALL (       6 calls)
+     mGS_orth     :      1.65s CPU      1.67s WALL (      15 calls)
+     mGS_orth_pp  :      0.04s CPU      0.04s WALL (      15 calls)
+     one_step     :     16.05s CPU     20.84s WALL (       6 calls)
+ 
+     lr_apply     :     13.38s CPU     17.97s WALL (     132 calls)
+     lr_apply_int :      9.64s CPU     13.81s WALL (      66 calls)
+     lr_apply_no  :      3.74s CPU      4.16s WALL (      66 calls)
+ 
+     h_psi        :      2.44s CPU      3.22s WALL (     132 calls)
+     lr_calc_dens :      2.83s CPU      3.01s WALL (      66 calls)
+     lr_dv_setup  :      0.02s CPU      0.03s WALL (       1 calls)
+     dv_of_drho   :      5.31s CPU      8.79s WALL (      66 calls)
+     interaction  :      0.10s CPU      0.17s WALL (      66 calls)
+     lr_dot       :      3.71s CPU      3.81s WALL (   16795 calls)
+     ortho        :      0.51s CPU      0.71s WALL (     231 calls)
+ 
+     lr_exx_int   :      2.67s CPU      2.84s WALL (     198 calls)
+     lr_exx_noint :      2.43s CPU      2.46s WALL (      66 calls)
+ 
      US routines
-     lr_sm1_psi   :      0.00s CPU      0.00s WALL (     168 calls)
-
+     lr_sm1_psi   :      0.00s CPU      0.00s WALL (     132 calls)
+ 
      General routines
-     calbec       :      0.04s CPU      0.05s WALL (     169 calls)
-     fft          :      1.04s CPU      1.24s WALL (     850 calls)
-     fftc         :     15.34s CPU     17.68s WALL (   16146 calls)
-     fftw         :      1.16s CPU      1.27s WALL (    2283 calls)
-     fftcw        :      2.02s CPU      2.22s WALL (    3537 calls)
-     interpolate  :      0.01s CPU      0.01s WALL (      84 calls)
-     davcio       :      0.00s CPU      0.00s WALL (       5 calls)
-
+     calbec       :      0.01s CPU      0.01s WALL (     133 calls)
+     fft          :      2.20s CPU      2.36s WALL (     670 calls)
+     fftc         :      1.61s CPU      1.67s WALL (   12690 calls)
+     fftw         :      0.18s CPU      0.27s WALL (    1269 calls)
+     fftcw        :      0.32s CPU      0.34s WALL (    2781 calls)
+     interpolate  :      0.00s CPU      0.00s WALL (      66 calls)
+     davcio       :      0.01s CPU      0.05s WALL (       5 calls)
+ 
      Parallel routines
-     fft_scatter  :     10.38s CPU     12.03s WALL (   22816 calls)
-
+ 
      EXX routines
      exx_grid     :      0.00s CPU      0.00s WALL (       1 calls)
-     exxinit      :      0.01s CPU      0.01s WALL (       1 calls)
-     vexx         :     10.04s CPU     11.34s WALL (     168 calls)
-     exxenergy    :      0.05s CPU      0.05s WALL (       1 calls)
+     exxinit      :      0.03s CPU      0.05s WALL (       1 calls)
+     vexx         :      2.10s CPU      2.83s WALL (     132 calls)
+     exxenergy    :      0.23s CPU      0.24s WALL (       1 calls)
+ 
+ 
+     turboTDDFT   :     20.18s CPU     26.18s WALL
 
-
-     turboTDDFT   :     34.25s CPU     38.65s WALL
-
-
-   This run was terminated on:  18: 2:34  23Mar2026            
+ 
+   This run was terminated on:  14:51:53  10Nov2026            
 
 =------------------------------------------------------------------------------=
    JOB DONE.

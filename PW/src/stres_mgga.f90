@@ -24,7 +24,8 @@ SUBROUTINE stres_mgga( sigmaxc )
   USE io_files,               ONLY : iunwfc, nwordwfc
   USE wvfct,                  ONLY : nbnd, npwx, wg 
   USE lsda_mod,               ONLY : lsda, nspin, current_spin, isk
-  USE fft_base,               ONLY : dffts
+  USE fft_base,               ONLY : dffts, dfftp
+  USE fft_interfaces,         ONLY : fft_interpolate
   USE mp,                     ONLY : mp_sum
   USE mp_pools,               ONLY : inter_pool_comm
   USE mp_bands,               ONLY : intra_bgrp_comm
@@ -144,8 +145,18 @@ SUBROUTINE stres_mgga( sigmaxc )
   !
   DO iss = 1, nspin 
      !
-     vkin = v%kin_r(1:dffts%nnr,iss)
-     rhokin = rho%kin_r(1:dffts%nnr,iss)
+     ! ... v%kin_r and rho%kin_r are on the dense grid, crosstaus on the smooth
+     ! ... grid: interpolate when the two grids differ. The host arrays are
+     ! ... filled in both cases, then copied to the device: fft_interpolate
+     ! ... would write only the device copy of vkin, rhokin (present here)
+     ! ... when the grids coincide, and the update below would overwrite it
+     IF ( dfftp%grid_id == dffts%grid_id ) THEN
+        vkin   = v%kin_r(1:dffts%nnr,iss)
+        rhokin = rho%kin_r(1:dffts%nnr,iss)
+     ELSE
+        CALL fft_interpolate( dfftp, v%kin_r(:,iss), dffts, vkin )
+        CALL fft_interpolate( dfftp, rho%kin_r(:,iss), dffts, rhokin )
+     ENDIF
      !$acc update device(vkin,rhokin)
      !
      !$acc parallel loop reduction(+:sigma1,sigma2,sigma3,sigma4,sigma5,sigma6)

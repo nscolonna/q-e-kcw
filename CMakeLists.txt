@@ -1,13 +1,5 @@
-cmake_minimum_required(VERSION 3.20 FATAL_ERROR)
-# CMake < 3.13 cannot install external targets:
-# https://gitlab.kitware.com/cmake/cmake/merge_requests/2152
-
-# CMake < 3.14 generates incorrect dependency graphs with
-# alias targets:
-# https://gitlab.kitware.com/cmake/cmake/merge_requests/2521
-
-# CMake < 3.20 does not support NVHPC compiler id
-# https://cmake.org/cmake/help/latest/release/3.20.html#compilers
+cmake_minimum_required(VERSION 3.25 FATAL_ERROR)
+# CMake < 3.25: Wannier90 v4 requires CMake >= 3.25
 
 if(POLICY CMP0144)
   cmake_policy(SET CMP0144 NEW) # v3.27+ find_package() uses upper-case <PACKAGENAME>_ROOT variables.
@@ -97,6 +89,8 @@ option(QE_ENABLE_MPI_INPLACE
     "enable inplace MPI calls (ignored when QE_ENABLE_MPI=OFF)" OFF)
 option(QE_ENABLE_BARRIER
     "enable global synchronization between execution units" OFF)
+option(VPL_OMP
+    "Use OpenMP threading for Vendor Performance Libraries" ${QE_ENABLE_OPENMP})
 option(QE_ENABLE_SCALAPACK
     "enable SCALAPACK execution units" OFF)
 cmake_dependent_option(QE_ENABLE_SCALAPACK_QRCP
@@ -114,8 +108,8 @@ option(QE_ENABLE_DOC
     "enable documentation building" OFF)
 option(QE_CLOCK_SECONDS
     "print program time in seconds" OFF)
-set(QE_FFTW_VENDOR "AUTO" CACHE
-    STRING "select a specific FFTW library [Intel_DFTI, Intel_FFTW3, ArmPL, IBMESSL, FFTW3, NVPL, Internal]")
+option(QE_FFTW_INTERNAL
+    "enable internal reference fftw" OFF)
 set(QE_ENABLE_SANITIZER "none" CACHE STRING "none,asan,ubsan,tsan,msan")
 set(QE_ENABLE_PLUGINS "" CACHE STRING "Semicolon-separated list of plugins")
 set (QE_EXTRA_DEFINITIONS "" CACHE STRING "Semicolon-separated list of extra global definitions")
@@ -389,9 +383,6 @@ if(QE_ENABLE_ROCM)
   if(NOT QE_ENABLE_OFFLOAD)
     message(FATAL_ERROR "QE_ENABLE_ROCM=ON requires QE_ENABLE_OFFLOAD=ON")
   endif()
-  if(CMAKE_VERSION VERSION_LESS 3.21.0)
-    message(FATAL_ERROR "QE_ENABLE_ROCM=ON require CMake 3.21.0 or later")
-  endif()
   enable_language(HIP)
   set(CMAKE_HIP_LINKER_PREFERENCE_PROPAGATES 0)
   if(DEFINED ROCM_ROOT)
@@ -450,7 +441,18 @@ add_library(qe_mpi_fortran INTERFACE)
 qe_install_targets(qe_mpi_fortran)
 ###########################################################
 if(QE_ENABLE_MPI)
+    if(NOT CMAKE_CROSSCOMPILING)
+        set(MPI_DETERMINE_LIBRARY_VERSION TRUE)
+    endif()
+
     find_package(MPI REQUIRED Fortran)
+
+    set(MPI_IS_OPENMPI FALSE)
+    if("${MPI_Fortran_LIBRARY_VERSION_STRING}" MATCHES "Open MPI"
+       OR "${MPI_Fortran_COMPILER}" MATCHES "openmpi"
+       OR "${MPI_Fortran_LIBRARIES}" MATCHES "openmpi")
+      set(MPI_IS_OPENMPI TRUE)
+    endif()
 
     # choose using mpi module or header file.
     if(MPI_Fortran_HAVE_F90_MODULE)
@@ -506,76 +508,11 @@ qe_install_targets(qe_lapack)
 ###########################################################
 if(QE_LAPACK_INTERNAL)
     message(FATAL_ERROR "Building Netlib LAPACK inside QE via CMake is no longer supported!")
-else()
-    if(NOT BLA_VENDOR)
-        if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64.*")
-            message(STATUS "Trying to find LAPACK from Intel MKL")
-            if(QE_ENABLE_OPENMP)
-                SET(BLA_VENDOR Intel10_64lp)
-            else()
-                SET(BLA_VENDOR Intel10_64lp_seq)
-            endif()
-            find_package(LAPACK)
-        elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "i686.*|i386.*|x86.*")
-            message(STATUS "Trying to find LAPACK from Intel MKL - 32bit")
-            SET(BLA_VENDOR Intel10_32)
-            find_package(LAPACK)
-        elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64.*|AARCH64.*|arm64.*|ARM64.*)")
-            message(STATUS "Trying to find LAPACK from ARM Performance Library")
-            if(QE_ENABLE_OPENMP)
-                SET(BLA_VENDOR Arm_mp)
-            else()
-                SET(BLA_VENDOR Arm)
-            endif()
-            find_package(LAPACK)
-        endif()
-        if(NOT LAPACK_FOUND)
-            message(STATUS "Trying to find alternative LAPACK libraries")
-            SET(BLA_VENDOR All)
-            if(QE_ENABLE_OPENMP)
-                set(CMAKE_REQUIRED_LINK_OPTIONS ${OpenMP_Fortran_FLAGS})
-            endif()
-            find_package(LAPACK)
-            unset(CMAKE_REQUIRED_LINK_OPTIONS)
-        endif()
-    elseif(BLA_VENDOR STREQUAL "NVPL")
-        find_package(nvpl REQUIRED COMPONENTS blas lapack)
-        if(QE_ENABLE_OPENMP)
-            set(QE_NVPL_LAPACK_TARGET nvpl::lapack_lp64_omp)
-        else()
-            set(QE_NVPL_LAPACK_TARGET nvpl::lapack_lp64_seq)
-        endif()
-        get_target_property(_nvpl_real ${QE_NVPL_LAPACK_TARGET} ALIASED_TARGET)
-        set_target_properties(${_nvpl_real} PROPERTIES IMPORTED_GLOBAL TRUE)
-        add_library(LAPACK::LAPACK INTERFACE IMPORTED GLOBAL)
-        set_target_properties(LAPACK::LAPACK PROPERTIES
-            INTERFACE_LINK_LIBRARIES ${_nvpl_real})
-        set(LAPACK_FOUND TRUE)
-    else()
-        if(QE_ENABLE_OPENMP)
-            set(CMAKE_REQUIRED_LINK_OPTIONS ${OpenMP_Fortran_FLAGS})
-        endif()
-        find_package(LAPACK)
-        unset(CMAKE_REQUIRED_LINK_OPTIONS)
-    endif()
-    if(LAPACK_FOUND)
-        target_link_libraries(qe_lapack INTERFACE LAPACK::LAPACK)
-        set(CMAKE_REQUIRED_LIBRARIES LAPACK::LAPACK)
-        if(QE_ENABLE_OPENMP)
-            target_link_libraries(qe_lapack INTERFACE ${OpenMP_Fortran_LIBRARIES})
-            list(APPEND CMAKE_REQUIRED_LIBRARIES "${OpenMP_Fortran_LIBRARIES}")
-        endif()
-        check_fortran_function_exists(zhpev ZHPEV_FOUND)
-        unset(CMAKE_REQUIRED_LIBRARIES)
-        if(NOT ZHPEV_FOUND)
-          unset(ZHPEV_FOUND CACHE)
-          message(FATAL_ERROR "Incomplete LAPACK! function zhpev not found!")
-        endif()
-    else()
-        message(FATAL_ERROR "Failed to find a complete set of external BLAS/LAPACK library by FindLAPACK. "
-                            "Variables controlling FindLAPACK can be found at CMake online documentation.")
-    endif()
 endif()
+
+find_package(VendorPerfLibs REQUIRED COMPONENTS lapack)
+target_link_libraries(qe_lapack INTERFACE VPL::lapack)
+set(LAPACK_LIBRARIES VPL::lapack)
 
 ###########################################################
 # SCALAPACK
@@ -584,14 +521,15 @@ add_library(qe_scalapack INTERFACE)
 qe_install_targets(qe_scalapack)
 ###########################################################
 if(QE_ENABLE_SCALAPACK)
-    find_package(SCALAPACK REQUIRED QUIET)
-    message(STATUS "Found SCALAPACK: ${SCALAPACK_LIBRARIES};${SCALAPACK_LINKER_FLAGS}")
-    target_link_libraries(qe_scalapack
-        INTERFACE
-            ${SCALAPACK_LIBRARIES}
-            ${SCALAPACK_LINKER_FLAGS})
+    if(MPI_IS_OPENMPI)
+        set(VPL_MPI "openmpi")
+    else()
+        set(VPL_MPI "mpich")
+    endif()
+    find_package(VendorPerfLibs REQUIRED COMPONENTS scalapack)
+    target_link_libraries(qe_scalapack INTERFACE VPL::scalapack)
     if(QE_ENABLE_SCALAPACK_QRCP)
-        set(CMAKE_REQUIRED_LIBRARIES "${SCALAPACK_LIBRARIES}")
+        set(CMAKE_REQUIRED_LIBRARIES VPL::scalapack)
         check_fortran_function_exists("pzgeqpf" SCALAPACK_PZGEQPF_WORKS)
         unset(CMAKE_REQUIRED_LIBRARIES)
         if(SCALAPACK_PZGEQPF_WORKS)
