@@ -23,6 +23,7 @@ SUBROUTINE kcw_deallocate_q()
   USE eqv,                 ONLY : dmuxc, dpsi, dvpsi, evq
   USE control_lr,          ONLY : lgamma, nbnd_occ
   USE qpoint_aux,          ONLY : ikmks, ikmkmqs, becpt, alphapt
+  USE Coul_cut_2D_ph,      ONLY : deallocate_2d_arrays
   !
   IMPLICIT NONE
   INTEGER :: ik, ipol
@@ -45,6 +46,7 @@ SUBROUTINE kcw_deallocate_q()
   if (allocated(m_loc))     deallocate (m_loc)
   !
   if (allocated(eigqts)) deallocate (eigqts)
+  CALL deallocate_2d_arrays()   ! 2D cutoff factor at q+G (no-op if not allocated)
   if (allocated(becp1))  then
      do ik=1,size(becp1)
         call deallocate_bec_type ( becp1(ik) )

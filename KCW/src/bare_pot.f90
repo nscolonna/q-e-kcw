@@ -20,7 +20,8 @@ SUBROUTINE bare_pot ( rhor, rhog, vh_rhog, delta_vr, delta_vg, iq, delta_vr_, de
   USE fft_interfaces,       ONLY : fwfft, invfft
   USE gvecs,                ONLY : ngms
   USE lsda_mod,             ONLY : nspin
-  USE cell_base,            ONLY : tpiba2, omega
+  USE cell_base,            ONLY : tpiba2, tpiba, omega, at, alat
+  USE Coul_cut_2D,          ONLY : do_cutoff_2D
   USE control_kcw,          ONLY : spin_component, kcw_iverbosity, x_q, nrho
   USE gvect,                ONLY : g
   USE qpoint,               ONLY : xq
@@ -78,7 +79,10 @@ SUBROUTINE bare_pot ( rhor, rhog, vh_rhog, delta_vr, delta_vg, iq, delta_vr_, de
   ! ... counters 
   !
   REAL(DP)                  :: qg2, eh_corr
-  ! ... |q+G|^2, g=0 correction to the hartree energy 
+  ! ... |q+G|^2, g=0 correction to the hartree energy
+  !
+  REAL(DP)                  :: cut2d, lz
+  ! ... 2D cutoff factor at q+G and cutoff length lz = c/2 (PRB 96, 075448)
   !
   LOGICAL                   :: lgamma
   !
@@ -160,17 +164,23 @@ SUBROUTINE bare_pot ( rhor, rhog, vh_rhog, delta_vr, delta_vg, iq, delta_vr_, de
   ! ... Gygi-Baldereschi sheme, see setup_coulomb) 
   !
   ALLOCATE(vh_rhog_g0eq0(ngms))
+  lz = 0.5_dp*at(3,3)*alat
   !$acc enter data create(vh_rhog_g0eq0) copyin(fac)
-  !$acc parallel loop private(qg2) present(fac, vh_rhog_g0eq0) present_or_copyin(g, x_q(:,iq))
+  !$acc parallel loop private(qg2, cut2d) present(fac, vh_rhog_g0eq0) present_or_copyin(g, x_q(:,iq))
   DO ig = 1, ngms
     !
    !! qg2 = SUM ( (g(:,ig)+x_q(:,iq))**2 )
-    qg2 =  (g(1,ig)+x_q(1,iq))**2  +  (g(2,ig)+x_q(2,iq))**2  +  (g(3,ig)+x_q(3,iq))**2  
+    qg2 =  (g(1,ig)+x_q(1,iq))**2  +  (g(2,ig)+x_q(2,iq))**2  +  (g(3,ig)+x_q(3,iq))**2
     !
-    IF (qg2 .lt. 1.0e-8_dp) THEN 
+    ! ... 2D cutoff factor (same as in g2_convolution and cutoff_fact_qg)
+    cut2d = 1.0_dp
+    IF (do_cutoff_2D) cut2d = 1.0_dp - EXP( -SQRT( (g(1,ig)+x_q(1,iq))**2 + (g(2,ig)+x_q(2,iq))**2 ) &
+                                           *tpiba*lz ) * COS( (g(3,ig)+x_q(3,iq))*tpiba*lz )
+    !
+    IF (qg2 .lt. 1.0e-8_dp) THEN
         vh_rhog_g0eq0(ig) = (0.0_dp, 0.0_dp)
     ELSE
-        vh_rhog_g0eq0(ig) =  e2 * fpi * rhog(ig,1) / (tpiba2 * qg2)
+        vh_rhog_g0eq0(ig) =  e2 * fpi * rhog(ig,1) / (tpiba2 * qg2) * cut2d
     END IF
     ! ... set to zero the q+g=0 component
     !

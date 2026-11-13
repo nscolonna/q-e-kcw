@@ -17,6 +17,8 @@ SUBROUTINE kcw_initialize_ph()
   USE control_lr,        ONLY : lgamma
   USE noncollin_module,  ONLY : domag, noncolin
   USE qpoint_aux,        ONLY : ikmks, ikmkmqs
+  USE Coul_cut_2D,       ONLY : do_cutoff_2D
+  USE Coul_cut_2D_ph,    ONLY : cutoff_fact_qg, deallocate_2d_arrays
   !
   IMPLICIT NONE
   INTEGER :: ik
@@ -84,6 +86,12 @@ SUBROUTINE kcw_initialize_ph()
   !  linear response to the perturbation
   CALL kcw_init_q()
   !
+  ! 2D Coulomb cutoff factor at q+G (cutoff_2D_qg), used by dv_of_drho.
+  ! Computed here, i.e. after the (possible) NSCF run, with the current xq and G-vectors.
+  IF (do_cutoff_2D) THEN
+     CALL deallocate_2d_arrays()
+     CALL cutoff_fact_qg()
+  ENDIF
   !
   CALL print_clock( 'NSCF' )
   !
