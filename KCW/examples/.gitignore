@@ -8,6 +8,10 @@
 !/example03/reference/
 !/example03/reference/*
 !/example03/reference/*/*
+!/example_2D/
+!/example_2D/reference/
+!/example_2D/reference/*
+!/example_2D/reference/*/*
 !run_example
 !*in
 !*ref

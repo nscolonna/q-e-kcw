@@ -50,3 +50,10 @@ echo "DONE"
 cd $home
 
 
+
+echo "Running example_2D"
+cd example_2D/
+./run_example
+./compare.sh
+echo "DONE"
+cd $home

@@ -1,0 +1,50 @@
+This example shows how to use the KCW code with the 2D Coulomb cutoff
+(assume_isolated='2D', Sohier et al., PRB 96, 075448 (2017)) to compute the
+KI band structure of a h-BN monolayer. The layer lies in the x-y plane; the
+cell height is c = 6a (~15 A). The steps are:
+
+1) scf calculation with the 2D cutoff on the full 3x3x1 grid, with enough
+   empty bands for the Wannierization of the empty manifold.
+   input=hBN.scf.in, output=hBN.scf.out
+
+2) dielectric tensor of the same cell with ph.x (epsil=.true.), from a
+   separate non-magnetic scf (2D cutoff, 6x6x1). The tensor is written to
+   eps.dat, which kcw.x reads from the run directory. Only its in-plane block
+   is used: alpha_2D = (eps_par - 1) c / (4 pi).
+   input=hBN.scf_eps.in, hBN.ph.in   output=hBN.scf_eps.out, hBN.ph.out, eps.dat
+
+3) Wannierization of the occupied manifold (N sp2 + N pz), results in ./wann_occ.
+   The Wannier-interpolated bands along G-M-K-G are in wann_occ/hBN_band.dat.
+
+4) Wannierization of the empty manifold (B pz + N s), results in ./wann_emp.
+   The 2D cutoff shifts all eigenvalues, so the disentanglement windows are set
+   relative to the lowest unoccupied level of step 1. The Wannier-interpolated
+   bands along G-M-K-G are in wann_emp/hBN_emp_band.dat.
+
+5) interface to KCW, with the 2D cutoff
+   input=hBN.kcw-wann2kcw.in, output=hBN.kcw-wann2kcw.out
+
+6) screening coefficients, with the 2D cutoff and l_vcut=.true.: the q+G=0
+   terms are computed with the 2D scheme (charged-sheet term + 2D
+   Gygi-Baldereschi, screened with eps(q) = 1 + r0 q, r0 = 2 pi alpha_2D).
+   With the 2D cutoff and l_vcut=.true., eps.dat is required.
+   input=hBN.kcw-screen.in, output=hBN.kcw-screen.out
+
+7) KI Hamiltonian, interpolation and band structure along G-M-K-G, with the
+   2D cutoff and l_vcut=.true. Only the on-site (R=0, i=j) KI corrections are
+   used (on_site_only=.true.), and the screening parameters are corrected beyond
+   second order (l_alpha_corr=.true.), as in the koopmans workflow.
+   input=hBN.kcw-ham.in, output=hBN.kcw-ham.out
+
+The KI band structure is in hBN.kcw_bands.dat.
+
+Notes
+- assume_isolated='2D' must be used consistently in pw.x and in all kcw.x
+  steps: kcw.x stops if it differs from the value in the pw.x data.
+- The 2D cutoff requires mp3 = 1.
+- The q+G=0 terms can also be added a posteriori: run the screening with
+  l_vcut=.false., then calculation='cc' with l_vcut=.true. (same mp1-mp3,
+  outdir and eps.dat), and add the printed "uPi(q+G=0) estimation" and
+  "rPi(q+G=0) estimation" to the unrelaxed and relaxed Pi of each orbital.
+- The parameters (ecutwfc = 40 Ry, 3x3x1 mesh) are chosen to keep the example
+  fast. They are not converged.

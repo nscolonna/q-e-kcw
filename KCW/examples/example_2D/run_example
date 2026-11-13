@@ -1,0 +1,493 @@
+#!/bin/sh
+
+# run from directory where this script is
+cd `dirname $0`
+EXAMPLE_DIR=`pwd`
+
+# check whether ECHO has the -e option
+if test "`echo -e`" = "-e" ; then ECHO=echo ; else ECHO="echo -e" ; fi
+
+$ECHO
+$ECHO "$EXAMPLE_DIR : starting"
+$ECHO
+$ECHO "This example shows how to use pw.x, ph.x and kcw.x to calculate the"
+$ECHO "KI electronic structure of a h-BN monolayer with the 2D Coulomb cutoff"
+$ECHO "and a 2D Gygi-baldereschi treatment of the Coulomb divergence."
+
+# set the needed environment variables
+. ../../../environment_variables
+
+# required executables and pseudopotentials
+BIN_LIST="pw.x ph.x wannier90.x pw2wannier90.x kcw.x"
+PSEUDO_LIST="B.upf N.upf"
+
+$ECHO
+$ECHO "  executables directory: $BIN_DIR"
+$ECHO "  pseudo directory:      $PSEUDO_DIR"
+$ECHO "  temporary directory:   $TMP_DIR"
+$ECHO
+$ECHO "  checking that needed directories and files exist...\c"
+
+# check for directories
+for DIR in "$BIN_DIR" "$PSEUDO_DIR" ; do
+    if test ! -d $DIR ; then
+        $ECHO
+        $ECHO "ERROR: $DIR not existent or not a directory"
+        $ECHO "Aborting"
+        exit 1
+    fi
+done
+for DIR in "$TMP_DIR" "$EXAMPLE_DIR/results" ; do
+    if test ! -d $DIR ; then
+        mkdir $DIR
+    fi
+done
+cd $EXAMPLE_DIR/results
+
+# check for executables
+for FILE in $BIN_LIST ; do
+    if test ! -x $BIN_DIR/$FILE ; then
+        $ECHO
+        $ECHO "ERROR: $BIN_DIR/$FILE not existent or not executable"
+        $ECHO "Aborting"
+        exit 1
+    fi
+done
+$ECHO " done"
+
+#Overwrite NETWORK_PSEUDO
+NETWORK_PSEUDO="https://raw.githubusercontent.com/epfl-theos/koopmans/refs/heads/master/src/koopmans/pseudopotentials/PseudoDojo/0.4/LDA/SR/standard/upf"
+
+# check for pseudopotentials
+$ECHO "  checking that pseudopotentials files exist      ...\c"
+for FILE in $PSEUDO_LIST ; do
+    if test ! -r $PSEUDO_DIR/$FILE ; then
+       $ECHO
+       $ECHO "Downloading $FILE to $PSEUDO_DIR...\c"
+            $WGET $PSEUDO_DIR/$FILE $NETWORK_PSEUDO/$FILE 2> /dev/null
+    fi
+    if test $? != 0; then
+        $ECHO
+        $ECHO "ERROR: $PSEUDO_DIR/$FILE not existent or not readable"
+        $ECHO "Aborting"
+        exit 1
+    fi
+done
+$ECHO " done"
+
+# how to run executables
+PW_COMMAND="$PARA_PREFIX $BIN_DIR/pw.x $PARA_POSTFIX"
+PH_COMMAND="$PARA_PREFIX $BIN_DIR/ph.x $PARA_POSTFIX"
+W90_COMMAND="$BIN_DIR/wannier90.x"
+PW2W90_COMMAND="$PARA_PREFIX $BIN_DIR/pw2wannier90.x"
+KCW_COMMAND="$PARA_PREFIX $BIN_DIR/kcw.x $PARA_POSTFIX"
+$ECHO
+$ECHO "  running pw.x as:   $PW_COMMAND"
+$ECHO "  running ph.x as:   $PH_COMMAND"
+$ECHO "  running kcw.x as:  $KCW_COMMAND"
+$ECHO
+
+# clean TMP_DIR
+$ECHO "  cleaning $TMP_DIR...\c"
+rm -rf $TMP_DIR/*
+$ECHO " done"
+
+PREFIX='hBN'
+SEEDNAME='hBN'
+
+# The 2D Coulomb cutoff (assume_isolated='2D') must be used consistently in
+# pw.x, ph.x and in all KCW steps. The layer lies in the x-y plane, c = 6a (~15 A).
+
+################### 1) SCF with the 2D cutoff, on the full 3x3x1 grid
+cat > $PREFIX.scf.in << EOF
+&CONTROL
+  calculation='scf'
+  prefix='$PREFIX'
+  outdir='$TMP_DIR/'
+  pseudo_dir = '$PSEUDO_DIR/'
+  verbosity='high'
+ /
+&SYSTEM
+  ibrav = 4
+  celldm(1) = 4.741890124873908
+  celldm(3) = 6.0
+  nat = 2, ntyp = 2
+  ecutwfc = 40.0
+  nbnd = 20
+  nspin = 2
+  tot_magnetization = 0.0
+  assume_isolated = '2D'
+/
+&ELECTRONS
+  conv_thr = 1.0d-10
+/
+ATOMIC_SPECIES
+B  10.811  B.upf
+N  14.007  N.upf
+
+ATOMIC_POSITIONS crystal
+B  0.3333333333  0.6666666667  0.5
+N  0.6666666667  0.3333333333  0.5
+
+K_POINTS crystal
+9
+  0.00000000  0.00000000  0.00000000  0.111111111
+  0.00000000  0.33333333  0.00000000  0.111111111
+  0.00000000  0.66666667  0.00000000  0.111111111
+  0.33333333  0.00000000  0.00000000  0.111111111
+  0.33333333  0.33333333  0.00000000  0.111111111
+  0.33333333  0.66666667  0.00000000  0.111111111
+  0.66666667  0.00000000  0.00000000  0.111111111
+  0.66666667  0.33333333  0.00000000  0.111111111
+  0.66666667  0.66666667  0.00000000  0.111111111
+EOF
+$ECHO "  Running the SCF calculation for $PREFIX...\c"
+$PW_COMMAND < $PREFIX.scf.in > $PREFIX.scf.out
+$ECHO " done"
+
+################### 2) Dielectric tensor of the same cell (ph.x, 2D cutoff)
+# Only the in-plane block is used by KCW: alpha_2D = (eps_par - 1) c / 4pi.
+# A separate non-magnetic scf on a denser in-plane grid is used for it.
+cat > $PREFIX.scf_eps.in << EOF
+&CONTROL
+  calculation='scf'
+  prefix='${PREFIX}_eps'
+  outdir='$TMP_DIR/'
+  pseudo_dir = '$PSEUDO_DIR/'
+ /
+&SYSTEM
+  ibrav = 4
+  celldm(1) = 4.741890124873908
+  celldm(3) = 6.0
+  nat = 2, ntyp = 2
+  ecutwfc = 40.0
+  assume_isolated = '2D'
+/
+&ELECTRONS
+  conv_thr = 1.0d-12
+/
+ATOMIC_SPECIES
+B  10.811  B.upf
+N  14.007  N.upf
+
+ATOMIC_POSITIONS crystal
+B  0.3333333333  0.6666666667  0.5
+N  0.6666666667  0.3333333333  0.5
+
+K_POINTS automatic
+6 6 1 0 0 0
+EOF
+$ECHO "  Running the SCF calculation for the dielectric tensor...\c"
+$PW_COMMAND < $PREFIX.scf_eps.in > $PREFIX.scf_eps.out
+$ECHO " done"
+
+cat > $PREFIX.ph.in << EOF
+epsilon
+&inputph
+  prefix = '${PREFIX}_eps'
+  outdir = '$TMP_DIR/'
+  fildyn = '$PREFIX.dyn'
+  tr2_ph = 1.0d-16
+  epsil  = .true.
+  trans  = .false.
+/
+0.0 0.0 0.0
+EOF
+$ECHO "  Running ph.x for the dielectric tensor...\c"
+$PH_COMMAND < $PREFIX.ph.in > $PREFIX.ph.out
+$ECHO " done"
+
+# eps.dat: the 3x3 tensor (one row per line), read by kcw.x from the run directory
+grep -A4 "Dielectric constant in cartesian axis" $PREFIX.ph.out | tail -3 | tr -d '()' > eps.dat
+$ECHO "  Dielectric tensor written to eps.dat:"
+cat eps.dat
+
+################### 3) Wannierization of the occupied manifold (N sp2 + N pz)
+if [ ! -d wann_occ ]; then  mkdir wann_occ ; fi
+cd wann_occ
+cat > $SEEDNAME.win << EOF
+num_bands         =   4
+num_wann          =   4
+exclude_bands     = 5-20
+spin              = up
+guiding_centres   = .true.
+use_ws_distance   = .true.
+
+write_hr = .true.
+write_xyz = .true.
+write_u_matrices = .true.
+conv_window = 5
+conv_tol = 1D-10
+num_iter = 1000
+
+Begin Atoms_Frac
+ B  0.3333333333  0.6666666667  0.5
+ N  0.6666666667  0.3333333333  0.5
+End Atoms_Frac
+
+Begin Projections
+ N : sp2
+ N : pz
+End Projections
+
+begin unit_cell_cart
+bohr
+  4.7418901249   0.0000000000   0.0000000000
+ -2.3709450624   4.1065973101   0.0000000000
+  0.0000000000   0.0000000000  28.4513407492
+end unit_cell_cart
+
+mp_grid = 3 3 1
+
+bands_plot              = .true.
+bands_num_points        = 40
+begin kpoint_path
+G 0.000 0.000 0.000  M 0.500 0.000 0.000
+M 0.500 0.000 0.000  K 0.333 0.333 0.000
+K 0.333 0.333 0.000  G 0.000 0.000 0.000
+end kpoint_path
+
+begin kpoints
+  0.00000000  0.00000000  0.00000000
+  0.00000000  0.33333333  0.00000000
+  0.00000000  0.66666667  0.00000000
+  0.33333333  0.00000000  0.00000000
+  0.33333333  0.33333333  0.00000000
+  0.33333333  0.66666667  0.00000000
+  0.66666667  0.00000000  0.00000000
+  0.66666667  0.33333333  0.00000000
+  0.66666667  0.66666667  0.00000000
+end kpoints
+EOF
+$ECHO "  Running W90 -pp for $PREFIX...\c"
+$W90_COMMAND -pp $SEEDNAME.win
+$ECHO " done"
+
+cat > $PREFIX.pw2wann.in << EOF
+&inputpp
+  prefix='$PREFIX'
+  outdir='$TMP_DIR/'
+  seedname = '$SEEDNAME'
+  wan_mode   =  'standalone'
+  spin_component = 'up'
+/
+EOF
+$ECHO "  Running PW2W90 for $PREFIX...\c"
+$PW2W90_COMMAND < $PREFIX.pw2wann.in > $PREFIX.pw2wann.out
+$ECHO " done"
+
+$ECHO "  Running W90 for $PREFIX...\c"
+$W90_COMMAND $SEEDNAME.win
+$ECHO " done"
+cd ../
+
+################### 4) Wannierization of the empty manifold (B pz + N s)
+# The 2D cutoff shifts all eigenvalues (here by about -2.3 eV with respect to a
+# calculation without cutoff), so the disentanglement windows are set relative
+# to the lowest unoccupied level of the scf run instead of using absolute values.
+CBM=`grep "highest occupied, lowest unoccupied level" $PREFIX.scf.out | awk '{print $8}'`
+DIS_FROZ_MAX=`echo $CBM | awk '{printf "%.4f", $1 + 1.2}'`
+DIS_WIN_MAX=`echo $CBM | awk '{printf "%.4f", $1 + 9.2}'`
+$ECHO "  Lowest unoccupied level: $CBM eV -> dis_froz_max = $DIS_FROZ_MAX, dis_win_max = $DIS_WIN_MAX"
+
+if [ ! -d wann_emp ]; then mkdir wann_emp; fi
+cd wann_emp
+cat > ${SEEDNAME}_emp.win << EOF
+num_bands         =   16
+num_wann          =   2
+exclude_bands     = 1-4
+spin              = up
+guiding_centres   = .true.
+use_ws_distance   = .true.
+
+dis_froz_max      = $DIS_FROZ_MAX
+dis_win_max       = $DIS_WIN_MAX
+dis_num_iter      = 5000
+
+write_hr = .true.
+write_xyz = .true.
+write_u_matrices = .true.
+conv_window = 5
+conv_tol = 1D-10
+num_iter = 1000
+
+Begin Atoms_Frac
+ B  0.3333333333  0.6666666667  0.5
+ N  0.6666666667  0.3333333333  0.5
+End Atoms_Frac
+
+Begin Projections
+ B : pz
+ N : s
+End Projections
+
+begin unit_cell_cart
+bohr
+  4.7418901249   0.0000000000   0.0000000000
+ -2.3709450624   4.1065973101   0.0000000000
+  0.0000000000   0.0000000000  28.4513407492
+end unit_cell_cart
+
+mp_grid = 3 3 1
+
+bands_plot              = .true.
+bands_num_points        = 40
+begin kpoint_path
+G 0.000 0.000 0.000  M 0.500 0.000 0.000
+M 0.500 0.000 0.000  K 0.333 0.333 0.000
+K 0.333 0.333 0.000  G 0.000 0.000 0.000
+end kpoint_path
+
+begin kpoints
+  0.00000000  0.00000000  0.00000000
+  0.00000000  0.33333333  0.00000000
+  0.00000000  0.66666667  0.00000000
+  0.33333333  0.00000000  0.00000000
+  0.33333333  0.33333333  0.00000000
+  0.33333333  0.66666667  0.00000000
+  0.66666667  0.00000000  0.00000000
+  0.66666667  0.33333333  0.00000000
+  0.66666667  0.66666667  0.00000000
+end kpoints
+EOF
+$ECHO "  Running W90 -pp for $PREFIX EMPTY...\c"
+$W90_COMMAND -pp ${SEEDNAME}_emp.win
+$ECHO " done"
+
+cat > ${PREFIX}_emp.pw2wann.in << EOF
+&inputpp
+  prefix='$PREFIX'
+  outdir='$TMP_DIR/'
+  seedname = '${SEEDNAME}_emp'
+  wan_mode   =  'standalone'
+  spin_component = 'up'
+/
+EOF
+$ECHO "  Running PW2W90 for $PREFIX EMPTY...\c"
+$PW2W90_COMMAND < ${PREFIX}_emp.pw2wann.in > ${PREFIX}_emp.pw2wann.out
+$ECHO " done"
+
+$ECHO "  Running W90 for $PREFIX EMPTY...\c"
+$W90_COMMAND ${SEEDNAME}_emp.win
+$ECHO " done"
+cd ../
+
+rm -fr ${SEEDNAME}_u.mat ${SEEDNAME}_emp_u.mat ${SEEDNAME}_emp_u_dis.mat
+rm -fr ${SEEDNAME}_centres.xyz ${SEEDNAME}_emp_centres.xyz
+ln -s wann_occ/${SEEDNAME}_u.mat .
+ln -s wann_emp/${SEEDNAME}_emp_u.mat .
+ln -s wann_emp/${SEEDNAME}_emp_u_dis.mat .
+ln -s wann_occ/${SEEDNAME}_centres.xyz .
+ln -s wann_emp/${SEEDNAME}_emp_centres.xyz .
+
+################### 5) Interface Wannier90 -> KCW (2D cutoff)
+cat > $PREFIX.kcw-wann2kcw.in << EOF
+W2K h-BN
+&control
+  prefix='$PREFIX'
+  outdir='$TMP_DIR/'
+  kcw_iverbosity = 1
+  kcw_at_ks=.false.
+  read_unitary_matrix = .true.
+  calculation = 'wann2kcw'
+  assume_isolated = '2D'
+  mp1 = 3
+  mp2 = 3
+  mp3 = 1
+/
+&wannier
+  seedname = '$SEEDNAME'
+  check_ks = .true.
+  num_wann_occ = 4
+  num_wann_emp = 2
+  have_empty = .true.
+  has_disentangle = .true.
+/
+EOF
+$ECHO "  Running the interface to KCW for $PREFIX...\c"
+$KCW_COMMAND -in $PREFIX.kcw-wann2kcw.in > $PREFIX.kcw-wann2kcw.out
+$ECHO " done"
+
+################### 6) Screening parameters (2D cutoff, q+G=0 terms, eps.dat)
+# l_vcut = .true. activates the 2D q+G=0 terms (charged sheet + 2D Gygi-Baldereschi).
+# With the 2D cutoff eps.dat is required: kcw.x stops if it is missing.
+cat > $PREFIX.kcw-screen.in << EOF
+KCW h-BN screen
+&control
+  prefix='$PREFIX'
+  outdir='$TMP_DIR/'
+  kcw_iverbosity = 1
+  kcw_at_ks=.false.
+  read_unitary_matrix = .true.
+  calculation = 'screen'
+  lrpa =.false.
+  assume_isolated = '2D'
+  l_vcut = .true.
+  mp1 = 3
+  mp2 = 3
+  mp3 = 1
+/
+&wannier
+  seedname = '$SEEDNAME'
+  check_ks = .true.
+  num_wann_occ = 4
+  num_wann_emp = 2
+  have_empty = .true.
+  has_disentangle = .true.
+/
+&screen
+  tr2    = 1.0d-18
+  nmix   = 4
+  niter  = 33
+/
+EOF
+$ECHO "  Running the screening parameters calculation for $PREFIX...\c"
+$KCW_COMMAND -in $PREFIX.kcw-screen.in > $PREFIX.kcw-screen.out
+$ECHO " done"
+
+################### 7) KI Hamiltonian and band structure (2D cutoff)
+cat > $PREFIX.kcw-ham.in << EOF
+KI h-BN
+&control
+  prefix='$PREFIX'
+  outdir='$TMP_DIR/'
+  kcw_iverbosity = 1
+  kcw_at_ks=.false.
+  homo_only = .false.
+  read_unitary_matrix = .true.
+  calculation = 'ham'
+  lrpa =.false.
+  assume_isolated = '2D'
+  l_vcut = .true.
+  mp1 = 3
+  mp2 = 3
+  mp3 = 1
+/
+&wannier
+  seedname = '$SEEDNAME'
+  check_ks = .true.
+  num_wann_occ = 4
+  num_wann_emp = 2
+  have_empty = .true.
+  has_disentangle = .true.
+/
+&ham
+  do_bands = .true.
+  use_ws_distance = .true.
+  write_hr = .true.
+  on_site_only = .true.
+  l_alpha_corr = .true.
+/
+K_POINTS crystal_b
+4
+0.000     0.000     0.000 20 ! GAMMA
+0.500     0.000     0.000 10 ! M
+0.333     0.333     0.000 20 ! K
+0.000     0.000     0.000 1  ! GAMMA
+EOF
+$ECHO "  Running the KI hamiltonian calculation for $PREFIX...\c"
+$KCW_COMMAND -in $PREFIX.kcw-ham.in > $PREFIX.kcw-ham.out
+$ECHO " done"
+
+$ECHO
+$ECHO "$EXAMPLE_DIR : done"
